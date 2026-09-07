@@ -2,6 +2,7 @@
 
 The public landing page and static Mission Control demo are deployed to GitHub Pages whenever a commit reaches `master`.
 
+- Repository visibility: public
 - Integration and CI branch: `main`
 - Production and deployment branch: `master`
 - Site: https://khanhhlee05.github.io/nova-agent/
