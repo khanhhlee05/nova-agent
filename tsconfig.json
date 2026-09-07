@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./apps/web" },
+    { "path": "./apps/extension" },
+    { "path": "./apps/api" },
+    { "path": "./packages/brightspace" },
+    { "path": "./packages/core" },
+    { "path": "./packages/planner" },
+    { "path": "./packages/agent" }
+  ]
+}

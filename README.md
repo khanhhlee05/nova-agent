@@ -11,14 +11,14 @@ Nova Agent is a Chrome extension and academic planning system built on top of D2
 ## MVP
 
 - Mission Control dashboard
-- "Since Your Last Visit" change feed
+- “Since Your Last Visit” change feed
 - Assignments, quizzes, and announcements
 - Deterministic priority and study planning
 - Bounded agent tools
 - Local-first browser-session authentication
 - ICS calendar export
 
-## Repository model
+## Branch and release model
 
 - `main` is the integration branch. Pull requests and pushes run CI.
 - `master` is the production branch. Merges to `master` deploy the public demo to GitHub Pages.

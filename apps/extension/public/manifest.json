@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Nova Agent",
+  "version": "0.1.0",
+  "description": "An unofficial academic assistant for Villanova students.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://*.villanova.edu/*"],
+  "content_scripts": [{ "matches": ["https://*.villanova.edu/*"], "js": ["nova-agent.iife.js"] }]
+}

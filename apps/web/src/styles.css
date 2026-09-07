@@ -1,0 +1,21 @@
+:root { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #f8fafc; background: #07111f; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; background: radial-gradient(circle at 80% 10%, #123766 0, #07111f 38%); }
+main { min-height: 100vh; }
+nav { display: flex; justify-content: space-between; align-items: center; max-width: 1120px; margin: auto; padding: 28px 24px; }
+nav a { color: #b9cae6; text-decoration: none; }
+.brand, .eyebrow { color: #65b5ff; font-weight: 800; letter-spacing: .14em; }
+.hero { max-width: 1120px; margin: auto; padding: 92px 24px 110px; }
+h1 { max-width: 900px; margin: 16px 0 22px; font-size: clamp(3rem, 8vw, 6.6rem); line-height: .96; letter-spacing: -.055em; }
+.lede { max-width: 680px; color: #b9cae6; font-size: 1.25rem; line-height: 1.7; }
+.button { display: inline-block; margin-top: 24px; padding: 14px 19px; color: #07111f; background: #65b5ff; border-radius: 9px; text-decoration: none; font-weight: 800; }
+.dashboard { max-width: 1060px; margin: 0 auto 90px; padding: 30px; border: 1px solid #25466d; border-radius: 22px; background: rgba(9, 27, 48, .9); box-shadow: 0 25px 80px #02060d99; }
+.dashboard header { display: flex; justify-content: space-between; gap: 24px; align-items: start; }
+h2 { margin: 8px 0 20px; font-size: clamp(1.8rem, 4vw, 3rem); }
+.status { padding: 7px 10px; color: #9bd0ff; background: #12385e; border-radius: 99px; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.stats article, .changes { padding: 22px; border: 1px solid #25466d; border-radius: 14px; background: #0b1d31; }
+.stats strong { display: block; font-size: 2.4rem; }.stats span, .changes p, footer { color: #aebed3; }
+.changes { margin-top: 14px; }.changes p { padding: 11px 0; border-bottom: 1px solid #1e3857; }.changes p:last-child { border: 0; }
+footer { padding: 0 24px 42px; text-align: center; }
+@media (max-width: 640px) { .hero { padding-top: 55px; } .stats { grid-template-columns: 1fr; } .dashboard { margin-inline: 14px; padding: 20px; } .dashboard header { display: block; } }
