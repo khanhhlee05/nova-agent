@@ -7,6 +7,7 @@
     { "path": "./packages/brightspace" },
     { "path": "./packages/core" },
     { "path": "./packages/planner" },
-    { "path": "./packages/agent" }
+    { "path": "./packages/agent" },
+    { "path": "./tests" }
   ]
 }
