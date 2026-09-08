@@ -36,7 +36,8 @@ export const weekHero = (dashboard: Dashboard): Hero => {
   const last = days[days.length - 1]?.date;
   const meta = first && last ? `This week · ${format(first, "MMM d")} to ${format(last, "MMM d")}` : "This week";
   if (total === 0) return { title: "Nothing due in the next seven days", meta, text: "Deadlines further out are listed under Later on the Focus tab." };
-  const busiest = [...days].sort((a, b) => b.entries.length - a.entries.length)[0];
+  const activeCount = (day: (typeof days)[number]) => day.entries.filter((entry) => entry.bucket !== "completed").length;
+  const busiest = [...days].sort((a, b) => activeCount(b) - activeCount(a))[0];
   const busiestActive = busiest ? busiest.entries.filter((entry) => entry.bucket !== "completed") : [];
   const dayName = busiest ? (busiest.isToday ? "today" : format(busiest.date, "EEEE")) : "";
   const title = busiestActive.length >= 2 ? `${cap(plural(total, "deadline"))}, ${cap(dayName)} is the crunch` : `${cap(plural(total, "deadline"))} this week`;

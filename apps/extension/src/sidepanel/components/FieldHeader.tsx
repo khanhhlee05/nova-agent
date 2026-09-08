@@ -55,9 +55,9 @@ export const FieldHeader = ({ freshness: fresh, theme, onThemeChange, onRefresh,
   </header>
 );
 
-export type HeroProps = { title: string; meta: string; text: string; actions?: ReactNode; aside?: ReactNode; headingId?: string };
+export type HeroProps = { title: string; meta: string; text: string; actions?: ReactNode; aside?: ReactNode; extra?: ReactNode; headingId?: string };
 
-export const Hero = ({ title, meta, text, actions, aside, headingId }: HeroProps) => (
+export const Hero = ({ title, meta, text, actions, aside, extra, headingId }: HeroProps) => (
   <div className="hero">
     <div className="hero-head">
       <h2 className="hero-title" id={headingId}>
@@ -68,5 +68,6 @@ export const Hero = ({ title, meta, text, actions, aside, headingId }: HeroProps
     <p className="hero-meta">{meta}</p>
     <p className="hero-text">{text}</p>
     {actions ? <div className="hero-actions">{actions}</div> : null}
+    {extra}
   </div>
 );

@@ -16,6 +16,7 @@ import { FirstRun } from "./components/FirstRun";
 import { FocusHero } from "./components/FocusHero";
 import { Menu } from "./components/Menu";
 import { FocusSkeleton } from "./components/Skeleton";
+import { WeekStrip } from "./components/WeekStrip";
 import { WeekView } from "./components/WeekView";
 import { countDismissed, type SessionDismissals } from "./dismissals";
 import { format } from "date-fns";
@@ -112,7 +113,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
       <Hero title="No data yet" meta={PHASE_LABELS[phase]} text="Nova could not complete a first refresh. Fix the connection below and retry." />
     )
   ) : tab === "week" ? (
-    <Hero {...weekHero(dashboard)} />
+    <Hero {...weekHero(dashboard)} extra={<WeekStrip week={dashboard.week} courseById={dashboard.courseById} />} />
   ) : tab === "changes" ? (
     <Hero
       {...changesHero(dashboard, null, now)}
