@@ -10,13 +10,16 @@ Nova Agent is a Chrome extension and academic planning system built on top of D2
 
 ## MVP
 
-- Mission Control dashboard
-- “Since Your Last Visit” change feed
-- Assignments, quizzes, and announcements
-- Deterministic priority and study planning
-- Bounded agent tools
-- Local-first browser-session authentication
-- ICS calendar export
+Implemented in the first vertical slice (features A–D):
+
+- **Brightspace connection**: allowlisted read-only routes, version discovery, pagination, bounded retries, rate limiting, session detection, Zod validation, and a feasibility probe. Fixture mode is always available and clearly labeled.
+- **Mission Control**: Chrome side panel with Focus, Week, and Changes tabs, launched from a Nova Orb injected into Brightspace.
+- **Since Your Last Visit**: local snapshots and a semantic diff that avoids false positives and duplicate events.
+- **Priority engine**: deterministic, explainable scoring in `packages/planner`.
+
+Planned next: bounded agent tools, ICS export, study planning.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/BRIGHTSPACE_ACCESS.md](docs/BRIGHTSPACE_ACCESS.md) for the data flow and the authentication outcome.
 
 ## Branch and release model
 
@@ -26,25 +29,26 @@ Nova Agent is a Chrome extension and academic planning system built on top of D2
 ## Applications
 
 - `apps/web`: public landing page and static Mission Control demo
-- `apps/extension`: Chrome Manifest V3 extension scaffold
+- `apps/extension`: Chrome Manifest V3 extension (Nova Orb, side panel, local database). See [apps/extension/README.md](apps/extension/README.md).
 - `apps/api`: future agent API scaffold
 
 ## Packages
 
-- `packages/brightspace`: Brightspace client and data access
-- `packages/core`: normalized academic models and snapshot logic
-- `packages/planner`: deterministic prioritization and scheduling
+- `packages/brightspace`: Brightspace routes, transports, client, normalization, and probe
+- `packages/core`: canonical academic models, deadline buckets, snapshots, and semantic diff
+- `packages/planner`: deterministic priority score and explanations
 - `packages/agent`: bounded agent tool definitions
 
 ## Development
 
 ```bash
 npm install
-npm run dev
-npm run check
+npm run dev              # public site
+npm run dev:extension    # side panel preview harness
+npm run check            # lint, typecheck, tests, build
 ```
 
-The initial smoke test intentionally always passes while the project foundation is being established.
+Load the extension from `apps/extension/dist` after `npm run build`.
 
 ## Inspiration
 
@@ -54,4 +58,4 @@ The initial smoke test intentionally always passes while the project foundation 
 
 ## Status
 
-Early MVP scaffolding. Do not use with real student data yet.
+First vertical slice. Live Brightspace access on the Villanova tenant is not yet verified; see [docs/BRIGHTSPACE_ACCESS.md](docs/BRIGHTSPACE_ACCESS.md). Demo mode works everywhere.

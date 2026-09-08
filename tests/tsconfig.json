@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["chrome", "node"]
+  },
+  "include": ["**/*.ts", "**/*.tsx", "../apps/extension/src/**/*.ts", "../apps/extension/src/**/*.tsx"],
+  "references": [
+    { "path": "../packages/brightspace" },
+    { "path": "../packages/core" },
+    { "path": "../packages/planner" }
+  ]
+}

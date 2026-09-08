@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>Nova Mission Control preview</title>
+    <style>
+      body { background: #04080f; }
+      .frame { width: 400px; height: 100vh; margin: 0 auto; border-left: 1px solid #1b2d45; border-right: 1px solid #1b2d45; }
+      @media (max-width: 420px) { .frame { width: 100%; border: 0; } }
+    </style>
+  </head>
+  <body>
+    <div class="frame"><div id="root" style="height: 100%"></div></div>
+    <script type="module" src="./preview.tsx"></script>
+  </body>
+</html>

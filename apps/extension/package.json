@@ -3,7 +3,28 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "build": "vite build" },
-  "dependencies": { "@vitejs/plugin-react": "^5.0.2", "vite": "^7.1.4", "react": "^19.1.1", "react-dom": "^19.1.1" },
-  "devDependencies": { "@types/chrome": "^0.1.1", "@types/react": "^19.1.12", "@types/react-dom": "^19.1.9" }
+  "scripts": {
+    "dev": "vite --config vite.preview.config.ts",
+    "build": "vite build && vite build --config vite.content.config.ts"
+  },
+  "dependencies": {
+    "@nova-agent/brightspace": "0.1.0",
+    "@nova-agent/core": "0.1.0",
+    "@nova-agent/planner": "0.1.0",
+    "@vitejs/plugin-react": "^5.0.2",
+    "date-fns": "^4.1.0",
+    "dexie": "^4.0.10",
+    "dexie-react-hooks": "^4.0.0",
+    "lucide-react": "^0.542.0",
+    "radix-ui": "^1.4.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "vite": "^7.1.4",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.1",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9"
+  }
 }
