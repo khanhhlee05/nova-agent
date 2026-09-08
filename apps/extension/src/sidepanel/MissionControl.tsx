@@ -170,7 +170,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
             counts={tab === "focus" && dashboard ? <CountsStrip counts={dashboard.counts} onSelect={jumpTo} /> : undefined}
             tabs={tabs}
           />
-          <SyncProgress phase={phase} progress={runtime.progress} />
+          <SyncProgress phase={phase} progress={runtime.progress} showLabel={!!dashboard} />
           <p className="sr-only" aria-live="polite" aria-atomic="true">
             {announcement ?? ""}
           </p>

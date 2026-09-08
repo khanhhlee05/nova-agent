@@ -344,7 +344,8 @@ h1, h2, h3, h4, p { margin: 0; }
 .first-run .button { min-height: 44px; }
 .skeleton { position: relative; overflow: hidden; border-radius: var(--nova-radius-sm); background: var(--nova-surface); }
 .skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(127, 127, 127, 0.12), transparent); animation: shimmer 1.4s infinite; }
-.skeleton-row { display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: center; padding: 10px 0; }
+.skeleton-section { display: flex; flex-direction: column; padding-top: 6px; }
+.skeleton-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--nova-rule); }
 
 /* Overlays */
 .tooltip { z-index: 40; padding: 5px 8px; border-radius: 6px; background: var(--nova-ink); color: var(--nova-bg); font-size: 12px; box-shadow: var(--nova-shadow); animation: fade-in 120ms ease-out; }

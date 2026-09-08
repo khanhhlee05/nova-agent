@@ -2,21 +2,22 @@ import { RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
 import type { SyncPhase } from "../../messaging/protocol";
 import { isRunningPhase } from "../../sync/syncState";
-import { formatUpdated } from "../format";
+import { formatAge } from "../format";
 import type { Theme } from "../theme";
 import { ThemeSwitch } from "./ThemeSwitch";
 import { Tip } from "./Tip";
 
 export type Freshness = { label: string; tone: "live" | "demo" | "syncing" | "error" | "idle"; text: string };
 
+/** One short line: connection state, then how old the data is. Fits the field's top row at 380 px. */
 export const freshness = (mode: "live" | "fixture", phase: SyncPhase, lastSuccessfulSyncAt: string | null, stale: boolean, now: Date): Freshness => {
-  const updated = formatUpdated(lastSuccessfulSyncAt, now).replace(/^Updated/, "updated").replace(/^Never refreshed$/, "never refreshed");
+  const age = lastSuccessfulSyncAt ? formatAge(lastSuccessfulSyncAt, now) : "never refreshed";
   if (isRunningPhase(phase)) return { label: "Refreshing", tone: "syncing", text: "Refreshing…" };
   if (phase === "idle") return { label: "Not connected", tone: "idle", text: "Not connected" };
   const broken = phase === "session-expired" || phase === "permission-required" || phase === "offline" || phase === "failed";
-  if (mode === "fixture") return { label: "Demo data", tone: "demo", text: `Demo data · ${updated}` };
-  if (broken) return { label: "Disconnected", tone: "error", text: `Disconnected · ${stale ? "stale · " : ""}${updated}` };
-  return { label: "Live", tone: "live", text: `${stale ? "Stale" : "Live"} · ${updated}` };
+  if (mode === "fixture") return { label: "Demo data", tone: "demo", text: `Demo data · ${age}` };
+  if (broken) return { label: "Disconnected", tone: "error", text: `Disconnected · ${age}` };
+  return { label: "Live", tone: "live", text: `${stale ? "Stale" : "Live"} · ${age}` };
 };
 
 export type FieldHeaderProps = {

@@ -78,7 +78,7 @@ describe("Mission Control states", () => {
     const { dashboard } = await demoDashboard();
     render(<MissionControl {...baseProps({ dashboard })} />);
     expect(screen.getByRole("status", { name: /connection: live/i })).toBeTruthy();
-    expect(screen.getByText(/live · updated 4m ago/i)).toBeTruthy();
+    expect(screen.getByText(/live · 4m ago/i)).toBeTruthy();
     const summary = screen.getByRole("group", { name: /workload summary/i });
     expect(within(summary).getByText("Overdue").previousSibling?.textContent).toBe(String(dashboard.counts.overdue));
     expect(within(summary).getByText("Today").previousSibling?.textContent).toBe(String(dashboard.counts.today));
@@ -92,7 +92,7 @@ describe("Mission Control states", () => {
     const { dashboard } = await demoDashboard();
     const old = new Date(NOW.getTime() - 2 * 3_600_000).toISOString();
     const { unmount } = render(<MissionControl {...baseProps({ dashboard, status: { ...baseProps().status, lastSuccessfulSyncAt: old } })} />);
-    expect(screen.getByText(/stale · updated 2h ago/i)).toBeTruthy();
+    expect(screen.getByText(/stale · 2h ago/i)).toBeTruthy();
     expect(screen.getByText(/this may be out of date/i)).toBeTruthy();
     unmount();
 
