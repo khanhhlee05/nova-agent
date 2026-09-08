@@ -41,7 +41,6 @@ export const FieldHeader = ({ freshness: fresh, theme, onThemeChange, onRefresh,
       <span className="freshness" data-tone={fresh.tone} role="status" aria-label={`Connection: ${fresh.label}`}>
         {fresh.text}
       </span>
-      <span className="spacer" />
       <ThemeSwitch theme={theme} onChange={onThemeChange} onField />
       <Tip label={refreshing ? "Refreshing" : "Refresh now"}>
         <button type="button" className="icon-button on-field" aria-label="Refresh now" onClick={onRefresh} disabled={refreshing || refreshDisabled}>
