@@ -180,7 +180,7 @@ h1, h2, h3, h4, p { margin: 0; }
 
 /* Theme switch */
 .theme-switch { display: inline-flex; padding: 2px; border-radius: var(--nova-radius-sm); background: var(--nova-surface); }
-.theme-option { display: inline-grid; place-items: center; width: 32px; height: 28px; padding: 0; border: 0; border-radius: calc(var(--nova-radius-sm) - 2px); background: transparent; color: var(--nova-muted); }
+.theme-option { display: inline-grid; place-items: center; width: 32px; height: 28px; padding: 0; border: 0; border-radius: var(--nova-radius-sm); background: transparent; color: var(--nova-muted); }
 .theme-option[aria-pressed="true"] { background: var(--nova-bg); color: var(--nova-ink); box-shadow: 0 1px 2px rgba(15, 20, 32, 0.12); }
 .theme-switch[data-on-field="true"] { background: var(--nova-field-chip); }
 .theme-switch[data-on-field="true"] .theme-option { color: var(--nova-field-muted); }
