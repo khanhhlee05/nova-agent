@@ -18,7 +18,7 @@ import { createStubHost } from "../src/platform/host";
 import { App } from "../src/sidepanel/App";
 import type { UiPreferences } from "../src/sidepanel/MissionControl";
 import { createNovaDb } from "../src/storage/novaDb";
-import { setPreference } from "../src/storage/repositories";
+import { setPreference, putSyncStatus } from "../src/storage/repositories";
 import { DATA_MODE_PREFERENCE, DEMO_SCENARIO_PREFERENCE, SyncCoordinator, type TransportFactory } from "../src/sync/syncCoordinator";
 import "../src/sidepanel/styles.css";
 
@@ -110,7 +110,11 @@ const main = async () => {
 
   const activeTab = tab ?? (scenario === "changes" ? "changes" : scenario === "week" ? "week" : "focus");
   const theme = params.get("theme") === "dark" ? "dark" : "light";
-  if (params.get("mode") === "demo") await setPreference(db, DATA_MODE_PREFERENCE, "fixture");
+  if (params.get("mode") === "demo") {
+    // Label everything as demo data: the preference for future syncs and the persisted status the freshness line reads.
+    await setPreference(db, DATA_MODE_PREFERENCE, "fixture");
+    await putSyncStatus(db, { mode: "fixture" });
+  }
   await setPreference(db, "ui.preferences", { activeTab, courseFilter: null, collapsedSections: ["completed", "later"], theme } satisfies UiPreferences);
 
   createRoot(document.getElementById("root") as HTMLElement).render(
