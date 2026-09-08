@@ -83,10 +83,15 @@ Contrast targets (verified during the build with computed values): every text pa
 
 Each step keeps `npm run check` green. Steps 3 to 5 are the bulk of the work.
 
-## Open decisions
+## Decisions taken
 
-- **Font hosting**: self-host Hanken Grotesk (adds roughly 80 to 120 KB to the extension) versus a system font stack. Impeccable permits system fonts for Operate surfaces; the direction contract names Hanken Grotesk.
-- **Scope of the orb and the public demo**: restyle the orb in this branch (small) and leave `apps/web` for a follow-up.
+- **Font hosting**: Hanken Grotesk is self-hosted (latin subset, variable 400 to 800, 35 KB woff2) with a metric-friendly fallback stack.
+- **Scope**: the orb is restyled in this branch; `apps/web` is left for a follow-up.
+- **Kicker rule**: the mockup's "Do this first · Course" line above the headline was a kicker, which Impeccable bans; in the build it sits below the headline as a meta line.
+
+## Status
+
+Steps 1 to 6 are implemented on `feature/revamp-ui`. Step 7 (detector, finish review, DESIGN.md, screenshots) closes the branch.
 
 ## Risks
 
