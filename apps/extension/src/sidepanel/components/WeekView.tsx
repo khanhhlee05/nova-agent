@@ -5,6 +5,7 @@ import { formatDayHeader, formatTime } from "../format";
 import type { Dashboard } from "../model";
 import { ItemDetails } from "./ItemDetails";
 import { KindIcon } from "./icons";
+import { courseSwatch } from "../theme";
 
 export type WeekViewProps = {
   dashboard: Dashboard;
@@ -27,7 +28,7 @@ export const WeekView = ({ dashboard, now, canOpen, onOpen, onDismiss }: WeekVie
               <strong>{header.day}</strong>
               <span className="dots" aria-hidden="true">
                 {day.entries.slice(0, 4).map((entry) => (
-                  <i key={entry.item.key} style={{ background: dashboard.courseById.get(entry.item.courseId)?.color }} />
+                  <i key={entry.item.key} style={{ background: courseSwatch(dashboard.courseById.get(entry.item.courseId)?.color ?? "") || undefined }} />
                 ))}
               </span>
             </div>
@@ -58,7 +59,7 @@ export const WeekView = ({ dashboard, now, canOpen, onOpen, onDismiss }: WeekVie
                     return (
                       <Popover.Root key={item.key}>
                         <Popover.Trigger asChild>
-                          <button type="button" className="event-chip" data-tone={bucket === "overdue" ? "coral" : undefined} data-done={done} style={{ "--rail": course?.color } as React.CSSProperties} aria-label={`${item.title}, ${course?.name ?? "course"}, ${formatTime(item.dueAt as string)}${bucket === "overdue" ? ", overdue" : ""}`}>
+                          <button type="button" className="event-chip" data-tone={bucket === "overdue" ? "coral" : undefined} data-done={done} style={{ "--rail": course ? courseSwatch(course.color) : undefined } as React.CSSProperties} aria-label={`${item.title}, ${course?.name ?? "course"}, ${formatTime(item.dueAt as string)}${bucket === "overdue" ? ", overdue" : ""}`}>
                             <KindIcon kind={item.kind} size={14} />
                             <span className="title">{item.title}</span>
                             <span className="time">{formatTime(item.dueAt as string)}</span>

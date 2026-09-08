@@ -248,3 +248,21 @@ describe("safe links", () => {
     expect(live?.textContent).toBe("Refresh complete. 3 new changes.");
   });
 });
+
+describe("theme", () => {
+  it("defaults to light, applies the preference to the document root, and switches on request", async () => {
+    const { dashboard } = await demoDashboard();
+    const p = baseProps({ dashboard });
+    const { unmount } = render(<MissionControl {...p} />);
+    expect(document.documentElement.dataset.theme).toBe("light");
+    const dark = screen.getByRole("button", { name: /dark theme/i });
+    expect(dark.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(dark);
+    expect((p.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0]).toEqual({ theme: "dark" });
+    unmount();
+
+    render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, theme: "dark" } })} />);
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(screen.getByRole("button", { name: /dark theme/i }).getAttribute("aria-pressed")).toBe("true");
+  });
+});

@@ -3,6 +3,7 @@ import { CheckCircle2, ExternalLink, Sparkles, X } from "lucide-react";
 import { formatDeadline, formatRelative } from "../format";
 import type { NextMove } from "../model";
 import { KindIcon } from "./icons";
+import { courseSwatch } from "../theme";
 import { Tip } from "./Tip";
 
 export type NextMoveCardProps = {
@@ -54,7 +55,7 @@ export const NextMoveCard = ({ nextMove, course, now, canOpen, onOpen, onInspect
         <div style={{ minWidth: 0 }}>
           <h2>{item.title}</h2>
           <div className="meta-row">
-            <span className="course-dot" style={{ background: course?.color }} aria-hidden="true" />
+            <span className="course-dot" style={{ background: course ? courseSwatch(course.color) : undefined }} aria-hidden="true" />
             <span>{course?.name ?? "Unknown course"}</span>
             <span aria-hidden="true">·</span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -63,7 +64,7 @@ export const NextMoveCard = ({ nextMove, course, now, canOpen, onOpen, onInspect
             </span>
           </div>
           <div className="meta-row" style={{ marginTop: 2 }}>
-            <strong style={{ color: tone === "coral" ? "var(--nova-coral)" : tone === "amber" ? "var(--nova-amber)" : "var(--nova-text)" }}>
+            <strong style={{ color: tone === "coral" ? "var(--nova-overdue)" : tone === "amber" ? "var(--nova-today)" : "var(--nova-ink)" }}>
               {ranked.priority.overdue ? `Overdue · ${formatRelative(item.dueAt, now)}` : `Due ${formatRelative(item.dueAt, now)}`}
             </strong>
             {item.dueAt ? <span>{formatDeadline(item.dueAt, now)}</span> : null}

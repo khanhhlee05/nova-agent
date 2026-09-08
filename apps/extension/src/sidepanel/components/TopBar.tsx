@@ -6,7 +6,10 @@ import type { SyncPhase } from "../../messaging/protocol";
 import { isRunningPhase } from "../../sync/syncState";
 import { formatUpdated } from "../format";
 import type { CourseFilter } from "../model";
+import type { Theme } from "../theme";
+import { ThemeSwitch } from "./ThemeSwitch";
 import { Tip } from "./Tip";
+import { courseSwatch } from "../theme";
 
 export type ConnectionTone = "live" | "demo" | "syncing" | "error" | "idle";
 
@@ -28,6 +31,8 @@ export type TopBarProps = {
   courses: Course[];
   courseFilter: CourseFilter;
   onCourseFilter: (value: CourseFilter) => void;
+  theme: Theme;
+  onThemeChange: (theme: Theme) => void;
   onRefresh: () => void;
   refreshDisabled?: boolean;
   menu: ReactNode;
@@ -35,7 +40,7 @@ export type TopBarProps = {
 
 const ALL = "__all__";
 
-export const TopBar = ({ mode, phase, lastSuccessfulSyncAt, stale, now, courses, courseFilter, onCourseFilter, onRefresh, refreshDisabled, menu }: TopBarProps) => {
+export const TopBar = ({ mode, phase, lastSuccessfulSyncAt, stale, now, courses, courseFilter, onCourseFilter, theme, onThemeChange, onRefresh, refreshDisabled, menu }: TopBarProps) => {
   const connection = connectionTone(mode, phase);
   const syncing = isRunningPhase(phase);
   return (
@@ -50,6 +55,7 @@ export const TopBar = ({ mode, phase, lastSuccessfulSyncAt, stale, now, courses,
           <span className="connection-dot" aria-hidden="true" />
           {connection.label}
         </span>
+        <ThemeSwitch theme={theme} onChange={onThemeChange} />
         {menu}
       </div>
       <div className="topbar-row">
@@ -71,7 +77,7 @@ export const TopBar = ({ mode, phase, lastSuccessfulSyncAt, stale, now, courses,
                 </Select.Item>
                 {courses.map((course) => (
                   <Select.Item className="select-item" value={course.id} key={course.id}>
-                    <span className="course-dot" style={{ background: course.color }} aria-hidden="true" />
+                    <span className="course-dot" style={{ background: courseSwatch(course.color) }} aria-hidden="true" />
                     <Select.ItemText>{course.name}</Select.ItemText>
                     <Select.ItemIndicator>
                       <Check size={14} aria-hidden="true" />

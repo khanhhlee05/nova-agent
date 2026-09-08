@@ -18,13 +18,14 @@ import { TopBar } from "./components/TopBar";
 import { WeekView } from "./components/WeekView";
 import { countDismissed, type SessionDismissals } from "./dismissals";
 import { pluralize } from "./format";
+import { applyTheme, type Theme } from "./theme";
 import type { CourseFilter, Dashboard } from "./model";
 
 export type TabId = "focus" | "week" | "changes";
 
-export type UiPreferences = { activeTab: TabId; courseFilter: CourseFilter; collapsedSections: DeadlineBucket[] };
+export type UiPreferences = { activeTab: TabId; courseFilter: CourseFilter; collapsedSections: DeadlineBucket[]; theme: Theme };
 
-export const DEFAULT_PREFERENCES: UiPreferences = { activeTab: "focus", courseFilter: null, collapsedSections: ["completed", "later"] };
+export const DEFAULT_PREFERENCES: UiPreferences = { activeTab: "focus", courseFilter: null, collapsedSections: ["completed", "later"], theme: "light" };
 
 export type MissionControlActions = {
   refresh: () => void;
@@ -70,6 +71,11 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
     setExpandedKey(null);
   }, [preferences.courseFilter]);
 
+  const theme: Theme = preferences.theme ?? "light";
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
   const inspect = (key: string) => {
     const item = dashboard?.itemByKey.get(key);
     if (!item) return;
@@ -104,6 +110,8 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
           courses={dashboard?.courses ?? []}
           courseFilter={preferences.courseFilter}
           onCourseFilter={(courseFilter) => actions.setPreferences({ courseFilter })}
+          theme={theme}
+          onThemeChange={(next) => actions.setPreferences({ theme: next })}
           onRefresh={actions.refresh}
           refreshDisabled={showFirstRun}
           menu={<Menu mode={status.mode} feasibility={feasibility} busy={running} onConnectLive={actions.connectLive} onUseDemo={actions.useDemoData} onClearData={actions.clearData} />}

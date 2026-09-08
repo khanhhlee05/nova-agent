@@ -26,6 +26,7 @@ import "../src/sidepanel/styles.css";
  * Preview harness. Drives the real App, Dexie database, and sync coordinator
  * with a stub host so every UI state can be reviewed without Chrome APIs:
  *   preview.html?scenario=ready|changes|week|fixture|first-run|loading|partial|session-expired|stale|offline|permission-required|empty
+ *   &theme=light|dark
  */
 
 type Scenario = "ready" | "changes" | "week" | "fixture" | "first-run" | "loading" | "partial" | "session-expired" | "stale" | "offline" | "permission-required" | "empty";
@@ -107,7 +108,8 @@ const main = async () => {
   }
 
   const activeTab = tab ?? (scenario === "changes" ? "changes" : scenario === "week" ? "week" : "focus");
-  await setPreference(db, "ui.preferences", { activeTab, courseFilter: null, collapsedSections: ["completed", "later"] } satisfies UiPreferences);
+  const theme = params.get("theme") === "dark" ? "dark" : "light";
+  await setPreference(db, "ui.preferences", { activeTab, courseFilter: null, collapsedSections: ["completed", "later"], theme } satisfies UiPreferences);
 
   createRoot(document.getElementById("root") as HTMLElement).render(
     <StrictMode>

@@ -6,6 +6,7 @@ import { formatDeadline, formatRelative } from "../format";
 import { SECTION_LABELS, STATUS_LABELS, type Dashboard } from "../model";
 import { ItemDetails } from "./ItemDetails";
 import { KindIcon, StatusIcon } from "./icons";
+import { courseSwatch } from "../theme";
 import { Tip } from "./Tip";
 
 const SECTION_TONE: Partial<Record<DeadlineBucket, "coral" | "amber" | "mint">> = { overdue: "coral", today: "amber", completed: "mint" };
@@ -85,7 +86,7 @@ const TaskRow = ({ item, bucket, course, ranked, now, expanded, onExpand, canOpe
   const dueTone = bucket === "overdue" ? "coral" : bucket === "today" ? "amber" : undefined;
   const detailsId = `details-${item.key.replace(/[^a-z0-9]+/gi, "-")}`;
   return (
-    <li className="task" data-done={done} style={{ "--rail": course?.color } as React.CSSProperties}>
+    <li className="task" data-done={done} style={{ "--rail": course ? courseSwatch(course.color) : undefined } as React.CSSProperties}>
       <span className="task-rail" aria-hidden="true" />
       <div className="task-row">
         <span className="task-kind">
