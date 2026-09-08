@@ -64,6 +64,7 @@ export type MissionControlProps = {
 /** Presentational root. Everything it needs arrives through props so tests and the preview harness can drive every state. */
 export const MissionControl = ({ dashboard, status, runtime, feasibility, preferences, hasEverSynced, announcement, now, tenantOrigin, dismissals, actions }: MissionControlProps) => {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const phase = runtime.phase === "idle" ? status.phase : runtime.phase;
   const running = isRunningPhase(phase);
   const stale = isStale(status.lastSuccessfulSyncAt, now);
@@ -113,7 +114,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
       <Hero title="No data yet" meta={PHASE_LABELS[phase]} text="Nova could not complete a first refresh. Fix the connection below and retry." />
     )
   ) : tab === "week" ? (
-    <Hero {...weekHero(dashboard)} extra={<WeekStrip week={dashboard.week} courseById={dashboard.courseById} />} />
+    <Hero {...weekHero(dashboard, selectedDay)} extra={<WeekStrip week={dashboard.week} courseById={dashboard.courseById} selected={selectedDay} onSelect={setSelectedDay} />} />
   ) : tab === "changes" ? (
     <Hero
       {...changesHero(dashboard, null, now)}
@@ -152,7 +153,20 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
     </Tabs.List>
   );
 
-  const filterNote = tab === "focus" ? format(now, "EEE, MMM d") : tab === "week" ? "Local time" : "Newest first";
+  const filterNote =
+    tab === "focus" ? (
+      format(now, "EEE, MMM d")
+    ) : tab === "week" ? (
+      selectedDay ? (
+        <button type="button" className="button button-ghost button-sm" onClick={() => setSelectedDay(null)}>
+          Show all days
+        </button>
+      ) : (
+        "Local time"
+      )
+    ) : (
+      "Newest first"
+    );
 
   return (
     <Tooltip.Provider delayDuration={300}>
@@ -235,7 +249,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                 </div>
               </Tabs.Content>
               <Tabs.Content className="tab-content" value="week">
-                {dashboard ? <WeekView dashboard={dashboard} now={now} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
+                {dashboard ? <WeekView dashboard={dashboard} now={now} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} selectedDay={selectedDay} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
               </Tabs.Content>
               <Tabs.Content className="tab-content" value="changes">
                 {dashboard ? <ChangesFeed dashboard={dashboard} now={now} baselineOnly={dashboard.totalChanges === 0 && hasEverSynced} canOpen={canOpen} onOpen={actions.openUrl} onSetRead={actions.setEventRead} onDismiss={actions.dismissEvent} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}

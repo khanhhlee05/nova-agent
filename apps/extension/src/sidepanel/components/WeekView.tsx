@@ -5,6 +5,7 @@ import { formatTime } from "../format";
 import type { Dashboard } from "../model";
 import { courseSwatch } from "../theme";
 import { ItemDetails } from "./ItemDetails";
+import { dayKey } from "./WeekStrip";
 import { KindIcon } from "./icons";
 
 export type WeekViewProps = {
@@ -13,14 +14,17 @@ export type WeekViewProps = {
   canOpen: (url: string | null) => boolean;
   onOpen: (url: string) => void;
   onDismiss: (key: string, title: string) => void;
+  /** Day key to show alone, or null for the whole week. */
+  selectedDay: string | null;
 };
 
 /** Time-led agenda. The seven-day strip lives in the field above; this is the list under it. */
-export const WeekView = ({ dashboard, now, canOpen, onOpen, onDismiss }: WeekViewProps) => {
+export const WeekView = ({ dashboard, now, canOpen, onOpen, onDismiss, selectedDay }: WeekViewProps) => {
   const nextBusy = dashboard.week.find((day) => !day.isToday && day.entries.some((entry) => entry.bucket !== "completed"));
+  const days = selectedDay ? dashboard.week.filter((day) => dayKey(day.date) === selectedDay) : dashboard.week;
   return (
     <div className="agenda">
-      {dashboard.week.map((day) => (
+      {days.map((day) => (
         <section key={day.date.toISOString()} className="agenda-day" aria-label={format(day.date, "EEEE, MMMM d")}>
           <h3 className="agenda-day-label" data-today={day.isToday}>
             {day.isToday ? "Today" : format(day.date, "EEE")}

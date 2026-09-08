@@ -29,8 +29,27 @@ export const focusHero = (nextMove: NextMove | null, courseName: string | undefi
   };
 };
 
-export const weekHero = (dashboard: Dashboard): Hero => {
+export const weekHero = (dashboard: Dashboard, selectedDay: string | null = null): Hero => {
   const days = dashboard.week;
+  if (selectedDay) {
+    const day = days.find((candidate) => format(candidate.date, "yyyy-MM-dd") === selectedDay);
+    if (day) {
+      const active = day.entries.filter((entry) => entry.bucket !== "completed");
+      const done = day.entries.length - active.length;
+      const name = day.isToday ? "Today" : format(day.date, "EEEE");
+      const quizzes = active.filter((entry) => entry.item.kind === "quiz").length;
+      return {
+        title: active.length === 0 ? `Nothing due ${day.isToday ? "today" : format(day.date, "EEEE")}` : `${name}: ${plural(active.length, "deadline")}`,
+        meta: `${format(day.date, "EEEE, MMM d")} · tap the day again for the whole week`,
+        text:
+          active.length === 0
+            ? done > 0
+              ? `${cap(plural(done, "item"))} already submitted. A clear day.`
+              : "A clear day. Use it to get ahead on the next one."
+            : `${quizzes > 0 ? `${cap(plural(quizzes, "quiz", "quizzes"))} and ` : ""}${quizzes > 0 ? plural(active.length - quizzes, "assignment") : cap(plural(active.length, "assignment"))}${done > 0 ? `, plus ${plural(done, "item")} already submitted` : ""}.`,
+      };
+    }
+  }
   const total = days.reduce((sum, day) => sum + day.entries.filter((entry) => entry.bucket !== "completed").length, 0);
   const first = days[0]?.date;
   const last = days[days.length - 1]?.date;
