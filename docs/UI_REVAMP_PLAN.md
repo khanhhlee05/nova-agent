@@ -91,7 +91,7 @@ Each step keeps `npm run check` green. Steps 3 to 5 are the bulk of the work.
 
 ## Status
 
-Steps 1 to 6 are implemented on `feature/revamp-ui`. Step 7 (detector, finish review, DESIGN.md, screenshots) closes the branch.
+All seven steps are implemented on `feature/revamp-ui`. The Impeccable detector reports zero findings over `apps/extension/src`; the finish review ran two rounds (eight material fixes, then three regressions) and closed with a ship disposition on the scored items; `apps/extension/DESIGN.md` records the built system; screenshots of every state in both themes live in `docs/screenshots/`.
 
 ## Risks
 
