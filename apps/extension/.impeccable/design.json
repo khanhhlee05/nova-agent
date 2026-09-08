@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-08T00:00:00Z",
+  "title": "Design System: Nova Mission Control",
+  "extensions": {
+    "colorMeta": {
+      "field-blue": { "role": "primary", "displayName": "Field Blue", "canonical": "#1d5fd1", "dark": "#163f8f", "cssVar": "--nova-field", "tonalRamp": ["oklch(18% 0.09 262)", "oklch(28% 0.14 262)", "oklch(38% 0.18 262)", "oklch(50% 0.2 262)", "oklch(62% 0.17 262)", "oklch(74% 0.12 262)", "oklch(86% 0.07 262)", "oklch(95% 0.025 262)"] },
+      "field-ink": { "role": "primary", "displayName": "Field Ink", "canonical": "#ffffff", "dark": "#ffffff", "cssVar": "--nova-field-ink" },
+      "field-muted": { "role": "primary", "displayName": "Field Muted", "canonical": "#dfe9ff", "dark": "#c7d8ff", "cssVar": "--nova-field-muted" },
+      "field-chip": { "role": "primary", "displayName": "Field Chip", "canonical": "rgba(255, 255, 255, 0.16)", "dark": "rgba(255, 255, 255, 0.14)", "cssVar": "--nova-field-chip" },
+      "field-rule": { "role": "primary", "displayName": "Field Rule", "canonical": "rgba(255, 255, 255, 0.22)", "dark": "rgba(255, 255, 255, 0.2)", "cssVar": "--nova-field-rule" },
+      "accent": { "role": "primary", "displayName": "Accent", "canonical": "#1d5fd1", "dark": "#7aa7ff", "cssVar": "--nova-accent", "tonalRamp": ["oklch(18% 0.09 262)", "oklch(28% 0.14 262)", "oklch(38% 0.18 262)", "oklch(50% 0.2 262)", "oklch(62% 0.17 262)", "oklch(74% 0.12 262)", "oklch(86% 0.07 262)", "oklch(95% 0.025 262)"] },
+      "accent-ink": { "role": "primary", "displayName": "Accent Ink", "canonical": "#ffffff", "dark": "#0b1a3a", "cssVar": "--nova-accent-ink" },
+      "accent-soft": { "role": "primary", "displayName": "Accent Soft", "canonical": "#e3ecff", "dark": "#1a2a4d", "cssVar": "--nova-accent-soft" },
+      "overdue-coral": { "role": "secondary", "displayName": "Overdue Coral", "canonical": "#c2281f", "dark": "#ff8a80", "cssVar": "--nova-overdue", "tonalRamp": ["oklch(18% 0.07 30)", "oklch(28% 0.11 30)", "oklch(40% 0.16 30)", "oklch(52% 0.2 30)", "oklch(64% 0.17 30)", "oklch(76% 0.12 30)", "oklch(87% 0.07 30)", "oklch(95% 0.025 30)"] },
+      "overdue-soft": { "role": "secondary", "displayName": "Overdue Soft", "canonical": "#fde8e6", "dark": "#3a1c1a", "cssVar": "--nova-overdue-soft" },
+      "today-amber": { "role": "secondary", "displayName": "Today Amber", "canonical": "#946000", "dark": "#f2c14e", "cssVar": "--nova-today", "tonalRamp": ["oklch(18% 0.04 75)", "oklch(28% 0.07 75)", "oklch(40% 0.1 75)", "oklch(52% 0.12 75)", "oklch(64% 0.13 75)", "oklch(76% 0.12 75)", "oklch(87% 0.08 75)", "oklch(95% 0.03 75)"] },
+      "today-soft": { "role": "secondary", "displayName": "Today Soft", "canonical": "#fff1cf", "dark": "#3a2e10", "cssVar": "--nova-today-soft" },
+      "done-green": { "role": "secondary", "displayName": "Done Green", "canonical": "#1f7a4d", "dark": "#6fd39a", "cssVar": "--nova-done", "tonalRamp": ["oklch(18% 0.05 155)", "oklch(28% 0.08 155)", "oklch(40% 0.11 155)", "oklch(52% 0.13 155)", "oklch(64% 0.13 155)", "oklch(76% 0.11 155)", "oklch(87% 0.07 155)", "oklch(95% 0.03 155)"] },
+      "done-soft": { "role": "secondary", "displayName": "Done Soft", "canonical": "#dcf3e6", "dark": "#173626", "cssVar": "--nova-done-soft" },
+      "course-0": { "role": "tertiary", "displayName": "Course Slot 0", "canonical": "#1d5fd1", "dark": "#7aa7ff", "cssVar": "--course-0" },
+      "course-1": { "role": "tertiary", "displayName": "Course Slot 1", "canonical": "#188a4f", "dark": "#6fd39a", "cssVar": "--course-1" },
+      "course-2": { "role": "tertiary", "displayName": "Course Slot 2", "canonical": "#c2591b", "dark": "#f0a06c", "cssVar": "--course-2" },
+      "course-3": { "role": "tertiary", "displayName": "Course Slot 3", "canonical": "#a3338a", "dark": "#f28fd6", "cssVar": "--course-3" },
+      "course-4": { "role": "tertiary", "displayName": "Course Slot 4", "canonical": "#0e7c86", "dark": "#5fd3dd", "cssVar": "--course-4" },
+      "course-5": { "role": "tertiary", "displayName": "Course Slot 5", "canonical": "#6d4c9f", "dark": "#b79cf0", "cssVar": "--course-5" },
+      "course-6": { "role": "tertiary", "displayName": "Course Slot 6", "canonical": "#c02f5c", "dark": "#ff8fb0", "cssVar": "--course-6" },
+      "course-7": { "role": "tertiary", "displayName": "Course Slot 7", "canonical": "#4b6a1f", "dark": "#b8d96a", "cssVar": "--course-7" },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#0f1420", "dark": "#eef1f6", "cssVar": "--nova-ink", "tonalRamp": ["oklch(15% 0.02 265)", "oklch(27% 0.02 265)", "oklch(39% 0.02 265)", "oklch(50% 0.02 265)", "oklch(62% 0.015 265)", "oklch(73% 0.012 265)", "oklch(84% 0.01 265)", "oklch(95% 0.006 265)"] },
+      "muted": { "role": "neutral", "displayName": "Muted", "canonical": "#5a6272", "dark": "#98a2b3", "cssVar": "--nova-muted" },
+      "faint": { "role": "neutral", "displayName": "Faint", "canonical": "#6a7383", "dark": "#8b95a5", "cssVar": "--nova-faint" },
+      "rule": { "role": "neutral", "displayName": "Rule", "canonical": "#e9ecf1", "dark": "#232833", "cssVar": "--nova-rule" },
+      "rule-strong": { "role": "neutral", "displayName": "Rule Strong", "canonical": "#d5dae3", "dark": "#323a49", "cssVar": "--nova-rule-strong" },
+      "bg": { "role": "neutral", "displayName": "Background", "canonical": "#ffffff", "dark": "#0f1218", "cssVar": "--nova-bg", "tonalRamp": ["oklch(15% 0.015 265)", "oklch(27% 0.015 265)", "oklch(39% 0.012 265)", "oklch(50% 0.01 265)", "oklch(62% 0.01 265)", "oklch(74% 0.008 265)", "oklch(86% 0.006 265)", "oklch(97% 0.004 265)"] },
+      "surface": { "role": "neutral", "displayName": "Surface", "canonical": "#f3f5f9", "dark": "#1a1f29", "cssVar": "--nova-surface" },
+      "surface-raised": { "role": "neutral", "displayName": "Surface Raised", "canonical": "#ffffff", "dark": "#161b24", "cssVar": "--nova-surface-raised" },
+      "surface-hover": { "role": "neutral", "displayName": "Surface Hover", "canonical": "#e9ecf1", "dark": "#232a37", "cssVar": "--nova-surface-hover" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The field headline, one per tab; balanced wrap." },
+      "headline": { "displayName": "Headline", "purpose": "Section triggers, feed-group labels, detail headings; takes the state hue in Overdue, Today, Done sections." },
+      "title": { "displayName": "Title", "purpose": "Task and event titles, single line with ellipsis." },
+      "body": { "displayName": "Body", "purpose": "Field sentence (max 60ch), signal bodies, banner copy." },
+      "label": { "displayName": "Label", "purpose": "Hero meta line, tab labels, select trigger, time column, disclosure links." },
+      "caption": { "displayName": "Caption", "purpose": "Row sub-lines, freshness, progress, hidden bar; muted." },
+      "wordmark": { "displayName": "Wordmark", "purpose": "NOVA on the field; the only tracked text." }
+    },
+    "themes": {
+      "attribute": "data-theme",
+      "target": "document.documentElement",
+      "default": "light",
+      "values": ["light", "dark"],
+      "note": "Dark is composed with its own swatches, not inverted. color-scheme follows the theme."
+    },
+    "shadows": [
+      { "name": "nova-shadow", "value": "0 6px 20px rgba(15, 20, 32, 0.12)", "dark": "0 8px 24px rgba(0, 0, 0, 0.5)", "purpose": "The single floating-layer shadow: menus, popovers, dialogs, select content, tooltips." },
+      { "name": "nova-focus", "value": "0 0 0 2px var(--nova-bg), 0 0 0 4px var(--nova-accent)", "onField": "0 0 0 2px var(--nova-field), 0 0 0 4px var(--nova-field-ink)", "purpose": "Two-ring focus-visible treatment on every control, 8px radius." },
+      { "name": "switch-thumb", "value": "0 1px 2px rgba(15, 20, 32, 0.12)", "purpose": "The pressed option of the theme switch on the page; dropped on the field." },
+      { "name": "scrim", "value": "rgba(15, 20, 32, 0.45)", "purpose": "Modal overlay behind dialogs." }
+    ],
+    "motion": [
+      { "name": "hero-in", "value": "180ms ease-out; opacity 0 to 1, translateY(4px) to 0", "purpose": "The one authored motion: the field hero settles in when a tab's headline changes." },
+      { "name": "fade-in", "value": "140ms ease-out (120ms for tooltips)", "purpose": "Menus, popovers, dialogs, overlay scrim, tooltips." },
+      { "name": "slide-down", "value": "160ms ease-out; translateY(-3px) to 0", "purpose": "Section content and expanded row details." },
+      { "name": "chevron", "value": "transform 160ms ease", "purpose": "Disclosure chevron rotation." },
+      { "name": "pulse", "value": "1.2s ease-in-out infinite, opacity 1 to 0.45", "purpose": "Freshness label while syncing." },
+      { "name": "spin", "value": "900ms linear infinite", "purpose": "Refresh glyph while syncing." },
+      { "name": "shimmer", "value": "1.4s infinite translateX sweep", "purpose": "Skeleton loading." },
+      { "name": "indeterminate", "value": "1.2s ease-in-out infinite", "purpose": "Progress bar with unknown total." },
+      { "name": "reduced-motion", "value": "@media (prefers-reduced-motion: reduce) { animation: none; transition: none }", "purpose": "Every animation and transition is removed." }
+    ],
+    "breakpoints": [
+      { "name": "min-width", "value": "320px" },
+      { "name": "narrow", "value": "360px", "note": "At or below: gutters 20px to 16px, counts strip gap 18px to 12px." },
+      { "name": "design-range", "value": "380px to 440px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The default button: white, hairline border, ink text. Used for Connect, Retry, Open course.",
+      "html": "<button class=\"ds-btn\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M15 3h6v6\"/><path d=\"M10 14 21 3\"/><path d=\"M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6\"/></svg>Open in Brightspace</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: var(--nova-radius-sm, 8px); border: 1px solid var(--nova-rule-strong, #d5dae3); background: var(--nova-bg, #fff); color: var(--nova-ink, #0f1420); font: 600 13.5px/1.45 'Hanken Grotesk', 'Helvetica Neue', Arial, system-ui, sans-serif; cursor: pointer; } .ds-btn:hover:not(:disabled) { background: var(--nova-surface, #f3f5f9); } .ds-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--nova-bg, #fff), 0 0 0 4px var(--nova-accent, #1d5fd1); } .ds-btn:disabled { opacity: 0.55; cursor: default; }"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Accent fill, used once per view for the committing action (first-run connect, dialog confirm).",
+      "html": "<button class=\"ds-btn-primary\">Load demo data</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: var(--nova-radius-sm, 8px); border: 1px solid transparent; background: var(--nova-accent, #1d5fd1); color: var(--nova-accent-ink, #fff); font: 600 13.5px/1.45 'Hanken Grotesk', 'Helvetica Neue', Arial, system-ui, sans-serif; cursor: pointer; } .ds-btn-primary:hover:not(:disabled) { filter: brightness(1.08); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--nova-bg, #fff), 0 0 0 4px var(--nova-accent, #1d5fd1); }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Transparent accent-text button; the most common variant (details, banners, first run). Usually small.",
+      "html": "<button class=\"ds-btn-ghost ds-btn-ghost--sm\">Why this score?</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: var(--nova-radius-sm, 8px); border: 1px solid transparent; background: transparent; color: var(--nova-accent, #1d5fd1); font: 600 13.5px/1.45 'Hanken Grotesk', 'Helvetica Neue', Arial, system-ui, sans-serif; cursor: pointer; } .ds-btn-ghost--sm { min-height: 30px; padding: 0 10px; font-size: 12.5px; } .ds-btn-ghost:hover:not(:disabled) { background: var(--nova-accent-soft, #e3ecff); } .ds-btn-ghost:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--nova-bg, #fff), 0 0 0 4px var(--nova-accent, #1d5fd1); }"
+    },
+    {
+      "name": "On-Field Button",
+      "kind": "button",
+      "refersTo": "button-on-field",
+      "description": "The one white button on the blue field: Open in Brightspace, Mark all read.",
+      "html": "<div class=\"ds-field-swatch\"><button class=\"ds-btn-on-field\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M15 3h6v6\"/><path d=\"M10 14 21 3\"/><path d=\"M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6\"/></svg>Open in Brightspace</button></div>",
+      "css": ".ds-field-swatch { display: inline-block; padding: 16px 20px; background: var(--nova-field, #1d5fd1); border-radius: 10px; } .ds-btn-on-field { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 0 12px; border-radius: var(--nova-radius-sm, 8px); border: 1px solid transparent; background: var(--nova-field-ink, #fff); color: var(--nova-field, #1d5fd1); font: 600 13.5px/1.45 'Hanken Grotesk', 'Helvetica Neue', Arial, system-ui, sans-serif; cursor: pointer; } .ds-btn-on-field:hover:not(:disabled) { filter: brightness(0.96); } .ds-btn-on-field:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--nova-field, #1d5fd1), 0 0 0 4px var(--nova-field-ink, #fff); }"
+    },
+    {
+      "name": "Icon Button",
+      "kind": "button",
+      "refersTo": "icon-button",
+      "description": "36px square, transparent, muted Lucide glyph; hover lifts to Surface and ink. Every icon-only control carries a tooltip.",
+      "html": "<button class=\"ds-icon-btn\" aria-label=\"Refresh\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/></svg></button>",
+      "css": ".ds-icon-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: var(--nova-radius-sm, 8px); background: transparent; color: var(--nova-muted, #5a6272); cursor: pointer; } .ds-icon-btn:hover:not(:disabled) { background: var(--nova-surface, #f3f5f9); color: var(--nova-ink, #0f1420); } .ds-icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--nova-bg, #fff), 0 0 0 4px var(--nova-accent, #1d5fd1); }"
+    },
+    {
+      "name": "Field Tabs",
+      "kind": "nav",
+      "refersTo": "tab-trigger",
+      "description": "Three tabs on the field's lower edge; the active one is the page color with top-only corners so it joins the list as one white tab.",
+      "html": "<div class=\"ds-field-tabs\"><div class=\"ds-tabs\" role=\"tablist\"><button class=\"ds-tab\" role=\"tab\" aria-selected=\"true\" data-state=\"active\">Focus</button><button class=\"ds-tab\" role=\"tab\">Week</button><button class=\"ds-tab\" role=\"tab\">Changes <span class=\"ds-count-pill\">4</span></button></div></div>",
+      "css": ".ds-field-tabs { padding: 14px 16px 0; background: var(--nova-field, #1d5fd1); border-radius: 10px 10px 0 0; } .ds-tabs { display: flex; gap: 2px; } .ds-tab { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border: 0; border-radius: 8px 8px 0 0; background: transparent; color: var(--nova-field-muted, #dfe9ff); font: 600 14px/1 'Hanken Grotesk', 'Helvetica Neue', Arial, system-ui, sans-serif; cursor: pointer; } .ds-tab:hover { color: var(--nova-field-ink, #fff); } .ds-tab[data-state=\"active\"] { background: var(--nova-bg, #fff); color: var(--nova-ink, #0f1420); font-weight: 700; } .ds-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--nova-field, #1d5fd1), 0 0 0 4px var(--nova-field-ink, #fff); } .ds-count-pill { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--nova-field-ink, #fff); color: var(--nova-field, #1d5fd1); font-size: 11px; font-weight: 800; } .ds-tab[data-state=\"active\"] .ds-count-pill { background: var(--nova-accent, #1d5fd1); color: var(--nova-accent-ink, #fff); }"
+    },
+    {
+      "name": "Course Filter",
+      "kind": "input",
+      "refersTo": "select-trigger",
+      "description": "The panel's only field control: a 32px select trigger with hairline border and trailing chevron.",
+      "html": "<button class=\"ds-select\" aria-haspopup=\"listbox\"><span>All courses</span><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"/></svg></button>",
+      "css": ".ds-select { display: inline-flex; align-items: center; justify-content: space-between; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--nova-rule, #e9ecf1); border-radius: var(--nova-radius-sm, 8px); background: var(--nova-bg, #fff); color: var(--nova-ink, #0f1420); font: 600 13px/1 'Hanken Grotesk', 'Helvetica Neue', Arial, system-ui, sans-serif; cursor: pointer; } .ds-select:hover { background: var(--nova-surface, #f3f5f9); } .ds-select:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--nova-bg, #fff), 0 0 0 4px var(--nova-accent, #1d5fd1); }"
+    },
+    {
+      "name": "Task Row",
+      "kind": "custom",
+      "refersTo": "task-row",
+      "description": "Hairline-separated list row: title, course dot and name, tone-colored due label, kind chip and icon actions. No card.",
+      "html": "<div class=\"ds-task\"><div class=\"ds-task-row\"><div class=\"ds-task-main\"><div class=\"ds-task-title\">Lab 2: GPIO and Debouncing</div><div class=\"ds-task-sub\"><span class=\"ds-task-course\"><i class=\"ds-dot\" style=\"background: var(--course-0, #1d5fd1)\"></i>Microcontrollers</span><span class=\"ds-due\" data-tone=\"overdue\">Overdue · 21 hours ago</span></div></div><div class=\"ds-task-aside\"><span class=\"ds-kind-chip\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z\"/><path d=\"M14 2v4a2 2 0 0 0 2 2h4\"/><path d=\"M10 9H8\"/><path d=\"M16 13H8\"/><path d=\"M16 17H8\"/></svg></span><button class=\"ds-icon-btn-sm\" aria-label=\"Expand\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"/></svg></button></div></div></div>",
+      "css": ".ds-task { border-bottom: 1px solid var(--nova-rule, #e9ecf1); font-family: 'Hanken Grotesk', 'Helvetica Neue', Arial, system-ui, sans-serif; font-variant-numeric: tabular-nums; color: var(--nova-ink, #0f1420); } .ds-task-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; min-height: 56px; padding: 10px 0; } .ds-task-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; } .ds-task-title { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-task-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; font-size: 12.5px; color: var(--nova-muted, #5a6272); } .ds-task-course { display: inline-flex; align-items: center; gap: 6px; } .ds-dot { display: inline-block; width: 8px; height: 8px; border-radius: 4px; } .ds-due[data-tone=\"overdue\"] { color: var(--nova-overdue, #c2281f); font-weight: 600; } .ds-due[data-tone=\"today\"] { color: var(--nova-today, #946000); font-weight: 600; } .ds-task-aside { display: flex; align-items: center; gap: 2px; } .ds-kind-chip { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; color: var(--nova-muted, #5a6272); } .ds-icon-btn-sm { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--nova-muted, #5a6272); cursor: pointer; } .ds-icon-btn-sm:hover { background: var(--nova-surface, #f3f5f9); color: var(--nova-ink, #0f1420); } .ds-icon-btn-sm:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--nova-bg, #fff), 0 0 0 4px var(--nova-accent, #1d5fd1); }"
+    },
+    {
+      "name": "The Field",
+      "kind": "custom",
+      "refersTo": "overlay-surface",
+      "description": "The signature: blue field with a 26px headline, meta line, one sentence, one white button, and the counts strip under a 22% white hairline.",
+      "html": "<section class=\"ds-field\"><div class=\"ds-hero\"><h2 class=\"ds-hero-title\">Lab 2: GPIO and Debouncing</h2><div class=\"ds-hero-meta\">Do this first · Microcontrollers · Assignment</div><p class=\"ds-hero-text\">Overdue since Mon, Sep 7, 5:00 PM, 21 hours ago. One of the higher-point items in this course.</p><div class=\"ds-hero-actions\"><button class=\"ds-btn-on-field\">Open in Brightspace</button><button class=\"ds-hero-score\">Suggested priority <strong>66</strong> · why?</button></div></div><div class=\"ds-counts\"><span class=\"ds-count\"><strong>1</strong> Overdue</span><span class=\"ds-count\"><strong>1</strong> Today</span><span class=\"ds-count\"><strong>6</strong> This week</span><span class=\"ds-count\"><strong>4</strong> New changes</span></div></section>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 16px; padding: 16px 20px; background: var(--nova-field, #1d5fd1); color: var(--nova-field-ink, #fff); border-radius: 10px; font-family: 'Hanken Grotesk', 'Helvetica Neue', Arial, system-ui, sans-serif; font-variant-numeric: tabular-nums; } .ds-hero { display: flex; flex-direction: column; gap: 6px; animation: ds-hero-in 180ms ease-out; } .ds-hero-title { margin: 0; font-size: 26px; font-weight: 800; line-height: 1.15; letter-spacing: -0.02em; text-wrap: balance; } .ds-hero-meta { font-size: 13px; font-weight: 600; color: var(--nova-field-muted, #dfe9ff); } .ds-hero-text { margin: 0; font-size: 14px; line-height: 1.45; max-width: 60ch; } .ds-hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 6px; } .ds-btn-on-field { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 12px; border-radius: 8px; border: 0; background: var(--nova-field-ink, #fff); color: var(--nova-field, #1d5fd1); font: 600 13.5px/1.45 inherit; font-family: inherit; cursor: pointer; } .ds-btn-on-field:hover { filter: brightness(0.96); } .ds-btn-on-field:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--nova-field, #1d5fd1), 0 0 0 4px var(--nova-field-ink, #fff); } .ds-hero-score { padding: 0; border: 0; background: transparent; color: var(--nova-field-muted, #dfe9ff); font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer; } .ds-hero-score strong { color: var(--nova-field-ink, #fff); } .ds-hero-score:hover { color: var(--nova-field-ink, #fff); } .ds-counts { display: flex; gap: 18px; padding-top: 12px; border-top: 1px solid var(--nova-field-rule, rgba(255,255,255,0.22)); } .ds-count { display: inline-flex; align-items: baseline; gap: 5px; color: var(--nova-field-muted, #dfe9ff); font-size: 13px; font-weight: 500; } .ds-count strong { font-size: 15px; font-weight: 800; color: var(--nova-field-ink, #fff); } @keyframes ds-hero-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }"
+    },
+    {
+      "name": "Menu",
+      "kind": "card",
+      "refersTo": "overlay-surface",
+      "description": "Floating layer: Surface Raised ground, Rule Strong border, 10px radius, the one shadow, 40px items.",
+      "html": "<div class=\"ds-menu\" role=\"menu\"><div class=\"ds-menu-label\">Data</div><button class=\"ds-menu-item\" role=\"menuitem\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/></svg>Refresh now</button><div class=\"ds-menu-sep\"></div><button class=\"ds-menu-item\" role=\"menuitem\" data-danger=\"true\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 6h18\"/><path d=\"M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6\"/><path d=\"M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2\"/></svg>Wipe local data</button></div>",
+      "css": ".ds-menu { min-width: 220px; padding: 6px; border: 1px solid var(--nova-rule-strong, #d5dae3); border-radius: var(--nova-radius-md, 10px); background: var(--nova-surface-raised, #fff); box-shadow: var(--nova-shadow, 0 6px 20px rgba(15, 20, 32, 0.12)); color: var(--nova-ink, #0f1420); font-family: 'Hanken Grotesk', 'Helvetica Neue', Arial, system-ui, sans-serif; animation: ds-fade-in 140ms ease-out; } .ds-menu-label { padding: 6px 10px 2px; font-size: 12px; font-weight: 700; color: var(--nova-muted, #5a6272); } .ds-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; font: 400 13.5px/1.45 inherit; font-family: inherit; color: inherit; cursor: pointer; } .ds-menu-item svg { color: var(--nova-muted, #5a6272); } .ds-menu-item:hover { background: var(--nova-surface, #f3f5f9); } .ds-menu-item:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--nova-bg, #fff), 0 0 0 4px var(--nova-accent, #1d5fd1); } .ds-menu-item[data-danger=\"true\"] { color: var(--nova-overdue, #c2281f); } .ds-menu-item[data-danger=\"true\"] svg { color: inherit; } .ds-menu-sep { height: 1px; margin: 6px 4px; background: var(--nova-rule, #e9ecf1); } @keyframes ds-fade-in { from { opacity: 0; } to { opacity: 1; } }"
+    },
+    {
+      "name": "Banner",
+      "kind": "card",
+      "refersTo": "banner",
+      "description": "The only in-flow container: hairline border, 10px radius, tone carried by the icon (and the border when critical).",
+      "html": "<div class=\"ds-banner\" data-tone=\"info\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M14.5 2v6.5L19 17a2 2 0 0 1-1.8 3H6.8A2 2 0 0 1 5 17l4.5-8.5V2\"/><path d=\"M8.5 2h7\"/><path d=\"M7 16h10\"/></svg><div class=\"ds-banner-main\"><strong>Demo data</strong><p>These courses are fictional. Nothing here comes from your Brightspace account.</p></div></div>",
+      "css": ".ds-banner { display: flex; gap: 10px; padding: 10px 12px; border: 1px solid var(--nova-rule, #e9ecf1); border-radius: var(--nova-radius-md, 10px); background: var(--nova-bg, #fff); color: var(--nova-ink, #0f1420); font: 400 13.5px/1.45 'Hanken Grotesk', 'Helvetica Neue', Arial, system-ui, sans-serif; } .ds-banner svg { flex-shrink: 0; margin-top: 1px; } .ds-banner[data-tone=\"info\"] svg { color: var(--nova-accent, #1d5fd1); } .ds-banner[data-tone=\"warn\"] svg { color: var(--nova-ink, #0f1420); } .ds-banner[data-tone=\"critical\"] { border-color: var(--nova-overdue, #c2281f); } .ds-banner[data-tone=\"critical\"] svg { color: var(--nova-overdue, #c2281f); } .ds-banner[data-tone=\"success\"] svg { color: var(--nova-done, #1f7a4d); } .ds-banner-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; } .ds-banner strong { font-weight: 700; } .ds-banner p { margin: 0; color: var(--nova-muted, #5a6272); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Field",
+    "overview": "One Villanova-blue field owns the top of the panel and states, per tab, the single thing the student needs to know: a 26 px headline, one sentence, one white button, a counts strip. Everything beneath the field is a plain list on white, separated by hairlines, with course color reduced to an 8 px dot. The panel is 380 to 440 px wide and sits beside Brightspace in a lit room; it earns a ten-second glance and does not compete with the LMS.\n\nThe world is bright by default. Light is the composed scene and dark is a second composition with its own swatches (deeper field blue, near-black ground, lifted accent) rather than an inversion. Every semantic role has a value in both themes, chosen so text pairs pass WCAG AA on both grounds; the switch is a persisted preference applied as data-theme on the document root so portaled layers inherit it.\n\nThe build refuses the four-tile summary, the labeled next-move card, and decorated rows. Emphasis comes from weight (400 to 800 in one family) and from the three state hues reserved for overdue, today, and done, never from boxes, tints, or badges around list content.",
+    "keyCharacteristics": [
+      "One blue field at the top; plain hairline list below.",
+      "Light default, separately composed dark; both AA.",
+      "Hanken Grotesk only, weights 400 to 800, tabular numerals everywhere.",
+      "Coral, amber, green appear only as overdue, today, done.",
+      "Course identity is an 8 px dot painted from one of eight theme-aware slots.",
+      "8 px control radius, 10 px overlay radius, hairline rules.",
+      "Flat in flow; the single shadow belongs to floating layers."
+    ],
+    "rules": [
+      { "name": "The Three Hues Rule", "body": "Coral, amber, and green mean overdue, today, and done. They color a heading, a date, an icon, or a border; they never fill a row or a card, and they never appear for any other reason.", "section": "colors" },
+      { "name": "The Composed Dark Rule", "body": "Dark is not light inverted. Every role gets a second swatch chosen on the dark ground (field deepens to #163f8f, accent lifts to #7aa7ff with dark ink), and course slots are re-painted so all eight stay distinguishable.", "section": "colors" },
+      { "name": "The Dot Rule", "body": "Course color is an 8 px dot beside the course name and nothing else. No tinted rows, no colored borders, no course-colored text.", "section": "colors" },
+      { "name": "The One Face Rule", "body": "Hanken Grotesk is the only family. Weight carries hierarchy; there is no display serif, no monospace label style, no system UI face.", "section": "typography" },
+      { "name": "The Tabular Rule", "body": "Numerals are tabular everywhere (font-variant-numeric: tabular-nums on body), so counts, dates, times, and scores align without a mono font.", "section": "typography" },
+      { "name": "The Floating-Only Rule", "body": "Shadows belong to layers that leave the page (menus, popovers, dialogs, tooltips). Nothing in the scroll flow casts one.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do open every tab with the field: a 26 px 800 headline, one sentence at 60 ch, one white on-field button, then a hairline and a strip.",
+      "Do build lists as hairline-separated rows (1 px Rule, 56 px minimum) with no background, no border box, and no shadow.",
+      "Do show course identity as an 8 px dot painted from var(--course-N) so both themes keep the slot distinguishable.",
+      "Do give every semantic color a light and a dark value and verify text pairs at 4.5:1 on both grounds before adding a role.",
+      "Do use Lucide stroke icons at 14 to 16 px, muted at rest, colored only by state.",
+      "Do keep motion to the hero settle-in (180 ms), 140 to 160 ms fades and slides for layers and disclosures, and utility pulses; all of it turns off under prefers-reduced-motion.",
+      "Do use the two-ring focus shadow on every interactive control, swapping to field-blue plus white when the control sits on the field."
+    ],
+    "donts": [
+      "Don't wrap list items in cards, tinted rows, or colored left borders; the field is the only colored block on the page.",
+      "Don't use coral, amber, or green for anything other than overdue, today, and done, and never as a fill behind text.",
+      "Don't derive the dark theme by inverting light values; compose it with the paired swatches (field #163f8f, accent #7aa7ff, ground #0f1218).",
+      "Don't add a second typeface, a monospace label style, or uppercase tracked labels; the wordmark is the only tracked text.",
+      "Don't cast shadows on in-flow surfaces; the floating shadow belongs to menus, popovers, dialogs, and tooltips only.",
+      "Don't summarize with tiles or a labeled \"next move\" card above the list; the field headline already is the summary."
+    ]
+  }
+}

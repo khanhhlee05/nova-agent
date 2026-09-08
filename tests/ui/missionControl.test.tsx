@@ -78,7 +78,7 @@ describe("Mission Control states", () => {
     const { dashboard } = await demoDashboard();
     render(<MissionControl {...baseProps({ dashboard })} />);
     expect(screen.getByRole("status", { name: /connection: live/i })).toBeTruthy();
-    expect(screen.getByText("Updated 4m ago")).toBeTruthy();
+    expect(screen.getByText(/live · 4m ago/i)).toBeTruthy();
     const summary = screen.getByRole("group", { name: /workload summary/i });
     expect(within(summary).getByText("Overdue").previousSibling?.textContent).toBe(String(dashboard.counts.overdue));
     expect(within(summary).getByText("Today").previousSibling?.textContent).toBe(String(dashboard.counts.today));
@@ -92,7 +92,7 @@ describe("Mission Control states", () => {
     const { dashboard } = await demoDashboard();
     const old = new Date(NOW.getTime() - 2 * 3_600_000).toISOString();
     const { unmount } = render(<MissionControl {...baseProps({ dashboard, status: { ...baseProps().status, lastSuccessfulSyncAt: old } })} />);
-    expect(screen.getByText(/Stale · Updated 2h ago/)).toBeTruthy();
+    expect(screen.getByText(/stale · 2h ago/i)).toBeTruthy();
     expect(screen.getByText(/this may be out of date/i)).toBeTruthy();
     unmount();
 
@@ -171,7 +171,7 @@ describe("keyboard navigation", () => {
     expect(expand.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByRole("button", { name: /show breakdown/i })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: /show breakdown/i }));
-    expect(screen.getByRole("table", { name: /priority breakdown/i })).toBeTruthy();
+    expect(screen.getByText(/total \(rounded, 0 to 100\)/i)).toBeTruthy();
   });
 
   it("renders the week view with seven days and item popovers", async () => {
@@ -246,5 +246,23 @@ describe("safe links", () => {
     render(<MissionControl {...baseProps({ dashboard, announcement: "Refresh complete. 3 new changes." })} />);
     const live = document.querySelector('[aria-live="polite"]');
     expect(live?.textContent).toBe("Refresh complete. 3 new changes.");
+  });
+});
+
+describe("theme", () => {
+  it("defaults to light, applies the preference to the document root, and switches on request", async () => {
+    const { dashboard } = await demoDashboard();
+    const p = baseProps({ dashboard });
+    const { unmount } = render(<MissionControl {...p} />);
+    expect(document.documentElement.dataset.theme).toBe("light");
+    const dark = screen.getByRole("button", { name: /dark theme/i });
+    expect(dark.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(dark);
+    expect((p.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0]).toEqual({ theme: "dark" });
+    unmount();
+
+    render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, theme: "dark" } })} />);
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(screen.getByRole("button", { name: /dark theme/i }).getAttribute("aria-pressed")).toBe("true");
   });
 });

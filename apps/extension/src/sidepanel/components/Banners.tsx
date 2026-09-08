@@ -121,7 +121,7 @@ export const StateBanners = (props: StateBannersProps) => {
         }
       >
         <p>Brightspace refused the read-only routes for your session. Official OAuth access must be registered by Villanova before live data can load.</p>
-        {error ? <p className="faint">{describeError(error)}</p> : null}
+        {error ? <p>{describeError(error)}</p> : null}
       </Banner>,
     );
   } else if (phase === "offline") {
@@ -176,12 +176,12 @@ export const StateBanners = (props: StateBannersProps) => {
   return banners.length > 0 ? <div className="stack">{banners}</div> : null;
 };
 
-export const SyncProgress = ({ phase, progress }: { phase: SyncPhase; progress: { completed: number; total: number } | null }) => {
+export const SyncProgress = ({ phase, progress, showLabel = true }: { phase: SyncPhase; progress: { completed: number; total: number } | null; showLabel?: boolean }) => {
   if (!isRunningPhase(phase)) return null;
   const percent = progress && progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : null;
   return (
     <div className="progress" aria-hidden="true">
-      <span>{PHASE_LABELS[phase]}{percent !== null ? ` · ${progress?.completed}/${progress?.total}` : ""}</span>
+      {showLabel ? <span>{PHASE_LABELS[phase]}{percent !== null ? ` · ${progress?.completed}/${progress?.total}` : ""}</span> : null}
       <span className="progress-bar" data-indeterminate={percent === null}>
         <i style={{ "--progress": percent === null ? undefined : `${percent}%` } as React.CSSProperties} />
       </span>

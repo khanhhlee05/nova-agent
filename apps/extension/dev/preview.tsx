@@ -18,7 +18,7 @@ import { createStubHost } from "../src/platform/host";
 import { App } from "../src/sidepanel/App";
 import type { UiPreferences } from "../src/sidepanel/MissionControl";
 import { createNovaDb } from "../src/storage/novaDb";
-import { setPreference } from "../src/storage/repositories";
+import { setPreference, putSyncStatus } from "../src/storage/repositories";
 import { DATA_MODE_PREFERENCE, DEMO_SCENARIO_PREFERENCE, SyncCoordinator, type TransportFactory } from "../src/sync/syncCoordinator";
 import "../src/sidepanel/styles.css";
 
@@ -26,6 +26,8 @@ import "../src/sidepanel/styles.css";
  * Preview harness. Drives the real App, Dexie database, and sync coordinator
  * with a stub host so every UI state can be reviewed without Chrome APIs:
  *   preview.html?scenario=ready|changes|week|fixture|first-run|loading|partial|session-expired|stale|offline|permission-required|empty
+ *   &theme=light|dark
+ *   &mode=demo   (label the data as demo regardless of scenario)
  */
 
 type Scenario = "ready" | "changes" | "week" | "fixture" | "first-run" | "loading" | "partial" | "session-expired" | "stale" | "offline" | "permission-required" | "empty";
@@ -107,7 +109,13 @@ const main = async () => {
   }
 
   const activeTab = tab ?? (scenario === "changes" ? "changes" : scenario === "week" ? "week" : "focus");
-  await setPreference(db, "ui.preferences", { activeTab, courseFilter: null, collapsedSections: ["completed", "later"] } satisfies UiPreferences);
+  const theme = params.get("theme") === "dark" ? "dark" : "light";
+  if (params.get("mode") === "demo") {
+    // Label everything as demo data: the preference for future syncs and the persisted status the freshness line reads.
+    await setPreference(db, DATA_MODE_PREFERENCE, "fixture");
+    await putSyncStatus(db, { mode: "fixture" });
+  }
+  await setPreference(db, "ui.preferences", { activeTab, courseFilter: null, collapsedSections: ["completed", "later"], theme } satisfies UiPreferences);
 
   createRoot(document.getElementById("root") as HTMLElement).render(
     <StrictMode>
