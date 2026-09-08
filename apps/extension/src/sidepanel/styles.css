@@ -155,7 +155,7 @@ h1, h2, h3, h4, p { margin: 0; }
 .tab-trigger { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border: 0; border-radius: var(--nova-radius-sm) var(--nova-radius-sm) 0 0; background: transparent; color: var(--nova-field-muted); font-size: 14px; font-weight: 600; }
 .tab-trigger:hover { color: var(--nova-field-ink); }
 .tab-trigger[data-state="active"] { background: var(--nova-bg); color: var(--nova-ink); font-weight: 700; }
-.count-pill { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--nova-field-ink); color: var(--nova-field); font-size: 11px; font-weight: 800; }
+.count-pill { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--nova-field-ink); color: var(--nova-field); font-size: 12px; font-weight: 800; }
 .tab-trigger[data-state="active"] .count-pill { background: var(--nova-accent); color: var(--nova-accent-ink); }
 
 /* Buttons */
