@@ -1,6 +1,7 @@
 import type { FeasibilityReport } from "@nova-agent/brightspace";
 import { isSafeTenantLink } from "@nova-agent/brightspace";
 import type { DeadlineBucket } from "@nova-agent/core";
+import { EyeOff } from "lucide-react";
 import { Tabs, Tooltip } from "radix-ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SyncStatusRecord } from "../storage/novaDb";
@@ -15,6 +16,8 @@ import { FocusSkeleton } from "./components/Skeleton";
 import { SummaryChips } from "./components/SummaryChips";
 import { TopBar } from "./components/TopBar";
 import { WeekView } from "./components/WeekView";
+import { countDismissed, type SessionDismissals } from "./dismissals";
+import { pluralize } from "./format";
 import type { CourseFilter, Dashboard } from "./model";
 
 export type TabId = "focus" | "week" | "changes";
@@ -32,6 +35,11 @@ export type MissionControlActions = {
   connectLive: () => void;
   useDemoData: () => void;
   clearData: () => Promise<void> | void;
+  /** Session-only: hides an item everywhere until the next refresh. */
+  dismissItem: (key: string, title: string) => void;
+  dismissEvent: (id: string, title: string) => void;
+  dismissBanner: (id: string) => void;
+  restoreDismissed: () => void;
 };
 
 export type MissionControlProps = {
@@ -44,11 +52,12 @@ export type MissionControlProps = {
   announcement: string | null;
   now: Date;
   tenantOrigin: string;
+  dismissals: SessionDismissals;
   actions: MissionControlActions;
 };
 
 /** Presentational root. Everything it needs arrives through props so tests and the preview harness can drive every state. */
-export const MissionControl = ({ dashboard, status, runtime, feasibility, preferences, hasEverSynced, announcement, now, tenantOrigin, actions }: MissionControlProps) => {
+export const MissionControl = ({ dashboard, status, runtime, feasibility, preferences, hasEverSynced, announcement, now, tenantOrigin, dismissals, actions }: MissionControlProps) => {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const focusRef = useRef<HTMLDivElement>(null);
   const phase = runtime.phase === "idle" ? status.phase : runtime.phase;
@@ -81,6 +90,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
 
   const showFirstRun = !dashboard && !hasEverSynced && !running && status.lastAttemptedSyncAt === null;
   const showSkeleton = !dashboard && running;
+  const hiddenCount = dashboard ? dashboard.hidden.items + dashboard.hidden.events + dismissals.banners.size : countDismissed(dismissals);
 
   return (
     <Tooltip.Provider delayDuration={300}>
@@ -124,6 +134,15 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                 ) : null}
               </Tabs.Trigger>
             </Tabs.List>
+            {hiddenCount > 0 ? (
+              <div className="hidden-bar" role="status">
+                <EyeOff size={14} aria-hidden="true" />
+                <span>{pluralize(hiddenCount, "item")} hidden until the next refresh</span>
+                <button type="button" className="button button-ghost button-sm" onClick={actions.restoreDismissed}>
+                  Show all
+                </button>
+              </div>
+            ) : null}
             <Tabs.Content className="tab-content" value="focus" ref={focusRef}>
               <div className="stack">
                 <StateBanners
@@ -142,20 +161,22 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                   onConnectLive={actions.connectLive}
                   onOpenBrightspace={() => actions.openUrl(`${tenantOrigin}/d2l/home`)}
                   onUseDemo={actions.useDemoData}
+                  dismissed={dismissals.banners}
+                  onDismiss={actions.dismissBanner}
                 />
                 {showSkeleton ? (
                   <FocusSkeleton />
                 ) : dashboard ? (
                   <>
                     <SummaryChips counts={dashboard.counts} onSelect={jumpTo} />
-                    <NextMoveCard nextMove={dashboard.nextMove} course={dashboard.nextMove ? dashboard.courseById.get(dashboard.nextMove.item.courseId) : undefined} now={now} canOpen={canOpen(dashboard.nextMove?.item.url ?? null)} onOpen={actions.openUrl} onInspect={inspect} />
+                    <NextMoveCard nextMove={dashboard.nextMove} course={dashboard.nextMove ? dashboard.courseById.get(dashboard.nextMove.item.courseId) : undefined} now={now} canOpen={canOpen(dashboard.nextMove?.item.url ?? null)} onOpen={actions.openUrl} onInspect={inspect} onDismiss={actions.dismissItem} />
                     {dashboard.items.length === 0 ? (
                       <div className="empty">
                         <strong>No assignments or quizzes yet</strong>
                         <span>{preferences.courseFilter ? "This course has nothing visible. Try All courses." : "Nova found no visible assignments or quizzes in your active courses."}</span>
                       </div>
                     ) : (
-                      <DeadlineSections dashboard={dashboard} now={now} collapsed={collapsed} onToggle={(bucket) => actions.setPreferences({ collapsedSections: collapsed.has(bucket) ? preferences.collapsedSections.filter((section) => section !== bucket) : [...preferences.collapsedSections, bucket] })} expandedKey={expandedKey} onExpand={setExpandedKey} canOpen={canOpen} onOpen={actions.openUrl} />
+                      <DeadlineSections dashboard={dashboard} now={now} collapsed={collapsed} onToggle={(bucket) => actions.setPreferences({ collapsedSections: collapsed.has(bucket) ? preferences.collapsedSections.filter((section) => section !== bucket) : [...preferences.collapsedSections, bucket] })} expandedKey={expandedKey} onExpand={setExpandedKey} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} />
                     )}
                   </>
                 ) : (
@@ -167,10 +188,10 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
               </div>
             </Tabs.Content>
             <Tabs.Content className="tab-content" value="week">
-              {dashboard ? <WeekView dashboard={dashboard} now={now} canOpen={canOpen} onOpen={actions.openUrl} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
+              {dashboard ? <WeekView dashboard={dashboard} now={now} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
             </Tabs.Content>
             <Tabs.Content className="tab-content" value="changes">
-              {dashboard ? <ChangesFeed dashboard={dashboard} now={now} baselineOnly={dashboard.totalChanges === 0 && hasEverSynced} canOpen={canOpen} onOpen={actions.openUrl} onMarkAllRead={actions.markAllRead} onSetRead={actions.setEventRead} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
+              {dashboard ? <ChangesFeed dashboard={dashboard} now={now} baselineOnly={dashboard.totalChanges === 0 && hasEverSynced} canOpen={canOpen} onOpen={actions.openUrl} onMarkAllRead={actions.markAllRead} onSetRead={actions.setEventRead} onDismiss={actions.dismissEvent} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
             </Tabs.Content>
           </Tabs.Root>
         )}

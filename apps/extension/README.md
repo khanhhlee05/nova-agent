@@ -14,6 +14,17 @@ Then open `chrome://extensions`, enable Developer mode, choose **Load unpacked**
 - Visit `https://brightspace.villanova.edu` while signed in. A small Nova Orb appears bottom-right; click it (or the toolbar icon) to open Mission Control in the side panel.
 - On first run choose **Connect to Brightspace** to run the read-only feasibility probe, or **Explore with demo data**.
 
+## Hiding things for a session
+
+Every task row, week entry, change event, Next move card, and notice banner has a **Hide until next refresh** control. Hidden things leave every view at once, including the summary counts, the Next move card, the week agenda, and the unread badge. A bar under the tabs shows how many things are hidden and offers **Show all**.
+
+Dismissals are deliberately not persisted:
+
+- Closing the side panel forgets them.
+- Pressing **Refresh**, or any automatic refresh that brings a new snapshot, restores everything.
+
+This keeps the student in control of what they look at right now while guaranteeing the panel always returns to what Brightspace actually says.
+
 ## Preview harness
 
 ```bash

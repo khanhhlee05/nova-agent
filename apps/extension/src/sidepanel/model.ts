@@ -35,6 +35,8 @@ export type Dashboard = {
   week: WeekDay[];
   changes: ChangeGroups;
   totalChanges: number;
+  /** Counts of things hidden by session dismissals, for the "hidden until next refresh" bar. */
+  hidden: { items: number; events: number };
 };
 
 export type BuildDashboardInput = {
@@ -42,15 +44,20 @@ export type BuildDashboardInput = {
   events: readonly ChangeEvent[];
   now: Date;
   courseFilter: CourseFilter;
+  /** Session-only dismissals. Hidden everywhere: counts, sections, next move, week, and changes. */
+  dismissedItemKeys?: ReadonlySet<string>;
+  dismissedEventIds?: ReadonlySet<string>;
 };
 
 /** Pure derivation of everything the three tabs render. Counts, buckets, and ranking share one filtered set. */
-export const buildDashboard = ({ snapshot, events, now, courseFilter }: BuildDashboardInput): Dashboard => {
+export const buildDashboard = ({ snapshot, events, now, courseFilter, dismissedItemKeys, dismissedEventIds }: BuildDashboardInput): Dashboard => {
   const courses = [...snapshot.courses].sort((a, b) => a.name.localeCompare(b.name));
   const courseById = new Map(courses.map((course) => [course.id, course]));
   const itemByKey = new Map(snapshot.items.map((item) => [item.key, item]));
   // Hidden and expired items are not actionable, so they never reach a bucket or the ranking.
-  const items = snapshot.items.filter((item) => item.visibility !== "hidden" && item.visibility !== "expired" && (courseFilter === null || item.courseId === courseFilter));
+  const items = snapshot.items.filter(
+    (item) => item.visibility !== "hidden" && item.visibility !== "expired" && !dismissedItemKeys?.has(item.key) && (courseFilter === null || item.courseId === courseFilter),
+  );
   const buckets = bucketItems(items, { now });
 
   const rankedList = rankItems(items, { now });
@@ -69,7 +76,7 @@ export const buildDashboard = ({ snapshot, events, now, courseFilter }: BuildDas
     return { date, isToday: offset === 0, entries };
   });
 
-  const filteredEvents = events.filter((event) => courseFilter === null || event.courseId === courseFilter);
+  const filteredEvents = events.filter((event) => !dismissedEventIds?.has(event.id) && (courseFilter === null || event.courseId === courseFilter));
   const yesterdayStart = subDays(start, 1);
   const changes: ChangeGroups = { today: [], yesterday: [], earlier: [] };
   for (const event of filteredEvents) {
@@ -93,6 +100,10 @@ export const buildDashboard = ({ snapshot, events, now, courseFilter }: BuildDas
     week,
     changes,
     totalChanges: filteredEvents.length,
+    hidden: {
+      items: dismissedItemKeys ? snapshot.items.filter((item) => dismissedItemKeys.has(item.key)).length : 0,
+      events: dismissedEventIds ? events.filter((event) => dismissedEventIds.has(event.id)).length : 0,
+    },
   };
 };
 

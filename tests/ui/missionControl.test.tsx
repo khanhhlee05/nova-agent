@@ -3,6 +3,7 @@ import "./setup";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
+import { EMPTY_DISMISSALS } from "../../apps/extension/src/sidepanel/dismissals";
 import { DEFAULT_PREFERENCES, MissionControl, type MissionControlActions, type MissionControlProps } from "../../apps/extension/src/sidepanel/MissionControl";
 import { INITIAL_SYNC_STATUS } from "../../apps/extension/src/storage/repositories";
 import { IDLE_STATE } from "../../apps/extension/src/sync/syncState";
@@ -27,6 +28,10 @@ const actions = (): MissionControlActions & { calls: Record<string, unknown[][]>
     connectLive: track("connectLive"),
     useDemoData: track("useDemoData"),
     clearData: track("clearData"),
+    dismissItem: track("dismissItem"),
+    dismissEvent: track("dismissEvent"),
+    dismissBanner: track("dismissBanner"),
+    restoreDismissed: track("restoreDismissed"),
   };
 };
 
@@ -40,6 +45,7 @@ const baseProps = (overrides: Partial<MissionControlProps> = {}): MissionControl
   announcement: null,
   now: NOW,
   tenantOrigin: TENANT,
+  dismissals: EMPTY_DISMISSALS,
   actions: actions(),
   ...overrides,
 });
