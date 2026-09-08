@@ -97,9 +97,10 @@ const TaskRow = ({ item, bucket, dashboard, now, expandedKey, onExpand, canOpen,
             {item.title}
           </span>
           <span className="task-sub">
-            <span className="course-dot" style={{ background: course ? courseSwatch(course.color) : undefined }} aria-hidden="true" />
-            <span className="task-course">{course?.name ?? "Unknown course"}</span>
-            <span aria-hidden="true">·</span>
+            <span className="task-course">
+              <span className="course-dot" style={{ background: course ? courseSwatch(course.color) : undefined }} aria-hidden="true" />
+              {course?.name ?? "Unknown course"}
+            </span>
             <span className="due" data-tone={dueTone}>
               {when}
             </span>

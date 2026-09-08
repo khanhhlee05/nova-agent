@@ -128,10 +128,8 @@ h1, h2, h3, h4, p { margin: 0; }
 /* The field */
 .field { position: sticky; top: 0; z-index: 5; display: flex; flex-direction: column; gap: 16px; padding: 12px 20px 0; background: var(--nova-field); color: var(--nova-field-ink); }
 .field-top { display: flex; align-items: center; gap: 8px; min-height: 32px; }
-.wordmark { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 800; letter-spacing: 0.08em; }
-.mark { width: 14px; height: 14px; border-radius: 50%; background: var(--nova-field-ink); display: grid; place-items: center; }
-.mark::after { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--nova-field); }
-.freshness { font-size: 12.5px; font-weight: 500; color: var(--nova-field-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wordmark { font-size: 16px; font-weight: 800; letter-spacing: 0.08em; }
+.freshness { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 500; color: var(--nova-field-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .freshness[data-tone="syncing"] { animation: pulse 1.2s ease-in-out infinite; }
 .field .icon-button { color: var(--nova-field-muted); }
 .field .icon-button:hover:not(:disabled) { background: var(--nova-field-chip); color: var(--nova-field-ink); }
@@ -229,7 +227,8 @@ h1, h2, h3, h4, p { margin: 0; }
 .task-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; min-height: 56px; padding: 10px 0; }
 .task-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .task-title { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.task-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: 12.5px; color: var(--nova-muted); min-width: 0; }
+.task-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; font-size: 12.5px; color: var(--nova-muted); min-width: 0; }
+.task-course { display: inline-flex; align-items: center; gap: 6px; }
 .task-sub .due { white-space: nowrap; }
 .task-sub .due[data-tone="overdue"] { color: var(--nova-overdue); font-weight: 600; }
 .task-sub .due[data-tone="today"] { color: var(--nova-today); font-weight: 600; }
@@ -310,8 +309,8 @@ h1, h2, h3, h4, p { margin: 0; }
 .signal-icon[data-tone="mint"] { color: var(--nova-done); }
 .signal-main { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .signal-verb { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; }
-.signal[data-unread="true"] .signal-verb { font-weight: 700; }
-.signal[data-unread="true"] .signal-verb > span:first-child { color: var(--nova-accent); }
+.signal[data-unread="true"] .signal-verb { font-weight: 700; color: var(--nova-ink); }
+.signal[data-unread="false"] .signal-verb > span:first-child { font-weight: 600; color: var(--nova-muted); }
 .signal-verb .course-name { font-weight: 500; color: var(--nova-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .signal-body { font-size: 14px; line-height: 1.4; }
 .signal-body .arrow { color: var(--nova-faint); margin: 0 4px; }

@@ -15,7 +15,7 @@ export const freshness = (mode: "live" | "fixture", phase: SyncPhase, lastSucces
   if (isRunningPhase(phase)) return { label: "Refreshing", tone: "syncing", text: "Refreshing…" };
   if (phase === "idle") return { label: "Not connected", tone: "idle", text: "Not connected" };
   const broken = phase === "session-expired" || phase === "permission-required" || phase === "offline" || phase === "failed";
-  if (mode === "fixture") return { label: "Demo data", tone: "demo", text: `Demo data · ${age}` };
+  if (mode === "fixture") return { label: "Demo data", tone: "demo", text: `Demo · ${age}` };
   if (broken) return { label: "Disconnected", tone: "error", text: `Disconnected · ${age}` };
   return { label: "Live", tone: "live", text: `${stale ? "Stale" : "Live"} · ${age}` };
 };
@@ -37,10 +37,7 @@ export type FieldHeaderProps = {
 export const FieldHeader = ({ freshness: fresh, theme, onThemeChange, onRefresh, refreshing, refreshDisabled, menu, hero, counts, tabs }: FieldHeaderProps) => (
   <header className="field">
     <div className="field-top">
-      <span className="wordmark">
-        <span className="mark" aria-hidden="true" />
-        NOVA
-      </span>
+      <span className="wordmark">NOVA</span>
       <span className="freshness" data-tone={fresh.tone} role="status" aria-label={`Connection: ${fresh.label}`}>
         {fresh.text}
       </span>
