@@ -58,15 +58,18 @@ export const FieldHeader = ({ freshness: fresh, theme, onThemeChange, onRefresh,
 export type HeroProps = { title: string; meta: string; text: string; actions?: ReactNode; aside?: ReactNode; extra?: ReactNode; headingId?: string };
 
 export const Hero = ({ title, meta, text, actions, aside, extra, headingId }: HeroProps) => (
-  <div className="hero" key={title}>
-    <div className="hero-head">
-      <h2 className="hero-title" id={headingId}>
-        {title}
-      </h2>
-      {aside}
+  <div className="hero">
+    {/* Only the copy remounts on a headline change, so controls beside it keep focus. */}
+    <div className="hero-copy" key={title}>
+      <div className="hero-head">
+        <h2 className="hero-title" id={headingId}>
+          {title}
+        </h2>
+        {aside}
+      </div>
+      <p className="hero-meta">{meta}</p>
+      <p className="hero-text">{text}</p>
     </div>
-    <p className="hero-meta">{meta}</p>
-    <p className="hero-text">{text}</p>
     {actions ? <div className="hero-actions">{actions}</div> : null}
     {extra}
   </div>

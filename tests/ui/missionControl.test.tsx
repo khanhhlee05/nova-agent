@@ -285,3 +285,28 @@ describe("collapse all", () => {
     expect((all.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0]).toEqual({ collapsedSections: [] });
   });
 });
+
+describe("week day filter", () => {
+  it("shows one day when a day is picked and the whole week by default", async () => {
+    const user = userEvent.setup();
+    const { dashboard } = await demoDashboard();
+    render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, activeTab: "week" } })} />);
+    const before = screen.getAllByRole("heading", { level: 3 }).filter((h) => h.className.includes("agenda-day-label")).length;
+    expect(before).toBe(7);
+
+    await user.click(screen.getByRole("button", { name: /^Thursday, September 10/ }));
+    expect(screen.getByRole("button", { name: /^Thursday, September 10/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getAllByRole("heading", { level: 3 }).filter((h) => h.className.includes("agenda-day-label"))).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toMatch(/^Thursday: /);
+    expect(screen.getByText("MATLAB Lab: Filters")).toBeTruthy();
+    expect(screen.queryByText("Lab 3: Timer Interrupts")).toBeNull();
+    expect(screen.queryByText("Problem Set 6: Fourier Series")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /show all days/i }));
+    expect(screen.getAllByRole("heading", { level: 3 }).filter((h) => h.className.includes("agenda-day-label"))).toHaveLength(7);
+
+    await user.click(screen.getByRole("button", { name: /^Thursday, September 10/ }));
+    await user.click(screen.getByRole("button", { name: /^Thursday, September 10.*selected/ }));
+    expect(screen.getAllByRole("heading", { level: 3 }).filter((h) => h.className.includes("agenda-day-label"))).toHaveLength(7);
+  });
+});

@@ -20,6 +20,10 @@ The panel follows the **Field** direction: one Villanova-blue field at the top c
 
 Design decisions were made with [Impeccable](https://impeccable.style): `PRODUCT.md` holds product truth, `apps/extension/.impeccable/surfaces/src-sidepanel.md` holds the direction contract, and `DESIGN.md` records the built system. Run the detector with `.claude/skills/impeccable/scripts/impeccable detect src` from this directory.
 
+## Picking a day on the Week tab
+
+The seven-day strip in the field is tappable. Selecting a day shows only what is due that day, with a headline for that day; tapping it again, or **Show all days**, returns to the whole week. Nothing selected is the default and shows every day.
+
 ## Collapsing sections
 
 Each deadline section (Overdue, Today, Tomorrow, This week, Later, Completed) collapses on its own, and a **Collapse all** / **Expand all** control above the list does all six at once. Both are remembered between opens.
