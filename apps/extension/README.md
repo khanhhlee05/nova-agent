@@ -20,6 +20,10 @@ The panel follows the **Field** direction: one Villanova-blue field at the top c
 
 Design decisions were made with [Impeccable](https://impeccable.style): `PRODUCT.md` holds product truth, `apps/extension/.impeccable/surfaces/src-sidepanel.md` holds the direction contract, and `DESIGN.md` records the built system. Run the detector with `.claude/skills/impeccable/scripts/impeccable detect src` from this directory.
 
+## Collapsing sections
+
+Each deadline section (Overdue, Today, Tomorrow, This week, Later, Completed) collapses on its own, and a **Collapse all** / **Expand all** control above the list does all six at once. Both are remembered between opens.
+
 ## Hiding things for a session
 
 Every task row, week entry, change event, Next move card, and notice banner has a **Hide until next refresh** control. Hidden things leave every view at once, including the summary counts, the Next move card, the week agenda, and the unread badge. A bar under the tabs shows how many things are hidden and offers **Show all**.

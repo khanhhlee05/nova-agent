@@ -1,6 +1,6 @@
 import { BUCKET_ORDER, type AcademicItem, type Course, type DeadlineBucket } from "@nova-agent/core";
 import type { RankedItem } from "@nova-agent/planner";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, ChevronsDownUp, ChevronsUpDown, X } from "lucide-react";
 import { Collapsible } from "radix-ui";
 import { formatDeadline, formatRelative } from "../format";
 import { SECTION_LABELS, STATUS_LABELS, type Dashboard } from "../model";
@@ -11,11 +11,16 @@ import { Tip } from "./Tip";
 
 const SECTION_TONE: Partial<Record<DeadlineBucket, "overdue" | "today" | "done">> = { overdue: "overdue", today: "today", completed: "done" };
 
+/** The sections a student can collapse. "No date" lives inside "Later" and has no header of its own. */
+export const COLLAPSIBLE_SECTIONS: readonly DeadlineBucket[] = BUCKET_ORDER.filter((bucket) => bucket !== "no-date");
+
 export type DeadlineSectionsProps = {
   dashboard: Dashboard;
   now: Date;
   collapsed: ReadonlySet<DeadlineBucket>;
   onToggle: (bucket: DeadlineBucket) => void;
+  /** Collapses or expands every section at once. */
+  onToggleAll: (collapseAll: boolean) => void;
   expandedKey: string | null;
   onExpand: (key: string | null) => void;
   canOpen: (url: string | null) => boolean;
@@ -23,9 +28,17 @@ export type DeadlineSectionsProps = {
   onDismiss: (key: string, title: string) => void;
 };
 
-export const DeadlineSections = ({ dashboard, now, collapsed, onToggle, expandedKey, onExpand, canOpen, onOpen, onDismiss }: DeadlineSectionsProps) => (
+export const DeadlineSections = ({ dashboard, now, collapsed, onToggle, onToggleAll, expandedKey, onExpand, canOpen, onOpen, onDismiss }: DeadlineSectionsProps) => {
+  const allCollapsed = COLLAPSIBLE_SECTIONS.every((bucket) => collapsed.has(bucket));
+  return (
   <div className="sections" aria-label="Deadlines">
-    {BUCKET_ORDER.filter((bucket) => bucket !== "no-date").map((bucket) => {
+    <div className="sections-toolbar">
+      <button type="button" className="button button-ghost button-sm" onClick={() => onToggleAll(!allCollapsed)} aria-label={allCollapsed ? "Expand all sections" : "Collapse all sections"}>
+        {allCollapsed ? <ChevronsUpDown size={14} aria-hidden="true" /> : <ChevronsDownUp size={14} aria-hidden="true" />}
+        {allCollapsed ? "Expand all" : "Collapse all"}
+      </button>
+    </div>
+    {COLLAPSIBLE_SECTIONS.map((bucket) => {
       const items = bucket === "later" ? dashboard.buckets.later : dashboard.buckets[bucket];
       const noDate = bucket === "later" ? dashboard.buckets["no-date"] : [];
       const total = items.length + noDate.length;
@@ -67,7 +80,8 @@ export const DeadlineSections = ({ dashboard, now, collapsed, onToggle, expanded
       );
     })}
   </div>
-);
+  );
+};
 
 type TaskRowProps = {
   item: AcademicItem;
