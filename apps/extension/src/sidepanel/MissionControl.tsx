@@ -10,7 +10,7 @@ import { StateBanners, SyncProgress } from "./components/Banners";
 import { ChangesFeed } from "./components/ChangesFeed";
 import { CountsStrip } from "./components/CountsStrip";
 import { CourseFilter } from "./components/CourseFilter";
-import { DeadlineSections } from "./components/DeadlineSections";
+import { COLLAPSIBLE_SECTIONS, DeadlineSections } from "./components/DeadlineSections";
 import { FieldHeader, Hero, freshness } from "./components/FieldHeader";
 import { FirstRun } from "./components/FirstRun";
 import { FocusHero } from "./components/FocusHero";
@@ -224,7 +224,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                         <span>{preferences.courseFilter ? "This course has nothing visible. Try All courses." : "Nova found no visible assignments or quizzes in your active courses."}</span>
                       </div>
                     ) : (
-                      <DeadlineSections dashboard={dashboard} now={now} collapsed={collapsed} onToggle={(bucket) => actions.setPreferences({ collapsedSections: collapsed.has(bucket) ? preferences.collapsedSections.filter((section) => section !== bucket) : [...preferences.collapsedSections, bucket] })} expandedKey={expandedKey} onExpand={setExpandedKey} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} />
+                      <DeadlineSections dashboard={dashboard} now={now} collapsed={collapsed} onToggle={(bucket) => actions.setPreferences({ collapsedSections: collapsed.has(bucket) ? preferences.collapsedSections.filter((section) => section !== bucket) : [...preferences.collapsedSections, bucket] })} onToggleAll={(collapseAll) => actions.setPreferences({ collapsedSections: collapseAll ? [...COLLAPSIBLE_SECTIONS] : [] })} expandedKey={expandedKey} onExpand={setExpandedKey} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} />
                     )
                   ) : (
                     <div className="empty">

@@ -266,3 +266,22 @@ describe("theme", () => {
     expect(screen.getByRole("button", { name: /dark theme/i }).getAttribute("aria-pressed")).toBe("true");
   });
 });
+
+describe("collapse all", () => {
+  it("collapses every section at once, then offers to expand them all", async () => {
+    const { dashboard } = await demoDashboard();
+    const p = baseProps({ dashboard });
+    const { unmount } = render(<MissionControl {...p} />);
+    fireEvent.click(screen.getByRole("button", { name: /collapse all sections/i }));
+    expect((p.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0]).toEqual({
+      collapsedSections: ["overdue", "today", "tomorrow", "this-week", "later", "completed"],
+    });
+    unmount();
+
+    const all = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, collapsedSections: ["overdue", "today", "tomorrow", "this-week", "later", "completed"] } });
+    render(<MissionControl {...all} />);
+    expect(screen.queryByRole("button", { name: /show details for Lab 2/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /expand all sections/i }));
+    expect((all.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0]).toEqual({ collapsedSections: [] });
+  });
+});
