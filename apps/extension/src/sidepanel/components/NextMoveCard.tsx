@@ -1,8 +1,9 @@
 import type { Course } from "@nova-agent/core";
-import { CheckCircle2, ExternalLink, Sparkles } from "lucide-react";
+import { CheckCircle2, ExternalLink, Sparkles, X } from "lucide-react";
 import { formatDeadline, formatRelative } from "../format";
 import type { NextMove } from "../model";
 import { KindIcon } from "./icons";
+import { Tip } from "./Tip";
 
 export type NextMoveCardProps = {
   nextMove: NextMove | null;
@@ -11,9 +12,10 @@ export type NextMoveCardProps = {
   canOpen: boolean;
   onOpen: (url: string) => void;
   onInspect: (key: string) => void;
+  onDismiss: (key: string, title: string) => void;
 };
 
-export const NextMoveCard = ({ nextMove, course, now, canOpen, onOpen, onInspect }: NextMoveCardProps) => {
+export const NextMoveCard = ({ nextMove, course, now, canOpen, onOpen, onInspect, onDismiss }: NextMoveCardProps) => {
   if (!nextMove) {
     return (
       <section className="card next-move" aria-labelledby="next-move-heading">
@@ -34,8 +36,15 @@ export const NextMoveCard = ({ nextMove, course, now, canOpen, onOpen, onInspect
     <section className="card next-move" aria-labelledby="next-move-heading">
       <div className="card-eyebrow">
         <span id="next-move-heading">Next move</span>
-        <span className="muted" style={{ letterSpacing: 0, textTransform: "none", fontWeight: 500 }}>
-          Suggested priority
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <span className="muted" style={{ letterSpacing: 0, textTransform: "none", fontWeight: 500 }}>
+            Suggested priority
+          </span>
+          <Tip label="Hide until next refresh">
+            <button type="button" className="icon-button icon-button-sm" aria-label={`Hide "${item.title}" until next refresh`} onClick={() => onDismiss(item.key, item.title)}>
+              <X size={14} aria-hidden="true" />
+            </button>
+          </Tip>
         </span>
       </div>
       <div className="next-move-title">
