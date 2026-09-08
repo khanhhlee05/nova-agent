@@ -1,5 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "composite": true, "jsx": "react-jsx", "noEmit": true, "types": ["chrome"] },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "dev", "vite.config.ts", "vite.content.config.ts", "vite.preview.config.ts"],
+  "references": [
+    { "path": "../../packages/brightspace" },
+    { "path": "../../packages/core" },
+    { "path": "../../packages/planner" }
+  ]
 }
