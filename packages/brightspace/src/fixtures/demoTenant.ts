@@ -160,7 +160,8 @@ export const buildDemoTenant = (now: Date, scenario: DemoScenario = "baseline"):
     },
     "31002": {
       folders: [
-        folder(4201, "Homework 4: Pipelining Hazards", hours(4, now), { ScoreDenominator: 40 }),
+        // Due dates use fixed clock times so repeated demo refreshes never look like moved deadlines.
+        folder(4201, "Homework 4: Pipelining Hazards", days(0, now, 20, 0), { ScoreDenominator: 40 }),
         folder(4202, "Homework 5: Cache Simulation", days(5, now), { ScoreDenominator: 40 }),
         folder(4203, "Reading Response: Hennessy Ch. 3", null, { ScoreDenominator: 10 }),
         folder(4204, "Homework 3: ISA Design", days(-7, now), { ScoreDenominator: 40 }),

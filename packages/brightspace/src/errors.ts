@@ -37,7 +37,7 @@ export const describeError = (error: BrightspaceError): string => {
     case "permission-denied":
       return `Brightspace denied access to ${error.operation}.`;
     case "not-found":
-      return `${error.operation} is unavailable for this course.`;
+      return `Brightspace returned 404 for ${error.operation}.`;
     case "rate-limited":
       return `Brightspace asked us to slow down until ${error.retryAt}.`;
     case "network":

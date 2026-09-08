@@ -111,6 +111,9 @@ export const isDone = (item: Pick<AcademicItem, "status">): boolean => DONE_STAT
 
 export const isHidden = (item: Pick<AcademicItem, "visibility">): boolean => item.visibility === "hidden";
 
-/** An item counts toward the active workload when it is neither done nor hidden. */
+/** Availability window closed: the item can no longer be acted on in Brightspace. */
+export const isExpired = (item: Pick<AcademicItem, "visibility">): boolean => item.visibility === "expired";
+
+/** An item counts toward the active workload when it is not done, hidden, or expired. */
 export const isActive = (item: Pick<AcademicItem, "status" | "visibility">): boolean =>
-  !isDone(item) && !isHidden(item);
+  !isDone(item) && !isHidden(item) && !isExpired(item);

@@ -80,6 +80,7 @@ describe("eligibility and ranking", () => {
     expect(isEligible(makeItem({ sourceId: "1", courseId: "c", status: "submitted" }))).toBe(false);
     expect(isEligible(makeItem({ sourceId: "2", courseId: "c", status: "completed" }))).toBe(false);
     expect(isEligible(makeItem({ sourceId: "3", courseId: "c", visibility: "hidden" }))).toBe(false);
+    expect(isEligible(makeItem({ sourceId: "3b", courseId: "c", visibility: "expired", dueAt: inHours(-400) }))).toBe(false);
     expect(isEligible(makeItem({ sourceId: "4", courseId: "c", visibility: "scheduled" }))).toBe(false);
     expect(isEligible(makeItem({ sourceId: "5", courseId: "c", visibility: "scheduled", dueAt: inHours(48) }))).toBe(true);
     expect(isEligible(makeItem({ sourceId: "6", courseId: "c", status: "unknown" }))).toBe(true);
