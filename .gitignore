@@ -8,3 +8,7 @@ coverage/
 .DS_Store
 
 *.tsbuildinfo
+
+# Impeccable per-machine overrides
+.impeccable/config.local.json
+**/.impeccable/config.local.json
