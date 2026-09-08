@@ -1,6 +1,6 @@
 import { BUCKET_ORDER, type AcademicItem, type Course, type DeadlineBucket } from "@nova-agent/core";
 import type { RankedItem } from "@nova-agent/planner";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { Collapsible } from "radix-ui";
 import { formatDeadline, formatRelative } from "../format";
 import { SECTION_LABELS, STATUS_LABELS, type Dashboard } from "../model";
@@ -19,9 +19,10 @@ export type DeadlineSectionsProps = {
   onExpand: (key: string | null) => void;
   canOpen: (url: string | null) => boolean;
   onOpen: (url: string) => void;
+  onDismiss: (key: string, title: string) => void;
 };
 
-export const DeadlineSections = ({ dashboard, now, collapsed, onToggle, expandedKey, onExpand, canOpen, onOpen }: DeadlineSectionsProps) => (
+export const DeadlineSections = ({ dashboard, now, collapsed, onToggle, expandedKey, onExpand, canOpen, onOpen, onDismiss }: DeadlineSectionsProps) => (
   <div className="stack" aria-label="Deadlines">
     {BUCKET_ORDER.filter((bucket) => bucket !== "no-date").map((bucket) => {
       const items = bucket === "later" ? dashboard.buckets.later : dashboard.buckets[bucket];
@@ -44,7 +45,7 @@ export const DeadlineSections = ({ dashboard, now, collapsed, onToggle, expanded
               <>
                 <ul>
                   {items.map((item) => (
-                    <TaskRow key={item.key} item={item} bucket={bucket} course={dashboard.courseById.get(item.courseId)} ranked={dashboard.ranked.get(item.key)} now={now} expanded={expandedKey === item.key} onExpand={onExpand} canOpen={canOpen} onOpen={onOpen} />
+                    <TaskRow key={item.key} item={item} bucket={bucket} course={dashboard.courseById.get(item.courseId)} ranked={dashboard.ranked.get(item.key)} now={now} expanded={expandedKey === item.key} onExpand={onExpand} canOpen={canOpen} onOpen={onOpen} onDismiss={onDismiss} />
                   ))}
                 </ul>
                 {noDate.length > 0 ? (
@@ -52,7 +53,7 @@ export const DeadlineSections = ({ dashboard, now, collapsed, onToggle, expanded
                     <p className="subgroup-label">No due date</p>
                     <ul>
                       {noDate.map((item) => (
-                        <TaskRow key={item.key} item={item} bucket="no-date" course={dashboard.courseById.get(item.courseId)} ranked={dashboard.ranked.get(item.key)} now={now} expanded={expandedKey === item.key} onExpand={onExpand} canOpen={canOpen} onOpen={onOpen} />
+                        <TaskRow key={item.key} item={item} bucket="no-date" course={dashboard.courseById.get(item.courseId)} ranked={dashboard.ranked.get(item.key)} now={now} expanded={expandedKey === item.key} onExpand={onExpand} canOpen={canOpen} onOpen={onOpen} onDismiss={onDismiss} />
                       ))}
                     </ul>
                   </>
@@ -76,9 +77,10 @@ type TaskRowProps = {
   onExpand: (key: string | null) => void;
   canOpen: (url: string | null) => boolean;
   onOpen: (url: string) => void;
+  onDismiss: (key: string, title: string) => void;
 };
 
-const TaskRow = ({ item, bucket, course, ranked, now, expanded, onExpand, canOpen, onOpen }: TaskRowProps) => {
+const TaskRow = ({ item, bucket, course, ranked, now, expanded, onExpand, canOpen, onOpen, onDismiss }: TaskRowProps) => {
   const done = item.status === "submitted" || item.status === "completed";
   const dueTone = bucket === "overdue" ? "coral" : bucket === "today" ? "amber" : undefined;
   const detailsId = `details-${item.key.replace(/[^a-z0-9]+/gi, "-")}`;
@@ -107,8 +109,13 @@ const TaskRow = ({ item, bucket, course, ranked, now, expanded, onExpand, canOpe
               <StatusIcon status={item.status} />
             </span>
           </Tip>
+          <Tip label="Hide until next refresh">
+            <button type="button" className="icon-button icon-button-sm" aria-label={`Hide "${item.title}" until next refresh`} onClick={() => onDismiss(item.key, item.title)}>
+              <X size={15} aria-hidden="true" />
+            </button>
+          </Tip>
           <Tip label={expanded ? "Hide details" : "Show details"}>
-            <button type="button" className="icon-button" aria-label={`${expanded ? "Hide" : "Show"} details for ${item.title}`} aria-expanded={expanded} aria-controls={detailsId} onClick={() => onExpand(expanded ? null : item.key)}>
+            <button type="button" className="icon-button icon-button-sm" aria-label={`${expanded ? "Hide" : "Show"} details for ${item.title}`} aria-expanded={expanded} aria-controls={detailsId} onClick={() => onExpand(expanded ? null : item.key)}>
               <ChevronDown size={16} aria-hidden="true" style={{ transform: expanded ? "rotate(180deg)" : undefined, transition: "transform 160ms ease" }} />
             </button>
           </Tip>
@@ -116,7 +123,7 @@ const TaskRow = ({ item, bucket, course, ranked, now, expanded, onExpand, canOpe
       </div>
       {expanded ? (
         <div className="task-details" id={detailsId}>
-          <ItemDetails item={item} course={course} ranked={ranked} now={now} canOpen={canOpen(item.url)} onOpen={onOpen} />
+          <ItemDetails item={item} course={course} ranked={ranked} now={now} canOpen={canOpen(item.url)} onOpen={onOpen} onDismiss={() => onDismiss(item.key, item.title)} />
         </div>
       ) : null}
     </li>

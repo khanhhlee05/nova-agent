@@ -1,21 +1,38 @@
 import { describeError, type BrightspaceError, type SyncWarning } from "@nova-agent/brightspace";
 import type { Course } from "@nova-agent/core";
-import { AlertTriangle, CloudOff, FlaskConical, KeyRound, LockKeyhole, RefreshCw } from "lucide-react";
+import { AlertTriangle, CloudOff, FlaskConical, KeyRound, LockKeyhole, RefreshCw, X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { SyncPhase } from "../../messaging/protocol";
 import { PHASE_LABELS, isRunningPhase } from "../../sync/syncState";
 import { formatAge, formatUpdated, pluralize } from "../format";
+import { Tip } from "./Tip";
 
-type BannerProps = { tone: "info" | "warn" | "critical" | "success"; icon: ReactNode; title: string; children?: ReactNode; actions?: ReactNode; role?: "status" | "alert" };
+type BannerProps = {
+  tone: "info" | "warn" | "critical" | "success";
+  icon: ReactNode;
+  title: string;
+  children?: ReactNode;
+  actions?: ReactNode;
+  role?: "status" | "alert";
+  /** Session-only dismissal. The banner returns on the next refresh. */
+  onDismiss?: () => void;
+};
 
-export const Banner = ({ tone, icon, title, children, actions, role = "status" }: BannerProps) => (
-  <div className="banner" data-tone={tone} role={role}>
+export const Banner = ({ tone, icon, title, children, actions, role = "status", onDismiss }: BannerProps) => (
+  <div className="banner" data-tone={tone} role={role} data-dismissible={!!onDismiss}>
     {icon}
     <div className="banner-main">
       <strong>{title}</strong>
       {children}
       {actions ? <div className="card-actions">{actions}</div> : null}
     </div>
+    {onDismiss ? (
+      <Tip label="Hide until next refresh">
+        <button type="button" className="icon-button icon-button-sm banner-close" aria-label={`Hide "${title}" until next refresh`} onClick={onDismiss}>
+          <X size={14} aria-hidden="true" />
+        </button>
+      </Tip>
+    ) : null}
   </div>
 );
 
@@ -35,11 +52,14 @@ export type StateBannersProps = {
   onConnectLive: () => void;
   onOpenBrightspace: () => void;
   onUseDemo: () => void;
+  /** Banner ids hidden for this session. */
+  dismissed: ReadonlySet<string>;
+  onDismiss: (id: string) => void;
 };
 
 /** Every non-happy state is rendered here so it is never an afterthought. */
 export const StateBanners = (props: StateBannersProps) => {
-  const { mode, phase, error, warnings, failedCourseIds, courses, lastSuccessfulSyncAt, stale, hasData, now, onRefresh, onConnectLive, onOpenBrightspace, onUseDemo } = props;
+  const { mode, phase, error, warnings, failedCourseIds, courses, lastSuccessfulSyncAt, stale, hasData, now, onRefresh, onConnectLive, onOpenBrightspace, onUseDemo, dismissed, onDismiss } = props;
   const banners: ReactNode[] = [];
   const retry = (
     <button type="button" className="button button-sm" onClick={onRefresh} disabled={isRunningPhase(phase)}>
@@ -49,9 +69,7 @@ export const StateBanners = (props: StateBannersProps) => {
   );
 
   if (mode === "fixture") {
-    banners.push(
-      <Banner
-        key="fixture"
+    if (!dismissed.has("fixture")) banners.push(<Banner key="fixture" onDismiss={() => onDismiss("fixture")}
         tone="warn"
         icon={<FlaskConical size={16} aria-hidden="true" />}
         title="Demo data"
@@ -68,9 +86,7 @@ export const StateBanners = (props: StateBannersProps) => {
   }
 
   if (phase === "session-expired") {
-    banners.push(
-      <Banner
-        key="expired"
+    if (!dismissed.has("expired")) banners.push(<Banner key="expired" onDismiss={() => onDismiss("expired")}
         tone="critical"
         role="alert"
         icon={<LockKeyhole size={16} aria-hidden="true" />}
@@ -88,9 +104,7 @@ export const StateBanners = (props: StateBannersProps) => {
       </Banner>,
     );
   } else if (phase === "permission-required") {
-    banners.push(
-      <Banner
-        key="permission"
+    if (!dismissed.has("permission")) banners.push(<Banner key="permission" onDismiss={() => onDismiss("permission")}
         tone="critical"
         role="alert"
         icon={<KeyRound size={16} aria-hidden="true" />}
@@ -111,28 +125,24 @@ export const StateBanners = (props: StateBannersProps) => {
       </Banner>,
     );
   } else if (phase === "offline") {
-    banners.push(
-      <Banner key="offline" tone="warn" role="alert" icon={<CloudOff size={16} aria-hidden="true" />} title="Brightspace is unreachable" actions={<>{retry}<button type="button" className="button button-ghost button-sm" onClick={onOpenBrightspace}>Open Brightspace</button></>}>
+    if (!dismissed.has("offline")) banners.push(<Banner key="offline" onDismiss={() => onDismiss("offline")} tone="warn" role="alert" icon={<CloudOff size={16} aria-hidden="true" />} title="Brightspace is unreachable" actions={<>{retry}<button type="button" className="button button-ghost button-sm" onClick={onOpenBrightspace}>Open Brightspace</button></>}>
         <p>{error?.kind === "network" && error.operation === "no-brightspace-tab" ? "Open brightspace.villanova.edu in a tab so Nova can read through your session." : hasData ? `Showing what Nova last saw ${formatAge(lastSuccessfulSyncAt, now)}.` : "Check your connection and try again."}</p>
       </Banner>,
     );
   } else if (phase === "failed") {
-    banners.push(
-      <Banner key="failed" tone="critical" role="alert" icon={<AlertTriangle size={16} aria-hidden="true" />} title="Refresh failed" actions={retry}>
+    if (!dismissed.has("failed")) banners.push(<Banner key="failed" onDismiss={() => onDismiss("failed")} tone="critical" role="alert" icon={<AlertTriangle size={16} aria-hidden="true" />} title="Refresh failed" actions={retry}>
         <p>{error ? describeError(error) : "Something went wrong."}{hasData ? ` Showing what Nova last saw ${formatAge(lastSuccessfulSyncAt, now)}.` : ""}</p>
       </Banner>,
     );
   } else if (stale && hasData && !isRunningPhase(phase)) {
-    banners.push(
-      <Banner key="stale" tone="info" icon={<AlertTriangle size={16} aria-hidden="true" />} title="This may be out of date" actions={retry}>
+    if (!dismissed.has("stale")) banners.push(<Banner key="stale" onDismiss={() => onDismiss("stale")} tone="info" icon={<AlertTriangle size={16} aria-hidden="true" />} title="This may be out of date" actions={retry}>
         <p>{formatUpdated(lastSuccessfulSyncAt, now)}. Refresh to check for changes.</p>
       </Banner>,
     );
   }
 
   if ((phase === "partial" || failedCourseIds.length > 0) && hasData) {
-    banners.push(
-      <Banner key="partial" tone="warn" icon={<AlertTriangle size={16} aria-hidden="true" />} title={`${pluralize(failedCourseIds.length, "course")} could not be refreshed`} actions={retry}>
+    if (!dismissed.has("partial")) banners.push(<Banner key="partial" onDismiss={() => onDismiss("partial")} tone="warn" icon={<AlertTriangle size={16} aria-hidden="true" />} title={`${pluralize(failedCourseIds.length, "course")} could not be refreshed`} actions={retry}>
         <p>Data for other courses is current. Nova will not report removals for courses it could not read.</p>
         <details>
           <summary>Details</summary>
@@ -147,8 +157,7 @@ export const StateBanners = (props: StateBannersProps) => {
   }
 
   if (warnings.length > 0 && hasData) {
-    banners.push(
-      <Banner key="warnings" tone="info" icon={<AlertTriangle size={16} aria-hidden="true" />} title="Some details are unavailable">
+    if (!dismissed.has("warnings")) banners.push(<Banner key="warnings" onDismiss={() => onDismiss("warnings")} tone="info" icon={<AlertTriangle size={16} aria-hidden="true" />} title="Some details are unavailable">
         <details>
           <summary>{pluralize(warnings.length, "notice")}</summary>
           <ul>

@@ -11,9 +11,10 @@ export type WeekViewProps = {
   now: Date;
   canOpen: (url: string | null) => boolean;
   onOpen: (url: string) => void;
+  onDismiss: (key: string, title: string) => void;
 };
 
-export const WeekView = ({ dashboard, now, canOpen, onOpen }: WeekViewProps) => {
+export const WeekView = ({ dashboard, now, canOpen, onOpen, onDismiss }: WeekViewProps) => {
   const total = dashboard.week.reduce((sum, day) => sum + day.entries.length, 0);
   return (
     <div className="stack">
@@ -68,7 +69,7 @@ export const WeekView = ({ dashboard, now, canOpen, onOpen }: WeekViewProps) => 
                             <Popover.Close className="icon-button popover-close" aria-label="Close details">
                               <X size={14} aria-hidden="true" />
                             </Popover.Close>
-                            <ItemDetails item={item} course={course} ranked={dashboard.ranked.get(item.key)} now={now} canOpen={canOpen(item.url)} onOpen={onOpen} headingLevel="h3" />
+                            <ItemDetails item={item} course={course} ranked={dashboard.ranked.get(item.key)} now={now} canOpen={canOpen(item.url)} onOpen={onOpen} headingLevel="h3" onDismiss={() => onDismiss(item.key, item.title)} />
                           </Popover.Content>
                         </Popover.Portal>
                       </Popover.Root>

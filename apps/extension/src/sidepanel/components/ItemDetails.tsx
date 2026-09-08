@@ -1,6 +1,6 @@
 import type { AcademicItem, Course } from "@nova-agent/core";
 import { COMPONENT_LABELS, explainPriority, type RankedItem } from "@nova-agent/planner";
-import { ChevronDown, ExternalLink } from "lucide-react";
+import { ChevronDown, ExternalLink, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { formatExact, formatRelative } from "../format";
 import { KIND_LABELS, STATUS_LABELS } from "../model";
@@ -13,10 +13,12 @@ export type ItemDetailsProps = {
   canOpen: boolean;
   onOpen: (url: string) => void;
   headingLevel?: "h3" | "h4";
+  /** Session-only dismissal; the item returns on the next refresh. */
+  onDismiss?: () => void;
 };
 
 /** Shared detail body used by the Focus row expansion and the Week popover. */
-export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headingLevel = "h4" }: ItemDetailsProps) => {
+export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headingLevel = "h4", onDismiss }: ItemDetailsProps) => {
   const [showBreakdown, setShowBreakdown] = useState(false);
   const reasons = ranked ? explainPriority(item, ranked.priority) : [];
   const Heading = headingLevel;
@@ -89,6 +91,12 @@ export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headin
           <button type="button" className="button button-sm" onClick={() => onOpen(link)}>
             <ExternalLink size={14} aria-hidden="true" />
             {canOpen ? "Open in Brightspace" : "Open course"}
+          </button>
+        ) : null}
+        {onDismiss ? (
+          <button type="button" className="button button-ghost button-sm" onClick={onDismiss}>
+            <EyeOff size={14} aria-hidden="true" />
+            Hide until next refresh
           </button>
         ) : null}
       </div>

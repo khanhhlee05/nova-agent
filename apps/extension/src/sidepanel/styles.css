@@ -82,6 +82,12 @@ h1, h2, h3, h4, p { margin: 0; }
 .icon-button:hover:not(:disabled) { background: var(--nova-surface-raised); color: var(--nova-text); }
 .icon-button[data-active="true"] { color: var(--nova-blue-text); }
 .icon-button .spin { animation: spin 900ms linear infinite; }
+.icon-button-sm { width: 32px; min-width: 32px; height: 32px; }
+
+/* Session dismissals */
+.hidden-bar { display: flex; align-items: center; gap: 8px; margin: 0 var(--nova-space-4) var(--nova-space-2); padding: 4px 4px 4px 12px; border: 1px dashed var(--nova-border-strong); border-radius: var(--nova-radius-sm); background: var(--nova-surface); color: var(--nova-text-muted); font-size: 12px; animation: slide-down 160ms ease-out; }
+.hidden-bar span { flex: 1; }
+.hidden-bar svg { flex-shrink: 0; color: var(--nova-text-faint); }
 
 /* Course filter (Radix Select) */
 .select-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 6px; height: 32px; padding: 0 10px; max-width: 100%; border: 1px solid var(--nova-border); border-radius: var(--nova-radius-sm); background: var(--nova-surface); color: var(--nova-text); font-size: 12px; font-weight: 600; }
@@ -113,7 +119,8 @@ h1, h2, h3, h4, p { margin: 0; }
 
 /* Cards */
 .card { position: relative; padding: var(--nova-space-3) var(--nova-space-4); border: 1px solid var(--nova-border); border-radius: var(--nova-radius-md); background: var(--nova-surface); }
-.card-eyebrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--nova-text-muted); }
+.card-eyebrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 20px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--nova-text-muted); }
+.card-eyebrow .icon-button-sm { margin: -6px -8px -6px 0; }
 .next-move { border-color: rgba(47, 125, 244, 0.35); background: linear-gradient(180deg, rgba(47, 125, 244, 0.08), transparent 70%), var(--nova-surface); }
 .next-move-title { display: flex; align-items: flex-start; gap: 10px; margin-top: 8px; }
 .next-move-title h2 { font-size: 15px; font-weight: 700; line-height: 1.3; }
@@ -244,7 +251,9 @@ h1, h2, h3, h4, p { margin: 0; }
 .signal-aside { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 
 /* Banners */
-.banner { display: flex; gap: 10px; padding: 10px 12px; border: 1px solid var(--nova-border); border-radius: var(--nova-radius-md); background: var(--nova-surface); font-size: 12.5px; }
+.banner { position: relative; display: flex; gap: 10px; padding: 10px 12px; border: 1px solid var(--nova-border); border-radius: var(--nova-radius-md); background: var(--nova-surface); font-size: 12.5px; }
+.banner[data-dismissible="true"] { padding-right: 40px; }
+.banner-close { position: absolute; top: 6px; right: 6px; }
 .banner svg { flex-shrink: 0; margin-top: 1px; }
 .banner-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .banner strong { font-weight: 700; }

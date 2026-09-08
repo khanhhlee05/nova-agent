@@ -7,6 +7,7 @@ import { clearAllData, getPreference, getSyncStatus, listChangeEvents, latestSna
 import { DATA_MODE_PREFERENCE, DEMO_SCENARIO_PREFERENCE, SyncCoordinator, type TransportFactory } from "../sync/syncCoordinator";
 import { IDLE_STATE, isRunningPhase, type SyncRuntimeState } from "../sync/syncState";
 import { connectLive as runConnectLive } from "./connect";
+import { useSessionDismissals } from "./dismissals";
 import { DEFAULT_PREFERENCES, MissionControl, type UiPreferences } from "./MissionControl";
 import { buildDashboard } from "./model";
 import { useNow } from "./useNow";
@@ -39,6 +40,9 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true }:
   const snapshot = useLiveQuery(() => (scope ? latestSnapshot(db, scope) : Promise.resolve(null)), [db, scope]);
   const events = useLiveQuery(() => (scope ? listChangeEvents(db, scope) : Promise.resolve([])), [db, scope]);
 
+  // Session-only dismissals: forgotten when the panel closes, restored whenever fresh data arrives.
+  const { dismissals, dismissItem, dismissEvent, dismissBanner, restoreAll } = useSessionDismissals(snapshot?.capturedAt ?? null);
+
   // Show cached data immediately, then refresh in the background when stale.
   // The first run waits for the student to choose a data source.
   const hasAttempted = !!status && (status.lastAttemptedSyncAt !== null || status.lastSuccessfulSyncAt !== null);
@@ -63,8 +67,11 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true }:
   }, [db, host, scope]);
 
   const dashboard = useMemo(
-    () => (snapshot && events && preferences ? buildDashboard({ snapshot, events, now, courseFilter: preferences.courseFilter }) : null),
-    [snapshot, events, now, preferences],
+    () =>
+      snapshot && events && preferences
+        ? buildDashboard({ snapshot, events, now, courseFilter: preferences.courseFilter, dismissedItemKeys: dismissals.items, dismissedEventIds: dismissals.events })
+        : null,
+    [snapshot, events, now, preferences, dismissals],
   );
 
   const setPreferences = useCallback(
@@ -76,8 +83,28 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true }:
 
   const actions = useMemo(
     () => ({
-      refresh: () => void coordinator.sync("manual"),
+      refresh: () => {
+        // A refresh always repopulates everything the student hid this session.
+        restoreAll();
+        void coordinator.sync("manual");
+      },
       setPreferences,
+      dismissItem: (key: string, title: string) => {
+        dismissItem(key);
+        setAnnouncement(`Hid "${title}" until the next refresh.`);
+      },
+      dismissEvent: (id: string, title: string) => {
+        dismissEvent(id);
+        setAnnouncement(`Hid the change for "${title}" until the next refresh.`);
+      },
+      dismissBanner: (id: string) => {
+        dismissBanner(id);
+        setAnnouncement("Notice hidden until the next refresh.");
+      },
+      restoreDismissed: () => {
+        restoreAll();
+        setAnnouncement("Everything hidden this session is back.");
+      },
       markAllRead: () => {
         if (!scope) return;
         void markAllRead(db, scope, new Date().toISOString()).then(publishBadge);
@@ -121,7 +148,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true }:
         setAnnouncement("Local Nova data cleared.");
       },
     }),
-    [coordinator, db, host, nowFn, publishBadge, scope, setPreferences],
+    [coordinator, db, dismissBanner, dismissEvent, dismissItem, host, nowFn, publishBadge, restoreAll, scope, setPreferences],
   );
 
   if (!status || !preferences || feasibility === undefined) return null;
@@ -137,6 +164,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true }:
       announcement={announcement}
       now={now}
       tenantOrigin={host.tenantOrigin}
+      dismissals={dismissals}
       actions={actions}
     />
   );
