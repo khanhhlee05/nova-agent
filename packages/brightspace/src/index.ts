@@ -1,4 +1,10 @@
-export class BrightspaceClient {
-  constructor(private readonly origin: string) {}
-  getOrigin(): string { return this.origin; }
-}
+export * from "./errors";
+export * from "./routes";
+export * from "./schemas";
+export * from "./versions";
+export * from "./paging";
+export * from "./transport";
+export * from "./normalize";
+export * from "./client";
+export * from "./probe";
+export * from "./fixtures/demoTenant";
