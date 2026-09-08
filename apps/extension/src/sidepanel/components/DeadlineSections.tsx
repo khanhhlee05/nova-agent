@@ -4,12 +4,12 @@ import { ChevronDown, X } from "lucide-react";
 import { Collapsible } from "radix-ui";
 import { formatDeadline, formatRelative } from "../format";
 import { SECTION_LABELS, STATUS_LABELS, type Dashboard } from "../model";
+import { courseSwatch } from "../theme";
 import { ItemDetails } from "./ItemDetails";
 import { KindIcon, StatusIcon } from "./icons";
-import { courseSwatch } from "../theme";
 import { Tip } from "./Tip";
 
-const SECTION_TONE: Partial<Record<DeadlineBucket, "coral" | "amber" | "mint">> = { overdue: "coral", today: "amber", completed: "mint" };
+const SECTION_TONE: Partial<Record<DeadlineBucket, "overdue" | "today" | "done">> = { overdue: "overdue", today: "today", completed: "done" };
 
 export type DeadlineSectionsProps = {
   dashboard: Dashboard;
@@ -24,12 +24,13 @@ export type DeadlineSectionsProps = {
 };
 
 export const DeadlineSections = ({ dashboard, now, collapsed, onToggle, expandedKey, onExpand, canOpen, onOpen, onDismiss }: DeadlineSectionsProps) => (
-  <div className="stack" aria-label="Deadlines">
+  <div className="sections" aria-label="Deadlines">
     {BUCKET_ORDER.filter((bucket) => bucket !== "no-date").map((bucket) => {
       const items = bucket === "later" ? dashboard.buckets.later : dashboard.buckets[bucket];
       const noDate = bucket === "later" ? dashboard.buckets["no-date"] : [];
       const total = items.length + noDate.length;
       const open = !collapsed.has(bucket);
+      const rowProps = { now, expandedKey, onExpand, canOpen, onOpen, onDismiss, dashboard };
       return (
         <Collapsible.Root key={bucket} className="section" data-tone={SECTION_TONE[bucket]} open={open} onOpenChange={() => onToggle(bucket)}>
           <Collapsible.Trigger className="section-trigger" id={`section-${bucket}`}>
@@ -41,20 +42,20 @@ export const DeadlineSections = ({ dashboard, now, collapsed, onToggle, expanded
           </Collapsible.Trigger>
           <Collapsible.Content className="section-content">
             {total === 0 ? (
-              <p className="section-empty">{bucket === "completed" ? "Nothing completed yet." : "Nothing here."}</p>
+              <p className="section-empty">{bucket === "completed" ? "Nothing completed yet." : bucket === "tomorrow" ? "Nothing due tomorrow." : "Nothing here."}</p>
             ) : (
               <>
-                <ul>
+                <ul className="tasks">
                   {items.map((item) => (
-                    <TaskRow key={item.key} item={item} bucket={bucket} course={dashboard.courseById.get(item.courseId)} ranked={dashboard.ranked.get(item.key)} now={now} expanded={expandedKey === item.key} onExpand={onExpand} canOpen={canOpen} onOpen={onOpen} onDismiss={onDismiss} />
+                    <TaskRow key={item.key} item={item} bucket={bucket} {...rowProps} />
                   ))}
                 </ul>
                 {noDate.length > 0 ? (
                   <>
                     <p className="subgroup-label">No due date</p>
-                    <ul>
+                    <ul className="tasks">
                       {noDate.map((item) => (
-                        <TaskRow key={item.key} item={item} bucket="no-date" course={dashboard.courseById.get(item.courseId)} ranked={dashboard.ranked.get(item.key)} now={now} expanded={expandedKey === item.key} onExpand={onExpand} canOpen={canOpen} onOpen={onOpen} onDismiss={onDismiss} />
+                        <TaskRow key={item.key} item={item} bucket="no-date" {...rowProps} />
                       ))}
                     </ul>
                   </>
@@ -71,43 +72,43 @@ export const DeadlineSections = ({ dashboard, now, collapsed, onToggle, expanded
 type TaskRowProps = {
   item: AcademicItem;
   bucket: DeadlineBucket;
-  course: Course | undefined;
-  ranked: RankedItem | undefined;
+  dashboard: Dashboard;
   now: Date;
-  expanded: boolean;
+  expandedKey: string | null;
   onExpand: (key: string | null) => void;
   canOpen: (url: string | null) => boolean;
   onOpen: (url: string) => void;
   onDismiss: (key: string, title: string) => void;
 };
 
-const TaskRow = ({ item, bucket, course, ranked, now, expanded, onExpand, canOpen, onOpen, onDismiss }: TaskRowProps) => {
+const TaskRow = ({ item, bucket, dashboard, now, expandedKey, onExpand, canOpen, onOpen, onDismiss }: TaskRowProps) => {
+  const course: Course | undefined = dashboard.courseById.get(item.courseId);
+  const ranked: RankedItem | undefined = dashboard.ranked.get(item.key);
+  const expanded = expandedKey === item.key;
   const done = item.status === "submitted" || item.status === "completed";
-  const dueTone = bucket === "overdue" ? "coral" : bucket === "today" ? "amber" : undefined;
+  const dueTone = bucket === "overdue" ? "overdue" : bucket === "today" ? "today" : undefined;
   const detailsId = `details-${item.key.replace(/[^a-z0-9]+/gi, "-")}`;
+  const when = item.dueAt ? (bucket === "overdue" ? `Overdue · ${formatRelative(item.dueAt, now)}` : formatDeadline(item.dueAt, now)) : "No due date";
   return (
-    <li className="task" data-done={done} style={{ "--rail": course ? courseSwatch(course.color) : undefined } as React.CSSProperties}>
-      <span className="task-rail" aria-hidden="true" />
+    <li className="task" data-done={done}>
       <div className="task-row">
-        <span className="task-kind">
-          <KindIcon kind={item.kind} />
-          <span className="sr-only">{item.kind}</span>
-        </span>
         <div className="task-main">
           <span className="task-title" title={item.title}>
             {item.title}
           </span>
-          <div className="task-sub">
-            <span>{course?.name ?? "Unknown course"}</span>
+          <span className="task-sub">
+            <span className="course-dot" style={{ background: course ? courseSwatch(course.color) : undefined }} aria-hidden="true" />
+            <span className="task-course">{course?.name ?? "Unknown course"}</span>
+            <span aria-hidden="true">·</span>
             <span className="due" data-tone={dueTone}>
-              {item.dueAt ? (bucket === "overdue" ? `Overdue · ${formatRelative(item.dueAt, now)}` : formatDeadline(item.dueAt, now)) : "No due date"}
+              {when}
             </span>
-          </div>
+          </span>
         </div>
         <div className="task-aside">
-          <Tip label={STATUS_LABELS[item.status]}>
-            <span className="status-icon" data-status={item.status} tabIndex={0} role="img" aria-label={STATUS_LABELS[item.status]}>
-              <StatusIcon status={item.status} />
+          <Tip label={`${item.kind === "quiz" ? "Quiz" : "Assignment"} · ${STATUS_LABELS[item.status]}`}>
+            <span className="kind-chip" data-status={item.status} tabIndex={0} role="img" aria-label={`${item.kind === "quiz" ? "Quiz" : "Assignment"}, ${STATUS_LABELS[item.status]}`}>
+              {done ? <StatusIcon status={item.status} size={15} /> : <KindIcon kind={item.kind} size={15} />}
             </span>
           </Tip>
           <Tip label="Hide until next refresh">
@@ -117,7 +118,7 @@ const TaskRow = ({ item, bucket, course, ranked, now, expanded, onExpand, canOpe
           </Tip>
           <Tip label={expanded ? "Hide details" : "Show details"}>
             <button type="button" className="icon-button icon-button-sm" aria-label={`${expanded ? "Hide" : "Show"} details for ${item.title}`} aria-expanded={expanded} aria-controls={detailsId} onClick={() => onExpand(expanded ? null : item.key)}>
-              <ChevronDown size={16} aria-hidden="true" style={{ transform: expanded ? "rotate(180deg)" : undefined, transition: "transform 160ms ease" }} />
+              <ChevronDown size={16} aria-hidden="true" className="chevron" data-open={expanded} />
             </button>
           </Tip>
         </div>
