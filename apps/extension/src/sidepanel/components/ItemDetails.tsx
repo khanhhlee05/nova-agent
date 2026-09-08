@@ -37,7 +37,7 @@ export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headin
           {item.dueAt ? <span className="muted"> ({formatRelative(item.dueAt, now)})</span> : null}
         </dd>
         <dt>Status</dt>
-        <dd>{STATUS_LABELS[item.status]}{item.status === "unknown" ? <span className="faint"> · Brightspace did not share submission state</span> : null}</dd>
+        <dd>{STATUS_LABELS[item.status]}{item.status === "unknown" ? <span className="muted"> · Brightspace did not share submission state</span> : null}</dd>
         {item.pointsPossible !== null ? (
           <>
             <dt>Points</dt>
@@ -67,20 +67,18 @@ export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headin
             {showBreakdown ? "Hide breakdown" : "Show breakdown"}
           </button>
           {showBreakdown ? (
-            <div className="breakdown" role="table" aria-label="Priority breakdown">
+            <dl className="breakdown" aria-label="Priority breakdown">
               {(Object.keys(ranked.priority.components) as (keyof typeof ranked.priority.components)[]).map((component) => (
-                <span key={component} style={{ display: "contents" }} role="row">
-                  <span role="cell">{COMPONENT_LABELS[component]}</span>
-                  <span role="cell">{ranked.priority.components[component].toFixed(1)}</span>
-                </span>
+                <div key={component} style={{ display: "contents" }}>
+                  <dt>{COMPONENT_LABELS[component]}</dt>
+                  <dd className="mono">{ranked.priority.components[component].toFixed(1)}</dd>
+                </div>
               ))}
-              <span role="cell">
-                <strong>Total (rounded, 0–100)</strong>
-              </span>
-              <span role="cell">
-                <strong>{ranked.priority.score}</strong>
-              </span>
-            </div>
+              <div className="total" style={{ display: "contents" }}>
+                <dt>Total (rounded, 0 to 100)</dt>
+                <dd className="mono">{ranked.priority.score}</dd>
+              </div>
+            </dl>
           ) : null}
         </section>
       ) : (

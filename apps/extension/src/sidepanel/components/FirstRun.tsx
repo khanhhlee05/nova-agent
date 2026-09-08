@@ -20,6 +20,6 @@ export const FirstRun = ({ busy, onConnectLive, onUseDemo }: FirstRunProps) => (
         Explore with demo data
       </button>
     </div>
-    <p className="faint">Unofficial student project. Not affiliated with Villanova University or D2L.</p>
+    <p className="muted">Unofficial student project. Not affiliated with Villanova University or D2L.</p>
   </section>
 );

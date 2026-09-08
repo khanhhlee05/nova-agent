@@ -121,7 +121,7 @@ export const StateBanners = (props: StateBannersProps) => {
         }
       >
         <p>Brightspace refused the read-only routes for your session. Official OAuth access must be registered by Villanova before live data can load.</p>
-        {error ? <p className="faint">{describeError(error)}</p> : null}
+        {error ? <p>{describeError(error)}</p> : null}
       </Banner>,
     );
   } else if (phase === "offline") {

@@ -27,6 +27,7 @@ import "../src/sidepanel/styles.css";
  * with a stub host so every UI state can be reviewed without Chrome APIs:
  *   preview.html?scenario=ready|changes|week|fixture|first-run|loading|partial|session-expired|stale|offline|permission-required|empty
  *   &theme=light|dark
+ *   &mode=demo   (label the data as demo regardless of scenario)
  */
 
 type Scenario = "ready" | "changes" | "week" | "fixture" | "first-run" | "loading" | "partial" | "session-expired" | "stale" | "offline" | "permission-required" | "empty";
@@ -109,6 +110,7 @@ const main = async () => {
 
   const activeTab = tab ?? (scenario === "changes" ? "changes" : scenario === "week" ? "week" : "focus");
   const theme = params.get("theme") === "dark" ? "dark" : "light";
+  if (params.get("mode") === "demo") await setPreference(db, DATA_MODE_PREFERENCE, "fixture");
   await setPreference(db, "ui.preferences", { activeTab, courseFilter: null, collapsedSections: ["completed", "later"], theme } satisfies UiPreferences);
 
   createRoot(document.getElementById("root") as HTMLElement).render(

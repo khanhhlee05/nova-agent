@@ -37,7 +37,10 @@ export type FieldHeaderProps = {
 export const FieldHeader = ({ freshness: fresh, theme, onThemeChange, onRefresh, refreshing, refreshDisabled, menu, hero, counts, tabs }: FieldHeaderProps) => (
   <header className="field">
     <div className="field-top">
-      <span className="wordmark">NOVA</span>
+      <span className="wordmark">
+        <span className="mark" aria-hidden="true" />
+        NOVA
+      </span>
       <span className="freshness" data-tone={fresh.tone} role="status" aria-label={`Connection: ${fresh.label}`}>
         {fresh.text}
       </span>
@@ -59,7 +62,7 @@ export const FieldHeader = ({ freshness: fresh, theme, onThemeChange, onRefresh,
 export type HeroProps = { title: string; meta: string; text: string; actions?: ReactNode; aside?: ReactNode; extra?: ReactNode; headingId?: string };
 
 export const Hero = ({ title, meta, text, actions, aside, extra, headingId }: HeroProps) => (
-  <div className="hero">
+  <div className="hero" key={title}>
     <div className="hero-head">
       <h2 className="hero-title" id={headingId}>
         {title}

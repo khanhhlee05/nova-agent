@@ -171,7 +171,7 @@ describe("keyboard navigation", () => {
     expect(expand.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByRole("button", { name: /show breakdown/i })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: /show breakdown/i }));
-    expect(screen.getByRole("table", { name: /priority breakdown/i })).toBeTruthy();
+    expect(screen.getByText(/total \(rounded, 0 to 100\)/i)).toBeTruthy();
   });
 
   it("renders the week view with seven days and item popovers", async () => {
