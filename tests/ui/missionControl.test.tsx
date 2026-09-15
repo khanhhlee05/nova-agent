@@ -29,7 +29,7 @@ const actions = (): MissionControlActions & { calls: Record<string, unknown[][]>
     useDemoData: track("useDemoData"),
     clearData: track("clearData"),
     dismissItem: track("dismissItem"),
-    dismissEvent: track("dismissEvent"),
+    deleteEvent: track("deleteEvent"),
     dismissBanner: track("dismissBanner"),
     restoreDismissed: track("restoreDismissed"),
   };
@@ -294,8 +294,15 @@ describe("week day filter", () => {
     const before = screen.getAllByRole("heading", { level: 3 }).filter((h) => h.className.includes("agenda-day-label")).length;
     expect(before).toBe(7);
 
+    // Nothing selected: today is marked but nobody wears the selected pill.
+    const today = screen.getByRole("button", { name: /^Tuesday, September 8/ });
+    expect(today.getAttribute("data-today")).toBe("true");
+    expect(today.getAttribute("data-selected")).toBe("false");
+
     await user.click(screen.getByRole("button", { name: /^Thursday, September 10/ }));
     expect(screen.getByRole("button", { name: /^Thursday, September 10/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /^Thursday, September 10/ }).getAttribute("data-selected")).toBe("true");
+    expect(screen.getByRole("button", { name: /^Tuesday, September 8/ }).getAttribute("data-selected")).toBe("false");
     expect(screen.getAllByRole("heading", { level: 3 }).filter((h) => h.className.includes("agenda-day-label"))).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 2 }).textContent).toMatch(/^Thursday: /);
     expect(screen.getByText("MATLAB Lab: Filters")).toBeTruthy();

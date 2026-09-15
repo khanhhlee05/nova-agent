@@ -3,26 +3,27 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 /**
  * Session-only dismissals.
  *
- * A student can hide any task, change event, or banner to focus on the rest.
- * Nothing is persisted: closing the panel forgets every dismissal, and any
- * refresh (an explicit refresh action or a new snapshot arriving) restores
- * everything, so the panel always returns to what Brightspace actually says.
+ * A student can hide any task or banner to focus on the rest. Nothing is
+ * persisted: closing the panel forgets every dismissal, and any refresh (an
+ * explicit refresh action or a new snapshot arriving) restores everything, so
+ * the panel always returns to what Brightspace actually says.
+ *
+ * Change events are different: deleting one is permanent (see
+ * `deleteChangeEvent` in the storage layer), because a change is a one-off
+ * notice rather than something Brightspace keeps asserting.
  */
 export type SessionDismissals = {
   items: ReadonlySet<string>;
-  events: ReadonlySet<string>;
   banners: ReadonlySet<string>;
 };
 
-export const EMPTY_DISMISSALS: SessionDismissals = { items: new Set(), events: new Set(), banners: new Set() };
+export const EMPTY_DISMISSALS: SessionDismissals = { items: new Set(), banners: new Set() };
 
-export const countDismissed = (dismissals: SessionDismissals): number =>
-  dismissals.items.size + dismissals.events.size + dismissals.banners.size;
+export const countDismissed = (dismissals: SessionDismissals): number => dismissals.items.size + dismissals.banners.size;
 
 export type DismissalControls = {
   dismissals: SessionDismissals;
   dismissItem: (key: string) => void;
-  dismissEvent: (id: string) => void;
   dismissBanner: (id: string) => void;
   restoreAll: () => void;
 };
@@ -43,9 +44,8 @@ export const useSessionDismissals = (resetKey: string | null): DismissalControls
   }, [resetKey]);
 
   const dismissItem = useCallback((key: string) => setDismissals((prev) => ({ ...prev, items: withAdded(prev.items, key) })), []);
-  const dismissEvent = useCallback((id: string) => setDismissals((prev) => ({ ...prev, events: withAdded(prev.events, id) })), []);
   const dismissBanner = useCallback((id: string) => setDismissals((prev) => ({ ...prev, banners: withAdded(prev.banners, id) })), []);
   const restoreAll = useCallback(() => setDismissals(EMPTY_DISMISSALS), []);
 
-  return useMemo(() => ({ dismissals, dismissItem, dismissEvent, dismissBanner, restoreAll }), [dismissals, dismissItem, dismissEvent, dismissBanner, restoreAll]);
+  return useMemo(() => ({ dismissals, dismissItem, dismissBanner, restoreAll }), [dismissals, dismissItem, dismissBanner, restoreAll]);
 };

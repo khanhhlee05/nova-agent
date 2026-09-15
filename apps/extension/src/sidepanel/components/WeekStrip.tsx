@@ -15,7 +15,9 @@ export type WeekStripProps = {
 
 /**
  * Seven days on the field. Tap a day to show only that day; tap it again for
- * the whole week. The selected day takes the white pill; today keeps a marker.
+ * the whole week. Only an explicitly selected day takes the white pill, so the
+ * whole-week view and the "today" view never look the same; today keeps its
+ * underline and marker in both.
  */
 export const WeekStrip = ({ week, courseById, selected, onSelect }: WeekStripProps) => (
   <div className="week-strip" role="list" aria-label="Next seven days">
@@ -23,14 +25,13 @@ export const WeekStrip = ({ week, courseById, selected, onSelect }: WeekStripPro
       const key = dayKey(day.date);
       const active = day.entries.filter((entry) => entry.bucket !== "completed");
       const isSelected = selected === key;
-      const highlighted = isSelected || (selected === null && day.isToday);
       return (
         <div key={key} role="listitem">
           <button
             type="button"
             className="week-day"
             data-today={day.isToday}
-            data-selected={highlighted}
+            data-selected={isSelected}
             aria-pressed={isSelected}
             aria-label={`${format(day.date, "EEEE, MMMM d")}: ${active.length} due${isSelected ? ", selected" : ""}`}
             onClick={() => onSelect(isSelected ? null : key)}
@@ -40,7 +41,7 @@ export const WeekStrip = ({ week, courseById, selected, onSelect }: WeekStripPro
             <span className="dots" aria-hidden="true">
               {active.slice(0, 4).map((entry) => {
                 const course = courseById.get(entry.item.courseId);
-                return <i key={entry.item.key} style={highlighted && course ? { background: courseSwatch(course.color) } : undefined} />;
+                return <i key={entry.item.key} style={isSelected && course ? { background: courseSwatch(course.color) } : undefined} />;
               })}
             </span>
           </button>

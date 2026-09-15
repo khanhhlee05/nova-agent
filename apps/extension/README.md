@@ -30,7 +30,7 @@ Each deadline section (Overdue, Today, Tomorrow, This week, Later, Completed) co
 
 ## Hiding things for a session
 
-Every task row, week entry, change event, Next move card, and notice banner has a **Hide until next refresh** control. Hidden things leave every view at once, including the summary counts, the Next move card, the week agenda, and the unread badge. A bar under the tabs shows how many things are hidden and offers **Show all**.
+Every task row, week entry, Next move card, and notice banner has a **Hide until next refresh** control. Hidden things leave every view at once, including the summary counts, the Next move card, and the week agenda. A bar under the tabs shows how many things are hidden and offers **Show all**.
 
 Dismissals are deliberately not persisted:
 
@@ -38,6 +38,15 @@ Dismissals are deliberately not persisted:
 - Pressing **Refresh**, or any automatic refresh that brings a new snapshot, restores everything.
 
 This keeps the student in control of what they look at right now while guaranteeing the panel always returns to what Brightspace actually says.
+
+## Changes: read and delete
+
+A change is a one-off notice, so it behaves differently from a task:
+
+- **Mark as read** keeps the change in the feed for the rest of this session. On the next refresh, anything read before that refresh leaves the feed, so the tab really is "since your last visit". Mark it unread again before the refresh to keep it.
+- **Delete** removes the change from local storage immediately and permanently. It does not come back on the next refresh. Change detection compares consecutive snapshots, so the same change can only reappear if it genuinely happens again in Brightspace.
+
+The unread badge only ever counts unread changes, so neither action can leave a stale count behind.
 
 ## Preview harness
 
