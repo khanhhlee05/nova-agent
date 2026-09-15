@@ -1,6 +1,6 @@
 # Nova backend: plan for the AI and calendar services
 
-Status: proposal. Replaces the "no backend" position in `CHATBOT_PLAN.md` for the AI and Google Calendar features. Brightspace access is unchanged.
+Status: slice 1 built (stateless chat API, no sign-in or database yet). See `ASK_NOVA.md`. Replaces the "no backend" position in `CHATBOT_PLAN.md` for the AI and Google Calendar features. Brightspace access is unchanged.
 
 ## Why a backend
 

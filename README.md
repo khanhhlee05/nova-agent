@@ -16,8 +16,9 @@ Implemented in the first vertical slice (features A–D):
 - **Mission Control**: Chrome side panel with Focus, Week, and Changes tabs, launched from a Nova Orb injected into Brightspace.
 - **Since Your Last Visit**: local snapshots and a semantic diff that avoids false positives and duplicate events.
 - **Priority engine**: deterministic, explainable scoring in `packages/planner`.
+- **Ask Nova**: a chat tab over the same data, answered by a small Node API that calls an OpenRouter model with read-only tools. Off until the student turns it on. See [docs/ASK_NOVA.md](docs/ASK_NOVA.md).
 
-Planned next: bounded agent tools, ICS export, study planning.
+Planned next: sign-in and saved conversations, Google Calendar sync, ICS export, study planning.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/BRIGHTSPACE_ACCESS.md](docs/BRIGHTSPACE_ACCESS.md) for the data flow and the authentication outcome.
 
@@ -30,14 +31,15 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/BRIGHTSPACE_ACCESS.md
 
 - `apps/web`: public landing page and static Mission Control demo
 - `apps/extension`: Chrome Manifest V3 extension (Nova Orb, side panel, local database). See [apps/extension/README.md](apps/extension/README.md).
-- `apps/api`: future agent API scaffold
+- `apps/api`: Node + Hono chat API for Ask Nova. Holds the model key, stores nothing.
 
 ## Packages
 
 - `packages/brightspace`: Brightspace routes, transports, client, normalization, and probe
 - `packages/core`: canonical academic models, deadline buckets, snapshots, and semantic diff
 - `packages/planner`: deterministic priority score and explanations
-- `packages/agent`: bounded agent tool definitions
+- `packages/agent`: compact snapshot, read-only tools, the agent loop, and model adapters
+- `packages/protocol`: Zod schemas shared by the extension and the API (compact snapshot, chat request, events, SSE parser)
 
 ## Development
 
@@ -45,6 +47,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/BRIGHTSPACE_ACCESS.md
 npm install
 npm run dev              # public site
 npm run dev:extension    # side panel preview harness
+npm run dev:api          # Ask Nova API on :8787 (needs apps/api/.env)
 npm run check            # lint, typecheck, tests, build
 ```
 
@@ -58,4 +61,4 @@ Load the extension from `apps/extension/dist` after `npm run build`.
 
 ## Status
 
-First vertical slice. Live Brightspace access on the Villanova tenant is not yet verified; see [docs/BRIGHTSPACE_ACCESS.md](docs/BRIGHTSPACE_ACCESS.md). Demo mode works everywhere.
+First vertical slice plus Ask Nova slice 1. Live Brightspace access on the Villanova tenant is not yet verified; see [docs/BRIGHTSPACE_ACCESS.md](docs/BRIGHTSPACE_ACCESS.md). Demo mode works everywhere. Nothing leaves the device unless Ask Nova is turned on, and then only the compact course data a question needs.

@@ -303,7 +303,7 @@ The only field control is the course filter select.
 - **Focus:** the shared two-ring focus shadow.
 
 ### Navigation
-Three tabs (Focus, Week, Changes) on the field's lower edge, 38 px tall, 14 px at 600 in Field Muted; hover to Field Ink; the active tab is the page color with ink text at 700 and top-only 8 px corners so it reads as one white tab joining the list. Above the tabs, the field top row carries the wordmark, freshness (12.5 px, Field Muted, pulsing while syncing), the theme switch, refresh, and an overflow menu, all 32 px controls.
+Four tabs (Focus, Week, Changes, Ask) on the field's lower edge, 38 px tall, 14 px at 600 in Field Muted; hover to Field Ink; the active tab is the page color with ink text at 700 and top-only 8 px corners so it reads as one white tab joining the list. Above the tabs, the field top row carries the wordmark, freshness (12.5 px, Field Muted, pulsing while syncing), the theme switch, refresh, and an overflow menu, all 32 px controls.
 
 ### The Field
 The signature. Sticky blue block with a 26 px 800 headline (balanced wrap), a 13 px 600 meta line in Field Muted, a 14 px sentence at 60 ch, then an actions row with the one on-field button and a 13 px muted secondary text-button (priority score, unread count). Below a 22% white hairline sits either the counts strip (four 13 px labels with 15 px 800 numbers, 18 px apart) or, on Week, the seven-day strip. The hero settles in with a 180 ms ease-out rise of 4 px; the headline text is computed per tab (item title, week summary, change summary).
@@ -313,6 +313,9 @@ Seven equal columns on the field, each a column of 11 px day name (Field Muted),
 
 ### Rows
 Task rows: 56 px minimum, 10 px vertical padding, hairline below, title 15 px 600 single-line, sub-line 12.5 px muted holding the course dot and name and a due label that takes coral (overdue, 600) or amber (today, 600). The aside holds the kind chip, hide, and expand icon buttons at 2 px gaps. Done rows strike the title through in muted. Expanding a row reveals details with a 160 ms slide-down. Event rows and signal rows follow the same hairline grammar with their own grids (see Layout); the signal icon well is a 32 px Surface square whose glyph takes Accent, Coral, Ink, or Green by event kind.
+
+### Ask Thread
+The fourth tab keeps the field grammar (headline, meta, sentence) and adds a row of chips on the field: 30 px, Field Chip fill, Field Ink text at 12.5 px 600, one suggested question each. Below, the thread is a plain column: the student's question as a right-aligned bubble (Accent fill, Accent Ink text, 10 px radius, 85% max width), a 12.5 px muted lookup line per tool call, the answer at 14.5 px on 1.5, then matching rows in the task and signal row grammar with the same hairlines. Errors reuse the critical banner. The composer is a 40 px textarea with a 1 px Rule Strong border and a 40 px accent send button, separated from the thread by a hairline. The setup card is the one container on the tab: Surface Raised, 1 px Rule Strong, 10 px radius, 14 px padding, holding the consent statement and two 36 px text inputs.
 
 ### Launcher Orb
 Outside the panel, on Brightspace pages: a 44 px field-blue circle with a 14 px white core, a `0 6px 16px rgba(15,20,32,0.28)` shadow, a white 18 px count badge bordered in field blue, a 1 px lift on hover, and a white outline plus blue halo on focus. It is light-only (it sits on Brightspace's own page, not on the panel's ground) and pulses its core while syncing.

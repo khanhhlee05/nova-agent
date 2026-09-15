@@ -1,6 +1,6 @@
 # Ask Nova: plan for a chatbot over Brightspace data
 
-Status: proposal. Nothing here is built yet.
+Status: slice 1 built (tools, loop, API, Ask tab) on the backend architecture in `BACKEND_PLAN.md`. See `ASK_NOVA.md` for what shipped. The "no backend" position below is superseded.
 
 ## What it is
 
