@@ -116,7 +116,8 @@ describe("Ask tab", () => {
     const { dashboard, events } = await demoDashboard();
     const ask = askProps(null, events, DEFAULT_ASK_SETTINGS);
     render(<MissionControl {...baseProps({ dashboard, ask })} />);
-    expect(screen.getByRole("heading", { level: 3, name: /ask nova is off/i })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: /ask nova is off/i })).toBeTruthy();
+    expect(screen.getByText(/what leaves this device/i)).toBeTruthy();
     expect(screen.getByText(/never leave this device/i)).toBeTruthy();
     expect((screen.getByRole("textbox", { name: /ask nova a question/i }) as HTMLTextAreaElement).disabled).toBe(true);
     expect(screen.queryByRole("group", { name: /suggested questions/i })).toBeNull();

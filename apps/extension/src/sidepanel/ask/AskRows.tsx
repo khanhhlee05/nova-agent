@@ -33,6 +33,7 @@ const asEvent = (row: Extract<ToolRow, { kind: "change" }>): ChangeEvent => ({
  */
 export const AskRows = ({ rows, dashboard, now, canOpen, onOpen }: AskRowsProps) => {
   if (rows.length === 0) return null;
+  const readState = new Map([...dashboard.changes.today, ...dashboard.changes.yesterday, ...dashboard.changes.earlier].map((event) => [event.id, event.readAt === null]));
   const openFor = (row: ToolRow): string | null => {
     if (canOpen(row.url)) return row.url;
     const home = dashboard.courseById.get(row.courseId)?.homeUrl ?? null;
@@ -115,10 +116,12 @@ export const AskRows = ({ rows, dashboard, now, canOpen, onOpen }: AskRowsProps)
         }
         const event = asEvent(row);
         const { icon, tone } = changeIcon(event);
-        const before = row.before?.dueLocal ?? (row.before?.status ? STATUS_LABELS[row.before.status] : null);
-        const after = row.after?.dueLocal ?? (row.after?.status ? STATUS_LABELS[row.after.status] : null);
+        const side = (fields: typeof row.before): string | null =>
+          fields?.dueAt !== undefined ? formatDeadline(fields.dueAt, now) : fields?.status ? STATUS_LABELS[fields.status] : null;
+        const before = side(row.before);
+        const after = side(row.after);
         return (
-          <li key={`change-${row.id}`} className="signal" data-unread="false">
+          <li key={`change-${row.id}`} className="signal" data-unread={readState.get(row.id) ?? false}>
             <span className="signal-icon" data-tone={tone} aria-hidden="true">
               {icon}
             </span>

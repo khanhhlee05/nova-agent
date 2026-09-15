@@ -49,7 +49,7 @@ export const AskView = ({ thread, settings, onSettingsChange, clientFactory, das
         ) : (
           <div className="ask-status">
             <span>
-              Nova API · <span className="mono">{hostOf(settings.apiBaseUrl)}</span>
+              Nova API · <span className="mono">{hostOf(settings.apiBaseUrl)}</span> · Session only
             </span>
             <span className="spacer" />
             {thread.messages.length > 0 ? (

@@ -1,4 +1,3 @@
-import { Sparkles } from "lucide-react";
 import { useState } from "react";
 import type { AskClientFactory } from "./askClient";
 import { normalizeApiBaseUrl, type AskSettings } from "./askSettings";
@@ -41,13 +40,18 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose }
 
   return (
     <section className="ask-setup" aria-labelledby="ask-setup-title">
-      <h3 id="ask-setup-title" className="ask-setup-title">
-        <Sparkles size={16} aria-hidden="true" />
-        {editing ? "Ask Nova settings" : "Ask Nova is off"}
-      </h3>
+      {editing ? (
+        <h3 id="ask-setup-title" className="ask-setup-title">
+          Ask Nova settings
+        </h3>
+      ) : (
+        <p id="ask-setup-title" className="ask-setup-title">
+          What leaves this device
+        </p>
+      )}
       <p className="ask-setup-text">
-        When you ask a question, Nova sends it together with a compact copy of your course data (titles, due dates, statuses, links) to the Nova API below, which forwards it to the model provider and keeps nothing.
-        Cookies, raw Brightspace responses, announcement text, and your name never leave this device.
+        When you ask a question, Nova sends it with a compact copy of your course data (course names, item titles, due dates, statuses, announcement titles, links) to the Nova API you run at the address below. That API forwards it to a model on OpenRouter and Nova keeps no copy of the conversation.
+        Cookies, raw Brightspace responses, announcement bodies, and your name never leave this device.
       </p>
       <label className="ask-field">
         <span>Nova API address</span>
@@ -75,7 +79,7 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose }
             <button type="button" className="button button-ghost" onClick={onClose}>
               Cancel
             </button>
-            <button type="button" className="button button-ghost button-danger" onClick={() => save(false)}>
+            <button type="button" className="button button-danger" onClick={() => save(false)}>
               Turn off
             </button>
           </>

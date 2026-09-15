@@ -47,15 +47,17 @@ export type AskThreadProps = {
 };
 
 export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpen, onOpen, onRetry, onSettings }: AskThreadProps) => {
-  const end = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLOListElement>(null);
   const lastId = messages.at(-1)?.id;
   const lastText = messages.at(-1)?.text.length ?? 0;
   useEffect(() => {
-    end.current?.scrollIntoView({ block: "end" });
+    // Scroll the thread's own container only; scrollIntoView would also move ancestor scrollers.
+    const scroller = list.current?.closest(".ask-thread");
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
   }, [lastId, lastText, status]);
 
   return (
-    <ol className="ask-messages" aria-label="Conversation">
+    <ol ref={list} className="ask-messages" aria-label="Conversation">
       {messages.map((message, index) => {
         const last = index === messages.length - 1;
         if (message.role === "user") {
@@ -84,7 +86,8 @@ export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpe
                 {streaming ? <span className="ask-caret" aria-hidden="true" /> : null}
               </p>
             ) : streaming ? (
-              <p className="ask-answer ask-thinking" aria-label="Nova is thinking">
+              <p className="ask-answer ask-thinking">
+                Thinking…
                 <span className="ask-caret" aria-hidden="true" />
               </p>
             ) : null}
@@ -117,7 +120,6 @@ export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpe
           </li>
         );
       })}
-      <div ref={end} />
     </ol>
   );
 };

@@ -146,7 +146,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
       <Hero title="No data yet" meta={PHASE_LABELS[phase]} text="Nova could not complete a first refresh. Fix the connection below and retry." />
     )
   ) : tab === "ask" && ask ? (
-    <Hero {...askHero(fresh, ask.settings.enabled)} extra={ask.settings.enabled ? <AskChips dashboard={dashboard} disabled={thread.status === "streaming" || !ask.client} onPick={thread.send} /> : undefined} />
+    <Hero {...askHero(dashboard, ask.settings.enabled, status.lastSuccessfulSyncAt, now)} extra={ask.settings.enabled ? <AskChips dashboard={dashboard} disabled={thread.status === "streaming" || !ask.client} onPick={thread.send} /> : undefined} />
   ) : tab === "week" ? (
     <Hero {...weekHero(dashboard, selectedDay)} extra={<WeekStrip week={dashboard.week} courseById={dashboard.courseById} selected={selectedDay} onSelect={setSelectedDay} />} />
   ) : tab === "changes" ? (
@@ -203,8 +203,6 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
       ) : (
         "Local time"
       )
-    ) : tab === "ask" ? (
-      "Session only"
     ) : (
       "Newest first"
     );
@@ -244,11 +242,13 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                   </button>
                 </div>
               ) : null}
-              <div className="filter-row">
-                {tab === "ask" ? <span className="filter-note">Ask Nova reads every course</span> : <CourseFilter courses={dashboard?.courses ?? []} value={preferences.courseFilter} onChange={(courseFilter) => actions.setPreferences({ courseFilter })} />}
-                <span className="spacer" />
-                <span className="filter-note">{filterNote}</span>
-              </div>
+              {tab !== "ask" ? (
+                <div className="filter-row">
+                  <CourseFilter courses={dashboard?.courses ?? []} value={preferences.courseFilter} onChange={(courseFilter) => actions.setPreferences({ courseFilter })} />
+                  <span className="spacer" />
+                  <span className="filter-note">{filterNote}</span>
+                </div>
+              ) : null}
               <Tabs.Content className="tab-content" value="focus">
                 <div className="stack">
                   <StateBanners
