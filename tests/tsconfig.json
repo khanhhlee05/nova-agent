@@ -10,6 +10,9 @@
   "references": [
     { "path": "../packages/brightspace" },
     { "path": "../packages/core" },
-    { "path": "../packages/planner" }
+    { "path": "../packages/planner" },
+    { "path": "../packages/protocol" },
+    { "path": "../packages/agent" },
+    { "path": "../apps/api" }
   ]
 }
