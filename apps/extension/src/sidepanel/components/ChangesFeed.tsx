@@ -1,5 +1,5 @@
 import type { ChangeEvent } from "@nova-agent/core";
-import { Check, CheckCheck, ExternalLink, Radio, X } from "lucide-react";
+import { Check, ExternalLink, Radio, Trash2 } from "lucide-react";
 import { formatDeadline, formatDetected } from "../format";
 import { STATUS_LABELS, changeTitle, changeVerb, type Dashboard } from "../model";
 import { changeIcon } from "./icons";
@@ -11,9 +11,9 @@ export type ChangesFeedProps = {
   baselineOnly: boolean;
   canOpen: (url: string | null) => boolean;
   onOpen: (url: string) => void;
-  onMarkAllRead: () => void;
   onSetRead: (id: string, read: boolean) => void;
-  onDismiss: (id: string, title: string) => void;
+  /** Permanent: the event is removed from local storage, not hidden for the session. */
+  onDelete: (id: string, title: string) => void;
 };
 
 const GROUPS: { key: keyof Dashboard["changes"]; label: string }[] = [
@@ -22,15 +22,8 @@ const GROUPS: { key: keyof Dashboard["changes"]; label: string }[] = [
   { key: "earlier", label: "Earlier" },
 ];
 
-export const ChangesFeed = ({ dashboard, now, baselineOnly, canOpen, onOpen, onMarkAllRead, onSetRead, onDismiss }: ChangesFeedProps) => (
+export const ChangesFeed = ({ dashboard, now, baselineOnly, canOpen, onOpen, onSetRead, onDelete }: ChangesFeedProps) => (
   <div className="stack">
-    <div className="feed-header">
-      <h2>Since your last visit</h2>
-      <button type="button" className="button button-ghost button-sm" onClick={onMarkAllRead} disabled={dashboard.counts.unread === 0}>
-        <CheckCheck size={14} aria-hidden="true" />
-        Mark all read
-      </button>
-    </div>
     {dashboard.totalChanges === 0 ? (
       <div className="empty">
         <Radio size={22} aria-hidden="true" />
@@ -43,7 +36,7 @@ export const ChangesFeed = ({ dashboard, now, baselineOnly, canOpen, onOpen, onM
           <h3 className="feed-group-label">{group.label}</h3>
           <ul className="feed-group">
             {dashboard.changes[group.key].map((event) => (
-              <SignalRow key={event.id} event={event} dashboard={dashboard} now={now} canOpen={canOpen} onOpen={onOpen} onSetRead={onSetRead} onDismiss={onDismiss} />
+              <SignalRow key={event.id} event={event} dashboard={dashboard} now={now} canOpen={canOpen} onOpen={onOpen} onSetRead={onSetRead} onDelete={onDelete} />
             ))}
           </ul>
         </section>
@@ -52,9 +45,9 @@ export const ChangesFeed = ({ dashboard, now, baselineOnly, canOpen, onOpen, onM
   </div>
 );
 
-type SignalRowProps = Pick<ChangesFeedProps, "dashboard" | "now" | "canOpen" | "onOpen" | "onSetRead" | "onDismiss"> & { event: ChangeEvent };
+type SignalRowProps = Pick<ChangesFeedProps, "dashboard" | "now" | "canOpen" | "onOpen" | "onSetRead" | "onDelete"> & { event: ChangeEvent };
 
-const SignalRow = ({ event, dashboard, now, canOpen, onOpen, onSetRead, onDismiss }: SignalRowProps) => {
+const SignalRow = ({ event, dashboard, now, canOpen, onOpen, onSetRead, onDelete }: SignalRowProps) => {
   const { icon, tone } = changeIcon(event);
   const course = dashboard.courseById.get(event.courseId);
   const item = dashboard.itemByKey.get(event.entityKey);
@@ -91,9 +84,9 @@ const SignalRow = ({ event, dashboard, now, canOpen, onOpen, onSetRead, onDismis
             <Check size={16} aria-hidden="true" />
           </button>
         </Tip>
-        <Tip label="Hide until next refresh">
-          <button type="button" className="icon-button icon-button-sm" aria-label={`Hide change "${title}" until next refresh`} onClick={() => onDismiss(event.id, title)}>
-            <X size={15} aria-hidden="true" />
+        <Tip label="Delete">
+          <button type="button" className="icon-button icon-button-sm" aria-label={`Delete change "${title}"`} onClick={() => onDelete(event.id, title)}>
+            <Trash2 size={15} aria-hidden="true" />
           </button>
         </Tip>
       </div>

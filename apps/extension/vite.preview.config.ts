@@ -7,7 +7,7 @@ import { defineConfig } from "vite";
 // and for the screenshot script. Not part of the shipped extension.
 export default defineConfig({
   root: resolve(__dirname, "dev"),
-  publicDir: false,
+  publicDir: resolve(__dirname, "public"),
   plugins: [react()],
   server: { port: 5174, strictPort: true },
 });

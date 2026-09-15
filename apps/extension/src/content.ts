@@ -22,21 +22,20 @@ const orbStyles = `
   :host { all: initial; }
   .orb {
     position: fixed; right: 20px; bottom: 20px; z-index: 2147483646;
-    width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.14);
-    background: radial-gradient(circle at 35% 35%, #2f7df4 0%, #143a74 55%, #08111f 100%);
-    box-shadow: 0 10px 26px rgba(2, 6, 13, 0.55), 0 0 0 0 rgba(47,125,244,0.6);
+    width: 44px; height: 44px; border-radius: 50%; border: 0;
+    background: #1d5fd1; box-shadow: 0 6px 16px rgba(15, 20, 32, 0.28);
     cursor: pointer; padding: 0; display: grid; place-items: center;
-    transition: transform 160ms ease, box-shadow 160ms ease;
-    font: 600 11px/1 ui-sans-serif, system-ui, sans-serif; color: #f5f8fc;
+    transition: transform 160ms ease;
+    font: 700 11px/1 "Hanken Grotesk", "Helvetica Neue", Arial, system-ui, sans-serif; color: #ffffff;
   }
   .orb:hover { transform: translateY(-1px); }
-  .orb:focus-visible { outline: 3px solid #5aa9ff; outline-offset: 3px; }
-  .core { width: 14px; height: 14px; border-radius: 50%; background: #f5f8fc; box-shadow: 0 0 12px #5aa9ff; }
+  .orb:focus-visible { outline: 3px solid #ffffff; outline-offset: 2px; box-shadow: 0 0 0 5px #1d5fd1; }
+  .core { width: 14px; height: 14px; border-radius: 50%; background: #ffffff; }
   .orb[data-syncing="true"] .core { animation: nova-pulse 1.1s ease-in-out infinite; }
   .badge {
     position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
-    background: #ff6b6b; color: #08111f; display: none; place-items: center; font-weight: 800;
-    border: 2px solid #08111f; box-sizing: border-box;
+    background: #ffffff; color: #1d5fd1; display: none; place-items: center; font-weight: 800;
+    border: 2px solid #1d5fd1; box-sizing: border-box;
   }
   .badge[data-visible="true"] { display: grid; }
   @keyframes nova-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.72); } }

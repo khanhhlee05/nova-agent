@@ -3,7 +3,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExtensionHost } from "../platform/host";
 import type { NovaDb } from "../storage/novaDb";
-import { clearAllData, getPreference, getSyncStatus, listChangeEvents, latestSnapshot, markAllRead, setEventRead, setPreference, unreadCount } from "../storage/repositories";
+import { clearAllData, deleteChangeEvent, getPreference, getSyncStatus, listChangeEvents, latestSnapshot, markAllRead, setEventRead, setPreference, unreadCount } from "../storage/repositories";
 import { DATA_MODE_PREFERENCE, DEMO_SCENARIO_PREFERENCE, SyncCoordinator, type TransportFactory } from "../sync/syncCoordinator";
 import { IDLE_STATE, isRunningPhase, type SyncRuntimeState } from "../sync/syncState";
 import { connectLive as runConnectLive } from "./connect";
@@ -25,6 +25,8 @@ const PREFERENCES_KEY = "ui.preferences";
 
 export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true }: AppDeps) => {
   const now = useNow(60_000, nowFn);
+  // Every timestamp the panel writes comes from the same injected clock as the one it reads with.
+  const clock = useCallback(() => (nowFn ? nowFn() : new Date()), [nowFn]);
   const coordinator = useMemo(() => new SyncCoordinator({ db, host, now: nowFn, transportFactory }), [db, host, nowFn, transportFactory]);
   const [runtime, setRuntime] = useState<SyncRuntimeState>(IDLE_STATE);
   const [announcement, setAnnouncement] = useState<string | null>(null);
@@ -41,7 +43,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true }:
   const events = useLiveQuery(() => (scope ? listChangeEvents(db, scope) : Promise.resolve([])), [db, scope]);
 
   // Session-only dismissals: forgotten when the panel closes, restored whenever fresh data arrives.
-  const { dismissals, dismissItem, dismissEvent, dismissBanner, restoreAll } = useSessionDismissals(snapshot?.capturedAt ?? null);
+  const { dismissals, dismissItem, dismissBanner, restoreAll } = useSessionDismissals(snapshot?.capturedAt ?? null);
 
   // Show cached data immediately, then refresh in the background when stale.
   // The first run waits for the student to choose a data source.
@@ -69,7 +71,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true }:
   const dashboard = useMemo(
     () =>
       snapshot && events && preferences
-        ? buildDashboard({ snapshot, events, now, courseFilter: preferences.courseFilter, dismissedItemKeys: dismissals.items, dismissedEventIds: dismissals.events })
+        ? buildDashboard({ snapshot, events, now, courseFilter: preferences.courseFilter, dismissedItemKeys: dismissals.items })
         : null,
     [snapshot, events, now, preferences, dismissals],
   );
@@ -93,9 +95,10 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true }:
         dismissItem(key);
         setAnnouncement(`Hid "${title}" until the next refresh.`);
       },
-      dismissEvent: (id: string, title: string) => {
-        dismissEvent(id);
-        setAnnouncement(`Hid the change for "${title}" until the next refresh.`);
+      deleteEvent: (id: string, title: string) => {
+        void deleteChangeEvent(db, id)
+          .then(publishBadge)
+          .then(() => setAnnouncement(`Deleted the change for "${title}".`));
       },
       dismissBanner: (id: string) => {
         dismissBanner(id);
@@ -107,10 +110,10 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true }:
       },
       markAllRead: () => {
         if (!scope) return;
-        void markAllRead(db, scope, new Date().toISOString()).then(publishBadge);
+        void markAllRead(db, scope, clock().toISOString()).then(publishBadge);
       },
       setEventRead: (id: string, read: boolean) => {
-        void setEventRead(db, id, read ? new Date().toISOString() : null).then(publishBadge);
+        void setEventRead(db, id, read ? clock().toISOString() : null).then(publishBadge);
       },
       openUrl: (url: string) => host.openTenantUrl(url),
       connectLive: () => {
@@ -148,7 +151,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true }:
         setAnnouncement("Local Nova data cleared.");
       },
     }),
-    [coordinator, db, dismissBanner, dismissEvent, dismissItem, host, nowFn, publishBadge, restoreAll, scope, setPreferences],
+    [clock, coordinator, db, dismissBanner, dismissItem, host, nowFn, publishBadge, restoreAll, scope, setPreferences],
   );
 
   if (!status || !preferences || feasibility === undefined) return null;

@@ -11,8 +11,12 @@ import {
 import { pageLinks } from "./routes";
 import type { DropboxFolder, EntityDropbox, MyOrgUnitInfo, NewsItem, QuizReadData } from "./schemas";
 
-/** Accessible course rail colors (checked against the dark surface palette). */
-export const COURSE_COLORS = ["#5aa9ff", "#c084fc", "#34d399", "#fbbf24", "#f472b6", "#22d3ee", "#a3e635", "#fb923c"] as const;
+/**
+ * Course color slots. These are the light-theme swatches (each at least 3:1
+ * against white as a dot); the side panel maps each slot to a dark-theme
+ * swatch by index. Order matters: it is the slot identity.
+ */
+export const COURSE_COLORS = ["#1d5fd1", "#188a4f", "#c2591b", "#a3338a", "#0e7c86", "#6d4c9f", "#c02f5c", "#4b6a1f"] as const;
 
 const hashString = (value: string): number => {
   let hash = 2166136261;
