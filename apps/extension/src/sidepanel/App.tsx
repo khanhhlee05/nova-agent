@@ -6,6 +6,7 @@ import type { NovaDb } from "../storage/novaDb";
 import { clearAllData, deleteChangeEvent, getPreference, getSyncStatus, listChangeEvents, latestSnapshot, markAllRead, setEventRead, setPreference, unreadCount } from "../storage/repositories";
 import { DATA_MODE_PREFERENCE, DEMO_SCENARIO_PREFERENCE, SyncCoordinator, type TransportFactory } from "../sync/syncCoordinator";
 import { IDLE_STATE, isRunningPhase, type SyncRuntimeState } from "../sync/syncState";
+import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, defaultAskClientFactory, type AskClientFactory, type AskSettings } from "./ask";
 import { connectLive as runConnectLive } from "./connect";
 import { useSessionDismissals } from "./dismissals";
 import { DEFAULT_PREFERENCES, MissionControl, type UiPreferences } from "./MissionControl";
@@ -19,11 +20,13 @@ export type AppDeps = {
   transportFactory?: TransportFactory;
   /** Skip the automatic refresh on open (used by the preview harness). */
   autoSync?: boolean;
+  /** Builds the Ask Nova client from settings. The preview harness and tests inject an in-process one. */
+  askClientFactory?: AskClientFactory;
 };
 
 const PREFERENCES_KEY = "ui.preferences";
 
-export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true }: AppDeps) => {
+export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, askClientFactory = defaultAskClientFactory }: AppDeps) => {
   const now = useNow(60_000, nowFn);
   // Every timestamp the panel writes comes from the same injected clock as the one it reads with.
   const clock = useCallback(() => (nowFn ? nowFn() : new Date()), [nowFn]);
@@ -41,6 +44,14 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true }:
   const scope = status?.scope ?? null;
   const snapshot = useLiveQuery(() => (scope ? latestSnapshot(db, scope) : Promise.resolve(null)), [db, scope]);
   const events = useLiveQuery(() => (scope ? listChangeEvents(db, scope) : Promise.resolve([])), [db, scope]);
+  const askSettings = useLiveQuery(() => getPreference<AskSettings>(db, ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS), [db]);
+  const askClient = useMemo(() => (askSettings?.enabled ? askClientFactory(askSettings) : null), [askClientFactory, askSettings]);
+  const setAskSettings = useCallback(
+    (patch: Partial<AskSettings>) => {
+      void setPreference(db, ASK_SETTINGS_PREFERENCE, { ...(askSettings ?? DEFAULT_ASK_SETTINGS), ...patch });
+    },
+    [askSettings, db],
+  );
 
   // Session-only dismissals: forgotten when the panel closes, restored whenever fresh data arrives.
   const { dismissals, dismissItem, dismissBanner, restoreAll } = useSessionDismissals(snapshot?.capturedAt ?? null);
@@ -154,7 +165,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true }:
     [clock, coordinator, db, dismissBanner, dismissItem, host, nowFn, publishBadge, restoreAll, scope, setPreferences],
   );
 
-  if (!status || !preferences || feasibility === undefined) return null;
+  if (!status || !preferences || feasibility === undefined || !askSettings) return null;
 
   return (
     <MissionControl
@@ -169,6 +180,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true }:
       tenantOrigin={host.tenantOrigin}
       dismissals={dismissals}
       actions={actions}
+      ask={{ client: askClient, settings: askSettings, setSettings: setAskSettings, clientFactory: askClientFactory, events: events ?? [] }}
     />
   );
 };

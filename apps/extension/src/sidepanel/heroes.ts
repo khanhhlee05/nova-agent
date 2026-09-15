@@ -1,6 +1,7 @@
 import type { ChangeEvent } from "@nova-agent/core";
 import { format } from "date-fns";
 import { formatDeadline, formatRelative } from "./format";
+import type { Freshness } from "./components/FieldHeader";
 import type { Dashboard, NextMove } from "./model";
 
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
@@ -91,3 +92,9 @@ export const changesHero = (dashboard: Dashboard, lastVisitAt: string | null, no
   const text = rest.length > 0 ? `Also ${rest.join(", ")}.` : "That is the only change.";
   return { title: `${cap(plural(events.length, "change"))}, ${lead}`, meta, text };
 };
+
+export const askHero = (fresh: Freshness, enabled: boolean): Hero => ({
+  title: "Ask Nova",
+  meta: enabled ? `Answers use data ${fresh.text.replace(/^[^·]+· /, "refreshed ")}` : "Off until you turn it on",
+  text: enabled ? "Ask about deadlines, changes, or what to start first. Nova reads only what the other tabs show and cannot change anything in Brightspace." : "Questions in plain words over the same data as the other tabs. Turn it on below after reading what is sent.",
+});
