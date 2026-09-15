@@ -20,23 +20,36 @@ Every answer is built from tool calls over the local snapshot, change events, an
 - **Not a scraper.** No new Brightspace routes. The chatbot reads IndexedDB, not Brightspace. If data is stale, it says so and offers a refresh.
 - **Not a server.** `apps/api` stays a placeholder. No academic data goes to it.
 
-## The one real decision: where the model runs
+## Where the model runs
 
-Today `PRODUCT.md` says "nothing is sent to a server or a model". A chatbot needs a model, so one of these gives:
+Today `PRODUCT.md` says "nothing is sent to a server or a model". A chatbot needs a model, so that sentence changes to: "nothing is sent to a model unless Ask Nova is turned on, and then only the normalized course data a question needs".
 
-| Option | Data leaves device? | Quality | Cost to student | Availability |
+The course provides an OpenRouter account per team ($200 allotment in $50 increments, token-based) and a ChatGPT license. That settles the provider:
+
+| Option | Data leaves device? | Quality | Cost | Notes |
 |---|---|---|---|---|
-| A. Chrome built-in Prompt API (Gemini Nano, on-device) | No | Limited; no native tool use, JSON output via schema constraint | Free | Chrome 138+, Prompt API for extensions, several GB download, not on every machine |
-| B. Bring your own Anthropic key, called directly from the extension | Yes, to Anthropic, only after explicit opt-in | High; native tool use, streaming | Student pays per use (Haiku 4.5 is cents per day) | Any Chrome 116+ |
-| C. Our own backend holding a key | Yes, to us and to the provider | High | Free to student, hosting cost to us | Breaks the "no academic data to apps/api" rule |
+| A. **OpenRouter** (OpenAI-compatible API, many models) | Yes, to OpenRouter and the model vendor, only after opt-in | High; native tool calling, streaming | Team allotment | Primary adapter. Access pending. |
+| B. Chrome built-in Prompt API (Gemini Nano, on-device) | No | Limited; tool use emulated | Free | Second adapter, feature-detected, Chrome 138+ |
+| C. Our own backend holding the key | Yes, to us too | High | Hosting | Rejected: breaks the "no academic data to apps/api" rule |
 
-**Recommendation: build for B first, keep A as a second adapter, never C.**
+The ChatGPT license is a chat product, not an API, so it cannot power the extension. It is useful for prompt drafting and evaluation during development.
 
-- B works everywhere today and gives real tool use.
-- A is the right long-term default for a local-first product, so the model boundary is an adapter interface from day one and A slots in behind feature detection.
-- Ask Nova stays fully useful without either: a deterministic intent matcher answers the common questions ("what's due tomorrow", "what changed in X") from the same tools, so a student with no key and no on-device model still gets grounded answers in demo and live mode.
+### OpenRouter adapter
 
-The privacy statement changes from "nothing is sent to a model" to "nothing is sent to a model unless you turn Ask Nova on with your own key, and then only the normalized course data a question needs". That sentence goes in `PRODUCT.md`, the README, and the opt-in card.
+- Endpoint `https://openrouter.ai/api/v1/chat/completions`, OpenAI chat format with `tools`, `tool_choice`, and SSE streaming. Because the format is OpenAI-compatible, the same adapter works against OpenAI directly or any compatible endpoint by changing the base URL.
+- Called directly from the side panel with the key in the `Authorization` header plus the `HTTP-Referer` and `X-Title` headers OpenRouter asks for. Network access through `optional_host_permissions` for `https://openrouter.ai/*`, requested at opt-in.
+- The key is pasted once in the settings dialog and stored in `chrome.storage.local` under its own key. It is never in Dexie, never in the repo, never in a build, never logged. The repo ships no key; each install (each teammate's Chrome) enters it.
+- Model is a setting with a curated list and a free-text override. Default: a current mid-tier model with tool calling (Claude Haiku 4.5 via OpenRouter is the reference choice; the list also carries a Claude Sonnet, a GPT, and a Gemini entry so the same questions can be compared for the report).
+- Data minimization: the system prompt carries course names and counts; tool results carry titles, dates, statuses, and links. Never cookies, raw Brightspace responses, or the student's name.
+
+### Budget controls (the allotment is shared and finite)
+
+- Every response's `usage` is recorded per turn in the conversation row. Settings shows tokens and estimated spend for today, this week, and total, using OpenRouter's per-model pricing fetched once a day from its models endpoint.
+- A daily token cap per install (default 100k) and a per-turn `max_tokens`. Past the cap the tab falls back to the intent matcher and says so.
+- Prompt caching where the model supports it, a short system prompt, and tool results trimmed to the fields the model needs. Conversation history is windowed to the last 12 messages plus a rolling summary.
+- Demo and tests never call the network: `ScriptedModel` and recorded fixtures only.
+
+Ask Nova stays useful without a key: a deterministic intent matcher answers the common questions from the same tools.
 
 ## Architecture
 
@@ -87,7 +100,7 @@ Implementations, in build order:
 
 1. **`IntentsModel`**: no LLM. A small grammar maps common questions to one tool call and a templated sentence. Ships first so the tab is useful for everyone.
 2. **`ScriptedModel`**: replays a fixed transcript. Tests and the preview harness.
-3. **`AnthropicModel`**: Messages API with tools and streaming, called directly from the side panel with the browser-access header. Default model Claude Haiku 4.5, switchable to Sonnet 5 in settings. Key stored in `chrome.storage.local` under its own key, never in Dexie, never in "Clear local Nova data" exports, never logged, never sent anywhere but Anthropic. Network permission requested at opt-in through `optional_host_permissions` so students who never enable it never grant it.
+3. **`OpenAiCompatibleModel`**: chat completions with tools and streaming against OpenRouter by default (base URL configurable). Key stored in `chrome.storage.local` under its own key, never in Dexie, never in "Clear local Nova data" exports, never logged. Network permission requested at opt-in through `optional_host_permissions`. Records `usage` per turn for the budget controls.
 4. **`ChromeModel`**: Prompt API when `LanguageModel` is available. Tool use emulated with a JSON schema response constraint and one tool per round. Feature-detected, hidden otherwise.
 
 ### Storage
@@ -112,7 +125,7 @@ Each step is one PR into `main`, `npm run check` green, then a release PR to `ma
 1. **Tools**: `packages/agent` tools, schemas, and unit tests over the demo fixtures. No UI.
 2. **Loop and adapters**: `runTurn`, `ChatModel`, `IntentsModel`, `ScriptedModel`, tests with recorded transcripts.
 3. **Ask tab**: UI with intents only, conversations table, settings without a provider, preview scenarios, screenshots. Useful and shippable on its own.
-4. **Anthropic BYOK**: adapter, opt-in card, optional host permission, key storage, privacy text in `PRODUCT.md` and README. Contract tests against recorded API responses, no network in CI.
+4. **OpenRouter adapter**: adapter, opt-in card, optional host permission, key storage, model picker, budget controls, privacy text in `PRODUCT.md` and README. Contract tests against recorded stream fixtures, no network in CI. Steps 1 to 3 do not need the OpenRouter access, so they proceed while it is pending.
 5. **Study plan and calendar**: `build_study_plan` rendering and ICS download.
 6. **Chrome on-device adapter**: feature-detected, behind a "Use on-device model" setting.
 
@@ -123,11 +136,11 @@ Step 4 is the only step that changes the privacy promise. Steps 1 to 3 keep ever
 - Every tool has unit tests over the demo tenant and the diff fixtures, including empty and partial-sync snapshots.
 - The agent loop is tested with `ScriptedModel` for: single tool answer, multi-round, tool error, abort, max rounds.
 - UI tests in jsdom cover states, keyboard, streaming, and that rendered rows match tool results exactly.
-- The Anthropic adapter is tested against recorded stream fixtures. A manual checklist covers a live call with a real key.
+- The OpenRouter adapter is tested against recorded stream fixtures. A manual checklist covers a live call with the team key once access arrives.
 - Honesty checks: an answer must not name an item that no tool returned. The loop rejects a final answer containing an item title absent from tool results in that turn and asks the model to correct it once.
 
 ## Open decisions
 
-1. Provider order: Anthropic BYOK first (recommended), on-device first, or both in one step.
+1. Default model on OpenRouter, and the daily token cap per install.
 2. Persist conversations by default, or session-only by default.
 3. Whether step 3 ships to `master` before step 4, or the tab stays hidden until a real model is in.
