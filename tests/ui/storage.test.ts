@@ -3,7 +3,7 @@ import { DEMO_LE_VERSION, DEMO_LP_VERSION, FixtureTransport, buildDemoTenant, de
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createStubHost } from "../../apps/extension/src/platform/host";
 import { createNovaDb, type NovaDb } from "../../apps/extension/src/storage/novaDb";
-import { getSyncStatus, listChangeEvents, listSnapshots, markAllRead, saveSyncOutcome, setPreference, unreadCount } from "../../apps/extension/src/storage/repositories";
+import { deleteChangeEvent, getSyncStatus, listChangeEvents, listSnapshots, markAllRead, saveSyncOutcome, setPreference, unreadCount } from "../../apps/extension/src/storage/repositories";
 import { DATA_MODE_PREFERENCE, SyncCoordinator, type TransportFactory } from "../../apps/extension/src/sync/syncCoordinator";
 import { makeItem, makeSnapshot } from "../helpers/factories";
 import { NOW, TENANT } from "../helpers/demoDashboard";
@@ -56,6 +56,20 @@ describe("repositories", () => {
     expect(await unreadCount(db, scope)).toBe(3);
     expect(await markAllRead(db, scope, NOW.toISOString())).toBe(3);
     expect(await unreadCount(db, scope)).toBe(0);
+  });
+
+  it("deletes a change event permanently and keeps it gone across the next sync", async () => {
+    const scope = `${TENANT}|2001`;
+    const events = [1, 2].map((n) => ({ id: `e${n}`, fingerprint: `f${n}`, kind: "item-added" as const, entityKey: `k${n}`, courseId: "c", detectedAt: NOW.toISOString(), before: null, after: null, readAt: null }));
+    await saveSyncOutcome(db, { snapshot: makeSnapshot(NOW.toISOString(), []), events, status: {}, now: NOW });
+    await deleteChangeEvent(db, "e1");
+    expect((await listChangeEvents(db, scope)).map((event) => event.id)).toEqual(["e2"]);
+    expect(await unreadCount(db, scope)).toBe(1);
+    await deleteChangeEvent(db, "e1");
+
+    // A later sync with no new events does not resurrect it.
+    await saveSyncOutcome(db, { snapshot: makeSnapshot(T(5).toISOString(), []), events: [], status: {}, now: T(5) });
+    expect((await listChangeEvents(db, scope)).map((event) => event.id)).toEqual(["e2"]);
   });
 });
 

@@ -48,6 +48,15 @@ export const setEventRead = async (db: NovaDb, id: string, readAt: string | null
   await db.changeEvents.update(id, { readAt });
 };
 
+/**
+ * Permanently removes one change event. Safe with respect to change
+ * detection: events come from comparing consecutive snapshots, so a deleted
+ * event only reappears if the same change genuinely happens again.
+ */
+export const deleteChangeEvent = async (db: NovaDb, id: string): Promise<void> => {
+  await db.changeEvents.delete(id);
+};
+
 export const getSyncStatus = async (db: NovaDb): Promise<SyncStatusRecord> => (await db.syncStatus.get("current")) ?? INITIAL_SYNC_STATUS;
 
 export const putSyncStatus = async (db: NovaDb, patch: Partial<SyncStatusRecord>): Promise<SyncStatusRecord> => {

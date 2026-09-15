@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, renderHook, screen, within } from "@te
 import { afterEach, describe, expect, it } from "vitest";
 import { EMPTY_DISMISSALS, useSessionDismissals } from "../../apps/extension/src/sidepanel/dismissals";
 import { DEFAULT_PREFERENCES, MissionControl, type MissionControlActions, type MissionControlProps } from "../../apps/extension/src/sidepanel/MissionControl";
-import { buildDashboard } from "../../apps/extension/src/sidepanel/model";
+import { buildDashboard, isReadBefore } from "../../apps/extension/src/sidepanel/model";
 import { INITIAL_SYNC_STATUS } from "../../apps/extension/src/storage/repositories";
 import { IDLE_STATE } from "../../apps/extension/src/sync/syncState";
 import { NOW, TENANT, demoDashboard } from "../helpers/demoDashboard";
@@ -29,7 +29,7 @@ const trackedActions = (): MissionControlActions & { calls: Record<string, unkno
     useDemoData: track("useDemoData"),
     clearData: track("clearData"),
     dismissItem: track("dismissItem"),
-    dismissEvent: track("dismissEvent"),
+    deleteEvent: track("deleteEvent"),
     dismissBanner: track("dismissBanner"),
     restoreDismissed: track("restoreDismissed"),
   };
@@ -63,20 +63,30 @@ describe("session dismissals: model", () => {
     expect(dismissed.nextMove?.item.key).not.toBe(top.key);
     expect(dismissed.ranked.has(top.key)).toBe(false);
     expect(dismissed.counts.overdue + dismissed.counts.today + dismissed.counts.thisWeek).toBeLessThan(base.counts.overdue + base.counts.today + base.counts.thisWeek);
-    expect(dismissed.hidden).toEqual({ items: 1, events: 0 });
+    expect(dismissed.hidden).toEqual({ items: 1 });
     // Change events keep resolving links through the full item map.
     expect(dismissed.itemByKey.has(top.key)).toBe(true);
   });
 
-  it("hides a dismissed change event from the feed and the unread count", async () => {
+  it("keeps a change read this session and drops it once a newer snapshot arrives", async () => {
     const { snapshot, events } = await demoDashboard({ withChanges: true });
     const first = events[0] as (typeof events)[number];
-    const dashboard = buildDashboard({ snapshot, events, now: NOW, courseFilter: null, dismissedEventIds: new Set([first.id]) });
-    const listed = [...dashboard.changes.today, ...dashboard.changes.yesterday, ...dashboard.changes.earlier];
-    expect(listed.some((event) => event.id === first.id)).toBe(false);
-    expect(dashboard.totalChanges).toBe(events.length - 1);
-    expect(dashboard.counts.unread).toBe(events.length - 1);
-    expect(dashboard.hidden).toEqual({ items: 0, events: 1 });
+    const captured = new Date(snapshot.capturedAt).getTime();
+    const listedIds = (dashboard: ReturnType<typeof buildDashboard>) => [...dashboard.changes.today, ...dashboard.changes.yesterday, ...dashboard.changes.earlier].map((event) => event.id);
+
+    // Read after the current snapshot was captured: still listed, just no longer unread.
+    const readNow = events.map((event) => (event.id === first.id ? { ...event, readAt: new Date(captured + 60_000).toISOString() } : event));
+    const sameSession = buildDashboard({ snapshot, events: readNow, now: NOW, courseFilter: null });
+    expect(listedIds(sameSession)).toContain(first.id);
+    expect(sameSession.counts.unread).toBe(events.length - 1);
+
+    // Read before the current snapshot was captured: gone from the feed and the total.
+    const readEarlier = events.map((event) => (event.id === first.id ? { ...event, readAt: new Date(captured - 60_000).toISOString() } : event));
+    const nextRefresh = buildDashboard({ snapshot, events: readEarlier, now: NOW, courseFilter: null });
+    expect(listedIds(nextRefresh)).not.toContain(first.id);
+    expect(nextRefresh.totalChanges).toBe(events.length - 1);
+    expect(nextRefresh.counts.unread).toBe(events.length - 1);
+    expect(isReadBefore(first, snapshot.capturedAt)).toBe(false);
   });
 });
 
@@ -86,11 +96,9 @@ describe("session dismissals: hook", () => {
     act(() => {
       result.current.dismissItem("item-a");
       result.current.dismissItem("item-a");
-      result.current.dismissEvent("event-1");
       result.current.dismissBanner("stale");
     });
     expect([...result.current.dismissals.items]).toEqual(["item-a"]);
-    expect([...result.current.dismissals.events]).toEqual(["event-1"]);
     expect([...result.current.dismissals.banners]).toEqual(["stale"]);
 
     rerender({ key: "snapshot-2" });
@@ -133,23 +141,18 @@ describe("session dismissals: UI", () => {
     expect((p.actions as ReturnType<typeof trackedActions>).calls.restoreDismissed).toHaveLength(1);
   });
 
-  it("hides change events individually and keeps the unread badge honest", async () => {
+  it("offers a permanent delete on every change event instead of a session hide", async () => {
     const { snapshot, events } = await demoDashboard({ withChanges: true });
-    const first = events[0] as (typeof events)[number];
     const p = props({ dashboard: buildDashboard({ snapshot, events, now: NOW, courseFilter: null }), preferences: { ...DEFAULT_PREFERENCES, activeTab: "changes" } });
     render(<MissionControl {...p} />);
-    const hideButtons = screen.getAllByRole("button", { name: /^Hide change "/ });
-    expect(hideButtons).toHaveLength(events.length);
-    fireEvent.click(hideButtons[0] as HTMLButtonElement);
-    expect((p.actions as ReturnType<typeof trackedActions>).calls.dismissEvent?.[0]?.[0]).toBeTypeOf("string");
-    cleanup();
-
-    const dismissals = { ...EMPTY_DISMISSALS, events: new Set([first.id]) };
-    const dashboard = buildDashboard({ snapshot, events, now: NOW, courseFilter: null, dismissedEventIds: dismissals.events });
-    render(<MissionControl {...props({ dashboard, dismissals, preferences: { ...DEFAULT_PREFERENCES, activeTab: "changes" } })} />);
-    expect(screen.getAllByRole("button", { name: /^Hide change "/ })).toHaveLength(events.length - 1);
-    expect(screen.getByRole("tab", { name: /changes/i }).textContent).toContain(String(events.length - 1));
-    expect(screen.getByText(/1 item hidden until the next refresh/i)).toBeTruthy();
+    const deleteButtons = screen.getAllByRole("button", { name: /^Delete change "/ });
+    expect(deleteButtons).toHaveLength(events.length);
+    expect(screen.queryAllByRole("button", { name: /^Hide change "/ })).toHaveLength(0);
+    fireEvent.click(deleteButtons[0] as HTMLButtonElement);
+    const call = (p.actions as ReturnType<typeof trackedActions>).calls.deleteEvent?.[0];
+    expect(call?.[0]).toBe((events[0] as (typeof events)[number]).id);
+    expect(call?.[1]).toBeTypeOf("string");
+    expect(screen.queryByText(/hidden until the next refresh/i)).toBeNull();
   });
 
   it("lets a banner be hidden for the session", async () => {

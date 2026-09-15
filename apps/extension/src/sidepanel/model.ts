@@ -35,8 +35,8 @@ export type Dashboard = {
   week: WeekDay[];
   changes: ChangeGroups;
   totalChanges: number;
-  /** Counts of things hidden by session dismissals, for the "hidden until next refresh" bar. */
-  hidden: { items: number; events: number };
+  /** Count of tasks hidden by session dismissals, for the "hidden until next refresh" bar. */
+  hidden: { items: number };
 };
 
 export type BuildDashboardInput = {
@@ -44,13 +44,20 @@ export type BuildDashboardInput = {
   events: readonly ChangeEvent[];
   now: Date;
   courseFilter: CourseFilter;
-  /** Session-only dismissals. Hidden everywhere: counts, sections, next move, week, and changes. */
+  /** Session-only task dismissals. Hidden everywhere: counts, sections, next move, and week. */
   dismissedItemKeys?: ReadonlySet<string>;
-  dismissedEventIds?: ReadonlySet<string>;
 };
 
+/**
+ * A change stays in the feed for the session in which it was read, then
+ * leaves on the next refresh: anything read before the current snapshot was
+ * captured has already been seen "since your last visit".
+ */
+export const isReadBefore = (event: Pick<ChangeEvent, "readAt">, capturedAt: string): boolean =>
+  event.readAt !== null && new Date(event.readAt).getTime() < new Date(capturedAt).getTime();
+
 /** Pure derivation of everything the three tabs render. Counts, buckets, and ranking share one filtered set. */
-export const buildDashboard = ({ snapshot, events, now, courseFilter, dismissedItemKeys, dismissedEventIds }: BuildDashboardInput): Dashboard => {
+export const buildDashboard = ({ snapshot, events, now, courseFilter, dismissedItemKeys }: BuildDashboardInput): Dashboard => {
   const courses = [...snapshot.courses].sort((a, b) => a.name.localeCompare(b.name));
   const courseById = new Map(courses.map((course) => [course.id, course]));
   const itemByKey = new Map(snapshot.items.map((item) => [item.key, item]));
@@ -76,7 +83,7 @@ export const buildDashboard = ({ snapshot, events, now, courseFilter, dismissedI
     return { date, isToday: offset === 0, entries };
   });
 
-  const filteredEvents = events.filter((event) => !dismissedEventIds?.has(event.id) && (courseFilter === null || event.courseId === courseFilter));
+  const filteredEvents = events.filter((event) => !isReadBefore(event, snapshot.capturedAt) && (courseFilter === null || event.courseId === courseFilter));
   const yesterdayStart = subDays(start, 1);
   const changes: ChangeGroups = { today: [], yesterday: [], earlier: [] };
   for (const event of filteredEvents) {
@@ -100,10 +107,7 @@ export const buildDashboard = ({ snapshot, events, now, courseFilter, dismissedI
     week,
     changes,
     totalChanges: filteredEvents.length,
-    hidden: {
-      items: dismissedItemKeys ? snapshot.items.filter((item) => dismissedItemKeys.has(item.key)).length : 0,
-      events: dismissedEventIds ? events.filter((event) => dismissedEventIds.has(event.id)).length : 0,
-    },
+    hidden: { items: dismissedItemKeys ? snapshot.items.filter((item) => dismissedItemKeys.has(item.key)).length : 0 },
   };
 };
 

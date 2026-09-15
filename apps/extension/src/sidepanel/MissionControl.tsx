@@ -42,7 +42,8 @@ export type MissionControlActions = {
   clearData: () => Promise<void> | void;
   /** Session-only: hides an item everywhere until the next refresh. */
   dismissItem: (key: string, title: string) => void;
-  dismissEvent: (id: string, title: string) => void;
+  /** Permanently deletes a change event; it will not return on the next refresh. */
+  deleteEvent: (id: string, title: string) => void;
   dismissBanner: (id: string) => void;
   restoreDismissed: () => void;
 };
@@ -102,7 +103,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
 
   const showFirstRun = !dashboard && !hasEverSynced && !running && status.lastAttemptedSyncAt === null;
   const showSkeleton = !dashboard && running;
-  const hiddenCount = dashboard ? dashboard.hidden.items + dashboard.hidden.events + dismissals.banners.size : countDismissed(dismissals);
+  const hiddenCount = dashboard ? dashboard.hidden.items + dismissals.banners.size : countDismissed(dismissals);
   const fresh = freshness(status.mode, phase, status.lastSuccessfulSyncAt, stale, now);
 
   const hero = showFirstRun ? (
@@ -252,7 +253,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                 {dashboard ? <WeekView dashboard={dashboard} now={now} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} selectedDay={selectedDay} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
               </Tabs.Content>
               <Tabs.Content className="tab-content" value="changes">
-                {dashboard ? <ChangesFeed dashboard={dashboard} now={now} baselineOnly={dashboard.totalChanges === 0 && hasEverSynced} canOpen={canOpen} onOpen={actions.openUrl} onSetRead={actions.setEventRead} onDismiss={actions.dismissEvent} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
+                {dashboard ? <ChangesFeed dashboard={dashboard} now={now} baselineOnly={dashboard.totalChanges === 0 && hasEverSynced} canOpen={canOpen} onOpen={actions.openUrl} onSetRead={actions.setEventRead} onDelete={actions.deleteEvent} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
               </Tabs.Content>
             </>
           )}
