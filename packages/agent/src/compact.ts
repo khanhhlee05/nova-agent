@@ -128,7 +128,7 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
   const announcements = [...snapshot.announcements]
     .filter((announcement: Announcement) => courseIds.has(announcement.courseId) && announcement.visibility !== "hidden" && announcement.visibility !== "expired")
     .filter((announcement) => announcement.pinned || withinDays(announcement.createdAt ?? announcement.updatedAt, now, announcementsWithinDays))
-    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "") || a.title.localeCompare(b.title))
     .slice(0, COMPACT_LIMITS.announcements)
     .map((announcement) => ({
       id: shortId(announcement.key, "announcement"),
