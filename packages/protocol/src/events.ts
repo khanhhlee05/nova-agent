@@ -50,6 +50,8 @@ export const toolRowSchema = z.discriminatedUnion("kind", [
 export type ToolRow = z.infer<typeof toolRowSchema>;
 
 export const askErrorCodeSchema = z.enum([
+  /** Client-only: the Nova API could not be reached at all. The server never emits it. */
+  "unreachable",
   "bad_request",
   "unauthorized",
   "not_configured",
