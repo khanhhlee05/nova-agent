@@ -1,4 +1,13 @@
-/** In-memory token counter per UTC day. Slice 1 has no database; the counter resets with the process. */
+export type Reservation = { day: string; tokens: number };
+
+/**
+ * In-memory token accounting per UTC day, best effort: it lives in this
+ * process, resets on restart, and is not shared between instances.
+ *
+ * A request reserves its worst-case budget synchronously before any model
+ * call, so concurrent requests cannot all slip past the cap, then settles
+ * to the real usage when the turn ends.
+ */
 export class UsageCounter {
   private readonly days = new Map<string, number>();
 
@@ -8,9 +17,20 @@ export class UsageCounter {
     return now.toISOString().slice(0, 10);
   }
 
-  add(now: Date, tokens: number): void {
-    const key = this.key(now);
-    this.days.set(key, (this.days.get(key) ?? 0) + Math.max(0, tokens));
+  /** Charges `tokens` at once, or returns null when that would pass the cap. A cap of 0 means unlimited. */
+  reserve(now: Date, tokens: number): Reservation | null {
+    const day = this.key(now);
+    const used = this.days.get(day) ?? 0;
+    const amount = Math.max(0, tokens);
+    if (this.dailyCap > 0 && used + amount > this.dailyCap) return null;
+    this.days.set(day, used + amount);
+    return { day, tokens: amount };
+  }
+
+  /** Replaces a reservation with what the turn actually used, on the reservation's own day. */
+  settle(reservation: Reservation, actualTokens: number): void {
+    const used = this.days.get(reservation.day) ?? 0;
+    this.days.set(reservation.day, Math.max(0, used - reservation.tokens + Math.max(0, actualTokens)));
   }
 
   usedToday(now: Date): number {
@@ -18,10 +38,6 @@ export class UsageCounter {
   }
 
   remaining(now: Date): number {
-    return Math.max(0, this.dailyCap - this.usedToday(now));
-  }
-
-  exhausted(now: Date): boolean {
-    return this.dailyCap > 0 && this.remaining(now) <= 0;
+    return this.dailyCap > 0 ? Math.max(0, this.dailyCap - this.usedToday(now)) : Number.POSITIVE_INFINITY;
   }
 }

@@ -1,6 +1,6 @@
 import type { serve as honoServe } from "@hono/node-server";
 import { describe, expect, it } from "vitest";
-import { isLoopbackHost, loadConfig, validateDeployment } from "../../apps/api/src/config";
+import { isLoopbackHost, loadConfig, turnTokenEstimate, validateDeployment } from "../../apps/api/src/config";
 import { createLogger } from "../../apps/api/src/log";
 import { startServer } from "../../apps/api/src/server";
 
@@ -22,20 +22,27 @@ describe("deployment rules", () => {
     expect(loadConfig({ HOST: "" }).HOST).toBe("127.0.0.1");
     for (const host of ["127.0.0.1", "127.0.0.2", "localhost", "LOCALHOST", "::1", "[::1]", "::ffff:127.0.0.1"]) {
       expect(isLoopbackHost(host)).toBe(true);
-      expect(() => validateDeployment({ HOST: host, NOVA_DEV_TOKEN: undefined })).not.toThrow();
+      expect(() => validateDeployment(loadConfig({ HOST: host }))).not.toThrow();
     }
   });
 
   it("refuses a public HOST without NOVA_DEV_TOKEN", () => {
     for (const host of ["0.0.0.0", "::", "10.0.0.5", "192.168.1.20", "nova.example", "127.0.0.1.evil.example"]) {
       expect(isLoopbackHost(host)).toBe(false);
-      expect(() => validateDeployment({ HOST: host, NOVA_DEV_TOKEN: undefined })).toThrow(/NOVA_DEV_TOKEN/);
+      expect(() => validateDeployment(loadConfig({ HOST: host }))).toThrow(/NOVA_DEV_TOKEN/);
       expect(() => validateDeployment(loadConfig({ HOST: host, NOVA_DEV_TOKEN: "" }))).toThrow(/NOVA_DEV_TOKEN/);
     }
   });
 
+  it("refuses a daily cap below one turn's reservation", () => {
+    expect(turnTokenEstimate(loadConfig({}))).toBe(2800);
+    expect(turnTokenEstimate(loadConfig({ TURN_TOKEN_ESTIMATE: "1000" }))).toBe(1000);
+    expect(() => validateDeployment(loadConfig({ DAILY_TOKEN_CAP: "2000" }))).toThrow(/reservation/);
+    expect(() => validateDeployment(loadConfig({ DAILY_TOKEN_CAP: "2000", TURN_TOKEN_ESTIMATE: "1000" }))).not.toThrow();
+    expect(() => validateDeployment(loadConfig({ DAILY_TOKEN_CAP: "0" }))).not.toThrow();
+  });
+
   it("allows a public HOST once a token is set", () => {
-    expect(() => validateDeployment({ HOST: "0.0.0.0", NOVA_DEV_TOKEN: "secret" })).not.toThrow();
     expect(() => validateDeployment(loadConfig({ HOST: "0.0.0.0", NOVA_DEV_TOKEN: "secret" }))).not.toThrow();
   });
 });

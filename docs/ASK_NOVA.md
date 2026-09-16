@@ -60,7 +60,8 @@ npm run smoke:api -- --direct        # runs the loop in-process, no server
 | `MAX_TOKENS` | `700` | Per model call. |
 | `MAX_ROUNDS` | `4` | Tool rounds before the model is forced to answer. |
 | `REQUEST_TIMEOUT_MS` | `60000` | |
-| `DAILY_TOKEN_CAP` | `200000` | Tokens per UTC day for the whole server. Past it, `/v1/chat` answers 429 `budget_exhausted`. |
+| `DAILY_TOKEN_CAP` | `200000` | Tokens per UTC day for the whole server, counted in memory per process: it resets on restart and is not shared between instances (best effort). Each request reserves `TURN_TOKEN_ESTIMATE` up front and answers 429 `budget_exhausted` at once if that would pass the cap, then settles to the real usage when the turn ends. A turn with no usage report is charged `MAX_TOKENS × rounds`. `0` disables the cap. |
+| `TURN_TOKEN_ESTIMATE` | `MAX_TOKENS × MAX_ROUNDS` (2800) | Worst-case tokens reserved per request. A cap below this refuses to start. |
 | `LOG_PROMPTS` | `0` | `1` adds question and answer text to the turn log. |
 
 `apps/api/.env` is gitignored. The key must never be committed, logged, or built into the extension.
@@ -78,7 +79,7 @@ Record here which ids worked once the live test runs:
 ## How a turn works
 
 1. `compactSnapshot` (`packages/agent`) runs in the browser: buckets, local dates, and days-ago follow the student's time zone, so the server never does date math.
-2. `POST /v1/chat` validates the body (`packages/protocol`), checks the daily cap, and starts the loop (`runTurn`).
+2. `POST /v1/chat` validates the body (`packages/protocol`), reserves the turn's worst-case tokens against the daily cap, and starts the loop (`runTurn`); the reservation is settled to real usage when the turn ends.
 3. The system prompt carries the date, the courses, counts, and a brief (next move, overdue, today, upcoming), so a weak model still answers from real facts. Tools cover everything deeper.
 4. Up to `MAX_ROUNDS` rounds: tool calls run over the snapshot, results go back to the model. The last round forces a text answer.
 5. If the model answers without any tool and names an item that neither a tool nor the brief listed, it is nudged once to look it up. `done.grounded` reports the outcome.

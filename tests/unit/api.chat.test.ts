@@ -1,4 +1,4 @@
-import { ScriptedModel, compactSnapshot, demoRouter } from "@nova-agent/agent";
+import { ModelError, ScriptedModel, compactSnapshot, demoRouter, type ChatModel, type ModelEvent, type ModelInput } from "@nova-agent/agent";
 import { askEventSchema, parseSseStream, type AskEvent, type ChatRequest } from "@nova-agent/protocol";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp, MAX_BODY_BYTES } from "../../apps/api/src/app";
@@ -16,7 +16,7 @@ beforeAll(async () => {
 
 const config = (overrides: Partial<Record<string, string>> = {}): ApiConfig => loadConfig({ OPENROUTER_API_KEY: "test", ...overrides });
 
-const harness = (options: { model?: ScriptedModel | null; env?: Partial<Record<string, string>>; cap?: number } = {}) => {
+const harness = (options: { model?: ChatModel | null; env?: Partial<Record<string, string>>; cap?: number } = {}) => {
   const lines: string[] = [];
   const cfg = config(options.env);
   const usage = new UsageCounter(options.cap ?? cfg.DAILY_TOKEN_CAP);
@@ -90,14 +90,53 @@ describe("POST /v1/chat", () => {
 
   it("answers 503 without a model, 429 past the daily cap, and 413 over the body limit", async () => {
     expect((await post(harness({ model: null }).app, request)).status).toBe(503);
-    const capped = harness({ cap: 100 });
-    expect((await post(capped.app, request)).status).toBe(200);
-    await readEvents(await post(capped.app, request)).catch(() => undefined);
+    // Each turn reserves 2800 (700 × 4) and settles to 144; the third would need 288 + 2800 > 3000.
+    const capped = harness({ cap: 3000 });
+    await readEvents(await post(capped.app, request));
+    await readEvents(await post(capped.app, request));
+    expect(capped.usage.usedToday(NOW)).toBe(288);
     const third = await post(capped.app, request);
     expect(third.status).toBe(429);
     expect(await third.json()).toMatchObject({ error: { code: "budget_exhausted" } });
+    expect(capped.usage.usedToday(NOW)).toBe(288);
     const huge = await post(harness().app, { ...request, message: "x".repeat(MAX_BODY_BYTES + 1) });
     expect(huge.status).toBe(413);
+  });
+
+  it("reserves the budget up front so concurrent requests cannot overshoot the cap", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const gated: ChatModel = {
+      id: "gated",
+      async *complete(input: ModelInput): AsyncIterable<ModelEvent> {
+        await gate;
+        void input;
+        yield { type: "text", delta: "Start with Lab 2: GPIO and Debouncing." };
+        yield { type: "done", stop: "end", usage: { promptTokens: 100, completionTokens: 44, totalTokens: 144 }, model: "gated" };
+      },
+    };
+    const { app, usage } = harness({ model: gated, cap: 5000 });
+    const first = await post(app, request);
+    expect(first.status).toBe(200);
+    expect(usage.usedToday(NOW)).toBe(2800);
+    const second = await post(app, request);
+    expect(second.status).toBe(429);
+    release();
+    const events = await readEvents(first);
+    expect(events.at(-1)).toMatchObject({ type: "done" });
+    expect(usage.usedToday(NOW)).toBe(144);
+    expect((await post(app, request)).status).toBe(200);
+  });
+
+  it("charges the ceiling for every attempted round when the model reports no usage", async () => {
+    const failing = harness({ model: new ScriptedModel([{ throw: new ModelError("upstream_error", "boom", true) }]) });
+    await readEvents(await post(failing.app, request));
+    expect(failing.usage.usedToday(NOW)).toBe(700);
+    const silent = harness({ model: new ScriptedModel([{ toolCalls: [{ name: "get_brief", args: {} }] }, { text: ["Start with Lab 2: GPIO and Debouncing."] }]) });
+    await readEvents(await post(silent.app, request));
+    expect(silent.usage.usedToday(NOW)).toBe(1400);
   });
 
   it("enforces the dev token when configured", async () => {

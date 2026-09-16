@@ -3,6 +3,7 @@ import { chatRequestSchema, type AskEvent } from "@nova-agent/protocol";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { AppContext } from "../app";
+import { turnTokenEstimate } from "../config";
 import { errorBody } from "../errors";
 
 const INTERNAL: AskEvent = { type: "error", code: "internal", message: "Nova hit an unexpected problem.", retryable: true };
@@ -23,7 +24,9 @@ export const chatRoute = (context: AppContext): Hono =>
     }
     if (!context.model) return c.json(errorBody("not_configured", "The Nova API has no model key configured."), 503);
     const startedAt = context.now();
-    if (context.usage.exhausted(startedAt)) {
+    // Reserve the worst case synchronously (no await between check and charge) so concurrent turns cannot overshoot the cap.
+    const reservation = context.usage.reserve(startedAt, turnTokenEstimate(context.config));
+    if (!reservation) {
       return c.json(errorBody("budget_exhausted", "Today's token budget for this server is used up. Try again tomorrow.", { retryable: true }), 429);
     }
 
@@ -68,8 +71,9 @@ export const chatRoute = (context: AppContext): Hono =>
           }
         } finally {
           clearTimeout(timer);
-          const tokens = result?.usage?.totalTokens ?? (result && result.outcome === "ok" ? context.config.MAX_TOKENS : 0);
-          context.usage.add(context.now(), tokens);
+          // A turn that reported no usage is charged the ceiling for every round it attempted.
+          const tokens = result?.usage?.totalTokens ?? context.config.MAX_TOKENS * Math.max(1, result?.rounds ?? 1);
+          context.usage.settle(reservation, tokens);
           context.logger.info("chat.turn", {
             requestId,
             model: result?.model ?? context.config.OPENROUTER_MODEL,
