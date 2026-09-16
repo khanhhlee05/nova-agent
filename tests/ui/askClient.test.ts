@@ -2,7 +2,7 @@ import { ScriptedModel, compactSnapshot, demoRouter } from "@nova-agent/agent";
 import { encodeSseFrame, streamFromChunks, type AskEvent, type ChatRequest } from "@nova-agent/protocol";
 import { beforeAll, describe, expect, it } from "vitest";
 import { HttpAskClient, LocalAskClient } from "../../apps/extension/src/sidepanel/ask/askClient";
-import { normalizeApiBaseUrl } from "../../apps/extension/src/sidepanel/ask/askSettings";
+import { checkApiBaseUrl, effectiveAskSettings, normalizeApiBaseUrl } from "../../apps/extension/src/sidepanel/ask/askSettings";
 import { historyOf, type AskMessage } from "../../apps/extension/src/sidepanel/ask/useAskThread";
 import { NOW, demoSnapshot } from "../helpers/demoDashboard";
 
@@ -110,11 +110,20 @@ describe("LocalAskClient", () => {
 });
 
 describe("settings and history helpers", () => {
-  it("normalizes API addresses", () => {
+  it("requires https for remote addresses and allows plain http only for local hosts", () => {
     expect(normalizeApiBaseUrl(" http://localhost:8787/ ")).toBe("http://localhost:8787");
+    expect(normalizeApiBaseUrl("http://127.0.0.1:8787")).toBe("http://127.0.0.1:8787");
+    expect(normalizeApiBaseUrl("http://[::1]:8787")).toBe("http://[::1]:8787");
+    expect(normalizeApiBaseUrl("http://api.localhost:8787")).toBe("http://api.localhost:8787");
     expect(normalizeApiBaseUrl("https://nova.example/api/")).toBe("https://nova.example/api");
-    expect(normalizeApiBaseUrl("ftp://x")).toBeNull();
-    expect(normalizeApiBaseUrl("not a url")).toBeNull();
+    expect(checkApiBaseUrl("http://nova.example:8787")).toEqual({ url: null, reason: "insecure" });
+    expect(checkApiBaseUrl("http://10.0.0.5:8787")).toEqual({ url: null, reason: "insecure" });
+    expect(checkApiBaseUrl("http://localhost.evil.example")).toEqual({ url: null, reason: "insecure" });
+    expect(checkApiBaseUrl("ftp://x")).toEqual({ url: null, reason: "invalid" });
+    expect(checkApiBaseUrl("not a url")).toEqual({ url: null, reason: "invalid" });
+    expect(effectiveAskSettings({ enabled: true, apiBaseUrl: "http://nova.example", token: "t" }).enabled).toBe(false);
+    expect(effectiveAskSettings({ enabled: true, apiBaseUrl: "https://nova.example", token: "t" }).enabled).toBe(true);
+    expect(effectiveAskSettings({ enabled: true, apiBaseUrl: "http://localhost:8787", token: null }).enabled).toBe(true);
   });
 
   it("builds text-only history from completed turns and caps it", () => {

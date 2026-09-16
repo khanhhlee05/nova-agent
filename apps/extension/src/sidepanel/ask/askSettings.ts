@@ -14,13 +14,35 @@ export const ASK_SETTINGS_PREFERENCE = "ai.settings";
 
 export const DEFAULT_ASK_SETTINGS: AskSettings = { enabled: false, apiBaseUrl: "http://localhost:8787", token: null };
 
-/** http(s) only, no trailing slash, no query or hash. Null when the value is not a usable API address. */
-export const normalizeApiBaseUrl = (value: string): string | null => {
+export type ApiBaseUrlReason = "invalid" | "insecure";
+export type ApiBaseUrlCheck = { url: string; reason: null } | { url: null; reason: ApiBaseUrlReason };
+
+/** Hosts that never leave the machine, so plain http cannot expose the token or course data. `URL.hostname` keeps IPv6 brackets. */
+const LOCAL_HOST = /^(localhost|[a-z0-9-]+\.localhost|127(\.\d{1,3}){3}|\[::1\])$/i;
+
+/**
+ * Validates an API address: http(s) only, no trailing slash, no query or
+ * hash, and plain http only for local hosts. Course data and the bearer
+ * token travel in the request, so a remote address must be https.
+ */
+export const checkApiBaseUrl = (value: string): ApiBaseUrlCheck => {
+  let url: URL;
   try {
-    const url = new URL(value.trim());
-    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-    return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+    url = new URL(value.trim());
   } catch {
-    return null;
+    return { url: null, reason: "invalid" };
   }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return { url: null, reason: "invalid" };
+  if (url.protocol === "http:" && !LOCAL_HOST.test(url.hostname)) return { url: null, reason: "insecure" };
+  return { url: `${url.origin}${url.pathname.replace(/\/+$/, "")}`, reason: null };
 };
+
+export const normalizeApiBaseUrl = (value: string): string | null => checkApiBaseUrl(value).url;
+
+export const API_URL_MESSAGES: Record<ApiBaseUrlReason, string> = {
+  invalid: "Enter an http or https address.",
+  insecure: "Remote addresses must use https. Plain http works only for localhost.",
+};
+
+/** Settings saved before the https rule existed: a failing address turns Ask off so the setup card explains why. */
+export const effectiveAskSettings = (settings: AskSettings): AskSettings => (normalizeApiBaseUrl(settings.apiBaseUrl) === null ? { ...settings, enabled: false } : settings);

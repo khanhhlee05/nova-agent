@@ -125,6 +125,12 @@ describe("Ask tab", () => {
     fireEvent.change(address, { target: { value: "not a url" } });
     expect(screen.getByText(/enter an http or https address/i)).toBeTruthy();
     expect((screen.getByRole("button", { name: /turn on ask nova/i }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(address, { target: { value: "http://nova.example:8787" } });
+    expect(screen.getByText(/remote addresses must use https/i)).toBeTruthy();
+    expect((screen.getByRole("button", { name: /turn on ask nova/i }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(address, { target: { value: "https://nova.example:8787" } });
+    expect(screen.queryByText(/must use https/i)).toBeNull();
+    expect((screen.getByRole("button", { name: /turn on ask nova/i }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.change(address, { target: { value: " http://localhost:8787/ " } });
     fireEvent.click(screen.getByRole("button", { name: /turn on ask nova/i }));
     expect(ask.settingsCalls).toEqual([{ enabled: true, apiBaseUrl: "http://localhost:8787", token: null }]);

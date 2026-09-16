@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { AskClientFactory } from "./askClient";
-import { normalizeApiBaseUrl, type AskSettings } from "./askSettings";
+import { API_URL_MESSAGES, checkApiBaseUrl, type AskSettings } from "./askSettings";
 
 export type AskSetupProps = {
   settings: AskSettings;
@@ -20,8 +20,9 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose }
   const [apiBaseUrl, setApiBaseUrl] = useState(settings.apiBaseUrl);
   const [token, setToken] = useState(settings.token ?? "");
   const [check, setCheck] = useState<{ state: "idle" | "checking" | "ok" | "fail"; text: string }>({ state: "idle", text: "" });
-  const normalized = normalizeApiBaseUrl(apiBaseUrl);
-  const invalid = apiBaseUrl.trim() !== "" && normalized === null;
+  const address = checkApiBaseUrl(apiBaseUrl);
+  const normalized = address.url;
+  const invalid = apiBaseUrl.trim() !== "" && address.reason !== null;
 
   const test = async () => {
     if (!normalized) return;
@@ -56,7 +57,7 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose }
       <label className="ask-field">
         <span>Nova API address</span>
         <input type="url" className="ask-text-input" value={apiBaseUrl} placeholder="http://localhost:8787" aria-invalid={invalid} onChange={(event) => setApiBaseUrl(event.target.value)} />
-        {invalid ? <span className="ask-field-error">Enter an http or https address.</span> : null}
+        {invalid && address.reason ? <span className="ask-field-error">{API_URL_MESSAGES[address.reason]}</span> : null}
       </label>
       <label className="ask-field">
         <span>Access token (only if the API requires one)</span>
