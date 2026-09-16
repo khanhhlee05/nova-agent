@@ -11,7 +11,7 @@ A fourth tab in Mission Control where a student asks a question in plain words a
 
 ## What is sent, and what never leaves the device
 
-Sent with each question, in memory on the server for the duration of that request only:
+Sent with every question, whatever the question is about (nothing is filtered by the question), in memory on the server for the duration of that request only:
 
 | Field | Notes |
 |---|---|
@@ -82,8 +82,12 @@ Record here which ids worked once the live test runs:
 2. `POST /v1/chat` validates the body (`packages/protocol`), reserves the turn's worst-case tokens against the daily cap, and starts the loop (`runTurn`); the reservation is settled to real usage when the turn ends.
 3. The system prompt carries the date, the courses, counts, and a brief (next move, overdue, today, upcoming), so a weak model still answers from real facts. Tools cover everything deeper.
 4. Up to `MAX_ROUNDS` rounds: tool calls run over the snapshot, results go back to the model. The last round forces a text answer.
-5. If the model answers without any tool and names an item that neither a tool nor the brief listed, it is nudged once to look it up. `done.grounded` reports the outcome.
-6. Events: `tool_call`, `tool_result` (with rows), `text` deltas, then `done` (usage, rounds, grounded) or a typed `error`.
+5. The answer text is held back until it has been checked against the item titles the tools returned and the brief listed. If it names an item that neither contains, the model is nudged once (only while a round is left, so model calls never exceed `MAX_ROUNDS`); `done.grounded` reports whether the answer that was finally shown passed. The check is title-level: dates, points, and statuses in the answer text are not verified, and the rows under the answer carry the real values.
+6. Events: `tool_call`, `tool_result` (with rows), one `text` event with the checked answer, then `done` (usage, rounds, grounded) or a typed `error`.
+
+## Prompt injection
+
+Course names, codes, and item titles come from Brightspace and can contain anything an instructor or a compromised course types. In the system prompt they are stripped of control characters, quoted, and placed between whole-line `BEGIN COURSE DATA` and `END COURSE DATA` markers under a notice that nothing inside is an instruction; tool results reach the model as JSON. Tests prove the shape: a hostile title cannot add a marker line, a `system:` line, or a control character, and it flows through tools and the honesty nudge as data. What the tests cannot prove is that a given model obeys the notice. What bounds the damage if it does not: the tools are read-only (the model cannot act on anything), the honesty check flags names it did not look up, and the panel renders rows from tool results rather than from the answer text.
 
 ## States the tab carries
 
@@ -92,6 +96,15 @@ Off (setup card), API unreachable, API without a key, streaming (Stop replaces S
 ## Testing
 
 Everything in CI runs on fixtures: SSE parsing, the compact snapshot, every tool, the loop with a scripted model, the OpenRouter adapter against recorded streams, the API through `app.request()`, and the tab in jsdom. No test touches the network.
+
+## Manual checklist before merging to master
+
+Run on a developer machine with Chrome and network access:
+
+1. `npm run probe:api`, set `OPENROUTER_MODEL` to a free model with tool support, `npm run dev:api`.
+2. `npm run smoke:api -- --question "What is due this week in Microcontrollers?"` returns a `tool_call`, rows, an answer, and `grounded=true`. Record the model id in the table above.
+3. `npm run build --workspace @nova-agent/extension`, load `apps/extension/dist`, open the Ask tab, Test connection, Turn on Ask Nova, and ask the three suggested questions on demo data.
+4. Rotate the OpenRouter key afterwards if it was ever shared outside `.env`.
 
 ## Not in slice 1
 

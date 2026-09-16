@@ -22,7 +22,7 @@ Every answer is built from tool calls over the local snapshot, change events, an
 
 ## Where the model runs
 
-Today `PRODUCT.md` says "nothing is sent to a server or a model". A chatbot needs a model, so that sentence changes to: "nothing is sent to a model unless Ask Nova is turned on, and then only the normalized course data a question needs".
+Today `PRODUCT.md` says "nothing is sent to a server or a model". A chatbot needs a model, so that sentence changed to the one that shipped: "Nothing leaves the device unless Ask Nova is turned on. Once it is on, every question sends a compact copy of the course data on the device (course names, item titles, due dates, statuses, announcement titles, links) to the Nova API, which forwards it to the model provider and keeps it in memory for that request only."
 
 The course provides an OpenRouter account per team ($200 allotment in $50 increments, token-based) and a ChatGPT license. That settles the provider:
 

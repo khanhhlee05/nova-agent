@@ -1,6 +1,6 @@
 # Architecture
 
-Nova Agent is local-first. The extension reads approved Brightspace data through the student's own logged-in browser session, normalizes it before anything else touches it, and keeps every snapshot, change event, and preference in IndexedDB inside the extension origin. Nothing academic leaves the device unless the student turns on Ask Nova; then each question carries a compact snapshot (titles, dates, statuses, links) to `apps/api`, which forwards it to the model provider and keeps it in memory only for that request.
+Nova Agent is local-first. The extension reads approved Brightspace data through the student's own logged-in browser session, normalizes it before anything else touches it, and keeps every snapshot, change event, and preference in IndexedDB inside the extension origin. Nothing academic leaves the device unless the student turns on Ask Nova; once it is on, every question carries a compact copy of the course data on the device (course names, item titles, due dates, statuses, announcement titles, links), not just the rows the question touches, to `apps/api`, which forwards it to the model provider and keeps it in memory only for that request.
 
 ## Data flow (implemented)
 

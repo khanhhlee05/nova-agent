@@ -61,4 +61,4 @@ Load the extension from `apps/extension/dist` after `npm run build`.
 
 ## Status
 
-First vertical slice plus Ask Nova slice 1. Live Brightspace access on the Villanova tenant is not yet verified; see [docs/BRIGHTSPACE_ACCESS.md](docs/BRIGHTSPACE_ACCESS.md). Demo mode works everywhere. Nothing leaves the device unless Ask Nova is turned on, and then only the compact course data a question needs.
+First vertical slice plus Ask Nova slice 1. Live Brightspace access on the Villanova tenant is not yet verified; see [docs/BRIGHTSPACE_ACCESS.md](docs/BRIGHTSPACE_ACCESS.md). Demo mode works everywhere. Nothing leaves the device unless Ask Nova is turned on. Once it is on, every question sends a compact copy of the course data on the device (course names, item titles, due dates, statuses, announcement titles, links) to the Nova API, which forwards it to the model provider and keeps it in memory for that request only.

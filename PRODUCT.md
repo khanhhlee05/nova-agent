@@ -16,7 +16,7 @@ Nova Agent is an unofficial, local-first academic assistant delivered as a Chrom
 
 ## Positioning
 
-Deterministic and explainable: every number is derived from Brightspace data on the device, every priority carries its reasons in words, and nothing leaves the device unless the student turns Ask Nova on; then only the compact course data a question needs goes to a self-hosted Nova API, which forwards it to a model on OpenRouter and keeps it in memory for that request only. "Since your last visit" is a real diff of normalized snapshots, not a notification feed. The feasibility of live access is stated honestly (demo data is always labeled).
+Deterministic and explainable: every number is derived from Brightspace data on the device, every priority carries its reasons in words, and nothing leaves the device unless the student turns Ask Nova on; once it is on, every question sends a compact copy of the course data on the device (course names, item titles, due dates, statuses, announcement titles, links) to a self-hosted Nova API, which forwards it to a model on OpenRouter and keeps it in memory for that request only. "Since your last visit" is a real diff of normalized snapshots, not a notification feed. The feasibility of live access is stated honestly (demo data is always labeled).
 
 ## Operating Context
 
