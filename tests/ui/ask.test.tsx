@@ -173,17 +173,18 @@ describe("Ask tab", () => {
     await screen.findByText(/looked up changes/i);
   });
 
-  it("lets the student stop an answer and keeps the partial text", async () => {
+  it("lets the student stop an answer before any unchecked text is shown", async () => {
     const { dashboard, events } = await demoDashboard();
     const { model, release } = gated();
     render(<MissionControl {...baseProps({ dashboard, ask: askProps(new LocalAskClient(model), events) })} />);
     fireEvent.change(screen.getByRole("textbox", { name: /ask nova a question/i }), { target: { value: "Go" } });
     fireEvent.click(screen.getByRole("button", { name: /send question/i }));
-    await screen.findByText("First part.");
+    await screen.findByText(/looked up your workload/i);
+    expect(screen.getByText(/thinking/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /stop answering/i }));
     release();
     expect(await screen.findByText(/stopped before nova finished/i)).toBeTruthy();
-    expect(screen.getByText("First part.")).toBeTruthy();
+    expect(screen.queryByText("First part.")).toBeNull();
     expect(screen.queryByText(/second part/i)).toBeNull();
     expect(screen.getByRole("button", { name: /send question/i })).toBeTruthy();
   });

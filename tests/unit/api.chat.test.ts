@@ -60,7 +60,7 @@ describe("POST /v1/chat", () => {
     expect(response.headers.get("content-type")).toContain("text/event-stream");
     expect(response.headers.get("access-control-allow-origin")).toBe("chrome-extension://abc");
     const events = await readEvents(response);
-    expect(events.map((event) => event.type)).toEqual(["tool_call", "tool_result", "text", "text", "text", "done"]);
+    expect(events.map((event) => event.type)).toEqual(["tool_call", "tool_result", "text", "done"]);
     expect(events[0]).toMatchObject({ type: "tool_call", name: "list_deadlines" });
     const done = events.at(-1);
     expect(done?.type === "done" && done.usage?.totalTokens === 144 && done.grounded).toBe(true);

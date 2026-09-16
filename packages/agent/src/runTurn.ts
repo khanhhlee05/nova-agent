@@ -1,7 +1,7 @@
 import type { AskEvent, ChatMessage, CompactSnapshot, ModelUsage, ToolName } from "@nova-agent/protocol";
 import { checkHonesty } from "./honesty";
 import { ModelError, addUsage, isAbortError, type ChatModel, type ModelMessage, type ToolCall } from "./model";
-import { briefTitles, buildSystemPrompt } from "./prompt";
+import { briefTitles, buildSystemPrompt, quote } from "./prompt";
 import { TOOLS, executeTool, isToolName, toolSchemasForModel, type ToolSpec } from "./tools";
 
 export type TurnLog = { rounds: number; toolNames: ToolName[]; usage: ModelUsage | null; model: string | null; outcome: "ok" | "error" | "aborted"; errorCode?: string; grounded: boolean; corrected: boolean };
@@ -42,12 +42,17 @@ const parseArgs = (raw: string): unknown => {
   }
 };
 
+const nudge = (title: string, canLookUp: boolean): string =>
+  `Your draft names ${quote(title)}, which no tool result or course data line contains. ${canLookUp ? "Call a tool to verify it, then answer using only tool results and the course data." : "Answer again without naming it, using only the course data and the tool results above."}`;
+
 /**
  * One chat turn: at most `maxRounds` model calls with tools, then a forced
- * answer. Emits the events the client renders. Streams text live once a tool
- * has been consulted; when the model answers without any tool, the text is
- * checked against known titles first and the model is nudged once if it
- * named something it never looked up.
+ * answer. Emits the events the client renders. Tool calls and results stream
+ * as they happen; the answer text is held back until it has been checked
+ * against the titles the tools returned and the brief listed. If the model
+ * named an item it never looked up, it is nudged once (while a round is
+ * left), and `grounded` reports whether the flushed answer passed. Model
+ * calls never exceed `maxRounds`.
  */
 export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, TurnResult> {
   const tools = input.tools ?? TOOLS;
@@ -65,7 +70,7 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
   let modelId: string | null = null;
   let rounds = 0;
   let corrected = false;
-  let usedTool = false;
+  let grounded = false;
   let finalText = "";
 
   const finish = (outcome: TurnResult["outcome"], errorCode?: string): TurnResult => ({
@@ -74,7 +79,7 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
     model: modelId,
     rounds,
     toolNames,
-    grounded: usedTool || checkHonesty(finalText, input.snapshot, [...allowedTitles, ...returnedTitles]).ok,
+    grounded,
     corrected,
     returnedTitles: [...returnedTitles],
     outcome,
@@ -92,8 +97,6 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
       for await (const event of input.model.complete({ messages, tools: definitions, toolChoice, maxTokens: input.maxTokens, signal: input.signal })) {
         if (event.type === "text") {
           text += event.delta;
-          // Live streaming once the answer is grounded in a tool result; otherwise buffer for the honesty check.
-          if (usedTool) yield { type: "text", delta: event.delta };
         } else if (event.type === "tool_call") {
           calls.push(event.call);
         } else {
@@ -112,7 +115,6 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
           const result = executeTool(call.name, args, { snapshot: input.snapshot }, tools);
           if (name) toolNames.push(name);
           if (result.ok) {
-            usedTool = true;
             for (const row of result.rows) returnedTitles.add(row.title);
             yield { type: "tool_result", id: call.id, name: name ?? "get_brief", ok: true, summary: result.summary, rows: result.rows };
             messages.push({ role: "tool", toolCallId: call.id, content: JSON.stringify({ summary: result.summary, ...(result.data as object) }) });
@@ -126,18 +128,18 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
 
       // Final answer. A tool call on the last round is dropped in favour of the text, or a fallback.
       if (text.trim() === "") text = stop === "max_tokens" ? FALLBACK : calls.length > 0 ? FALLBACK : "I do not have enough to answer that. Try asking about deadlines, changes, or what to start first.";
-      if (!usedTool) {
-        const check = checkHonesty(text, input.snapshot, allowedTitles);
-        if (!check.ok && !corrected) {
-          corrected = true;
-          messages.push({ role: "assistant", content: text });
-          messages.push({ role: "user", content: `Your draft names "${check.unverified[0]}" but you did not look it up. Call a tool to verify, then answer using only tool results and the brief.` });
-          continue;
-        }
-        yield { type: "text", delta: text };
+      const check = checkHonesty(text, input.snapshot, [...allowedTitles, ...returnedTitles]);
+      // One correction, and only while a round is left: the last round is reserved for the answer.
+      if (!check.ok && !corrected && !lastRound) {
+        corrected = true;
+        messages.push({ role: "assistant", content: text });
+        messages.push({ role: "user", content: nudge(check.unverified[0] ?? "", rounds + 1 < maxRounds) });
+        continue;
       }
       finalText = text;
-      yield { type: "done", model: modelId, usage, rounds, grounded: usedTool || checkHonesty(finalText, input.snapshot, allowedTitles).ok, corrected };
+      grounded = check.ok;
+      yield { type: "text", delta: text };
+      yield { type: "done", model: modelId, usage, rounds, grounded, corrected };
       return finish("ok");
     }
   } catch (error) {
