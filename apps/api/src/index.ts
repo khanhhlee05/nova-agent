@@ -1,9 +1,8 @@
 import { OpenAiCompatibleModel } from "@nova-agent/agent";
-import { serve } from "@hono/node-server";
 import { fileURLToPath } from "node:url";
-import { createApp } from "./app";
 import { loadConfig } from "./config";
 import { createLogger } from "./log";
+import { startServer } from "./server";
 
 try {
   process.loadEnvFile(fileURLToPath(new URL("../.env", import.meta.url)));
@@ -23,8 +22,9 @@ const model = config.OPENROUTER_API_KEY
     })
   : null;
 
-const app = createApp({ config, model, logger });
-
-serve({ fetch: app.fetch, port: config.PORT }, (info) => {
-  logger.info("api.listening", { port: info.port, configured: model !== null, model: model ? config.OPENROUTER_MODEL : null, corsOrigins: config.CORS_ORIGINS });
-});
+try {
+  startServer({ config, model, logger });
+} catch (error) {
+  logger.error("api.refused", { message: error instanceof Error ? error.message : String(error) });
+  process.exit(1);
+}

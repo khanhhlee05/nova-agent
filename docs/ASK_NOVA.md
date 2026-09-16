@@ -54,6 +54,7 @@ npm run smoke:api -- --direct        # runs the loop in-process, no server
 | `OPENROUTER_MODEL` | `meta-llama/llama-3.3-70b-instruct:free` | Any OpenAI-compatible model id on OpenRouter. Free ids change; use the probe. |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | Any OpenAI-compatible endpoint works. |
 | `PORT` | `8787` | |
+| `HOST` | `127.0.0.1` | Bind address. Loopback keeps the key reachable only from this machine. Any other value refuses to start unless `NOVA_DEV_TOKEN` is set, because CORS is not authentication and anyone who can reach `/v1/chat` can spend the key. |
 | `CORS_ORIGINS` | `chrome-extension://*,http://localhost:5174` | Exact origins, or a prefix ending in `*` for development. Use the exact extension id in production. |
 | `NOVA_DEV_TOKEN` | | Optional bearer token for `/v1/*`. Paste the same value into the tab's settings. |
 | `MAX_TOKENS` | `700` | Per model call. |
