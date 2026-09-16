@@ -33,8 +33,11 @@ const localOf = (iso: string | null): string | null => {
   return Number.isNaN(date.getTime()) ? null : format(date, LOCAL_FORMAT);
 };
 
+/** Strips control characters (newlines included) and collapses whitespace, so LMS text can never add a line to a prompt. */
+export const cleanText = (text: string): string => normalizeText(text.replace(/\p{Cc}/gu, " "));
+
 const clip = (text: string): string => {
-  const clean = normalizeText(text);
+  const clean = cleanText(text);
   return clean.length > COMPACT_LIMITS.title ? `${clean.slice(0, COMPACT_LIMITS.title - 1)}…` : clean;
 };
 
@@ -93,7 +96,7 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
     .filter((course) => course.active)
     .sort((a, b) => a.name.localeCompare(b.name))
     .slice(0, COMPACT_LIMITS.courses)
-    .map((course) => ({ id: course.id, name: clip(course.name), code: course.code ? course.code.slice(0, 64) : null, homeUrl: course.homeUrl, active: course.active }));
+    .map((course) => ({ id: course.id, name: clip(course.name), code: course.code ? cleanText(course.code).slice(0, 64) : null, homeUrl: course.homeUrl, active: course.active }));
   const courseIds = new Set(courses.map((course) => course.id));
 
   const window = deadlineWindow(now);
