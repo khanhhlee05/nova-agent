@@ -80,13 +80,21 @@ const main = async () => {
     return;
   }
 
-  const api = arg("api", `http://localhost:${config.PORT}`);
+  // 127.0.0.1, not localhost: on Windows, Node resolves localhost to ::1 first while the API listens on IPv4 loopback.
+  const api = arg("api", `http://127.0.0.1:${config.PORT}`);
   const token = arg("token", config.NOVA_DEV_TOKEN ?? "");
-  const response = await fetch(`${api}/v1/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify(request),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${api}/v1/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(request),
+    });
+  } catch (error) {
+    const cause = error instanceof Error && error.cause instanceof Error ? ` (${error.cause.message})` : "";
+    console.error(`Could not reach the Nova API at ${api}${cause}. Is npm run dev:api running? Pass --api http://127.0.0.1:${config.PORT} if it listens elsewhere.`);
+    process.exit(1);
+  }
   if (!response.ok || !response.body) {
     console.error(`API answered ${response.status}: ${await response.text()}`);
     process.exit(1);

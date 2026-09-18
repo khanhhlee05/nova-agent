@@ -44,6 +44,7 @@ Smoke test from the terminal (sends the demo snapshot):
 ```bash
 npm run smoke:api -- --question "What is due this week in Microcontrollers?"
 npm run smoke:api -- --direct        # runs the loop in-process, no server
+npm run smoke:api -- --api http://127.0.0.1:8787 --token <NOVA_DEV_TOKEN>   # explicit address and token
 ```
 
 ### Environment
