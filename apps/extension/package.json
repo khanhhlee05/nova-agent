@@ -8,9 +8,11 @@
     "build": "vite build && vite build --config vite.content.config.ts"
   },
   "dependencies": {
+    "@nova-agent/agent": "0.1.0",
     "@nova-agent/brightspace": "0.1.0",
     "@nova-agent/core": "0.1.0",
     "@nova-agent/planner": "0.1.0",
+    "@nova-agent/protocol": "0.1.0",
     "@vitejs/plugin-react": "^5.0.2",
     "date-fns": "^4.1.0",
     "dexie": "^4.0.10",

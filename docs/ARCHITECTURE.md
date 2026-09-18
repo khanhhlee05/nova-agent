@@ -1,6 +1,6 @@
 # Architecture
 
-Nova Agent is local-first. The extension reads approved Brightspace data through the student's own logged-in browser session, normalizes it before anything else touches it, and keeps every snapshot, change event, and preference in IndexedDB inside the extension origin. Nothing academic is sent to `apps/api` or any third party.
+Nova Agent is local-first. The extension reads approved Brightspace data through the student's own logged-in browser session, normalizes it before anything else touches it, and keeps every snapshot, change event, and preference in IndexedDB inside the extension origin. Nothing academic leaves the device unless the student turns on Ask Nova; once it is on, every question carries a compact copy of the course data on the device (course names, item titles, due dates, statuses, announcement titles, links), not just the rows the question touches, to `apps/api`, which forwards it to the model provider and keeps it in memory only for that request.
 
 ## Data flow (implemented)
 
@@ -33,7 +33,9 @@ flowchart TD
 | `packages/planner` | Pure priority score, stable ordering, reason text |
 | `apps/extension` | Manifest V3 lifecycle, Nova Orb content script, typed messaging, Chrome host boundary, Dexie persistence, sync coordinator, Mission Control UI |
 | `apps/web` | Public demo only. Untouched by this slice. |
-| `apps/api`, `packages/agent` | Placeholders. Not used by features A–D. |
+| `packages/protocol` | Zod schemas shared by extension and API: compact snapshot, chat request, server-sent events, SSE parser |
+| `packages/agent` | Compact snapshot builder (runs in the browser), read-only tools, `runTurn` loop with the honesty check, `ChatModel` adapters (OpenAI-compatible streaming, scripted) |
+| `apps/api` | Node + Hono: `POST /v1/chat` (SSE), `GET /healthz`, CORS allowlist, body limit, optional dev token, daily token cap, content-free logs. Stateless. |
 
 ## Sync state machine
 
@@ -59,6 +61,19 @@ Recoverable or terminal: `session-expired | permission-required | offline | part
 - **Change event lifecycle**: an event read before the current snapshot was captured is filtered out of the feed by `buildDashboard` (`isReadBefore`), so read changes survive the session they were read in and leave on the next refresh. Delete removes the row from `changeEvents` outright (`deleteChangeEvent`); fingerprint dedupe is not needed to keep it away, because events only come from comparing consecutive snapshots.
 
 Messages are a discriminated union (`OPEN_PANEL`, `PING`, `BRIGHTSPACE_FETCH`, `SYNC_REQUEST`, `SYNC_PROGRESS`, `SYNC_RESULT`) validated on receipt. Bridge responses are validated with Zod in the side panel.
+
+## Ask Nova turn
+
+```
+Ask tab ──compactSnapshot()──▶ POST /v1/chat (question, history, snapshot) ──▶ runTurn ──▶ OpenRouter
+   ▲                                                                            │ tools over the snapshot
+   └────────────── SSE: tool_call, tool_result (rows), text, done | error ◀─────┘
+```
+
+- The compact snapshot is built in the browser so buckets and local dates follow the student's time zone; the server never does date math.
+- The server is stateless: history travels with the request, usage is an in-memory daily counter, logs carry counts only.
+- Rows under an answer come from tool results, never from the model's text. The tab is force-mounted so the session-only thread survives switching tabs.
+- Details, environment, and privacy statement: [ASK_NOVA.md](./ASK_NOVA.md).
 
 ## Authentication outcome
 

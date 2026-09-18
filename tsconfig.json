@@ -8,6 +8,7 @@
     { "path": "./packages/core" },
     { "path": "./packages/planner" },
     { "path": "./packages/agent" },
+    { "path": "./packages/protocol" },
     { "path": "./tests" }
   ]
 }

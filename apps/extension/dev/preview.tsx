@@ -12,10 +12,12 @@ import {
   type DemoTenantData,
   type RawFetch,
 } from "@nova-agent/brightspace";
+import { ScriptedModel, demoRouter } from "@nova-agent/agent";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createStubHost } from "../src/platform/host";
 import { App } from "../src/sidepanel/App";
+import { ASK_SETTINGS_PREFERENCE, LocalAskClient, defaultAskClientFactory, type AskClientFactory, type AskSettings } from "../src/sidepanel/ask";
 import type { UiPreferences } from "../src/sidepanel/MissionControl";
 import { createNovaDb } from "../src/storage/novaDb";
 import { setPreference, putSyncStatus } from "../src/storage/repositories";
@@ -25,12 +27,13 @@ import "../src/sidepanel/styles.css";
 /**
  * Preview harness. Drives the real App, Dexie database, and sync coordinator
  * with a stub host so every UI state can be reviewed without Chrome APIs:
- *   preview.html?scenario=ready|changes|week|fixture|first-run|loading|partial|session-expired|stale|offline|permission-required|empty
+ *   preview.html?scenario=ready|changes|week|ask|fixture|first-run|loading|partial|session-expired|stale|offline|permission-required|empty
  *   &theme=light|dark
  *   &mode=demo   (label the data as demo regardless of scenario)
+ *   &api=http://localhost:8787   (Ask tab talks to a real Nova API instead of the in-process scripted model)
  */
 
-type Scenario = "ready" | "changes" | "week" | "fixture" | "first-run" | "loading" | "partial" | "session-expired" | "stale" | "offline" | "permission-required" | "empty";
+type Scenario = "ready" | "changes" | "week" | "ask" | "fixture" | "first-run" | "loading" | "partial" | "session-expired" | "stale" | "offline" | "permission-required" | "empty";
 
 const params = new URLSearchParams(location.search);
 const scenario = (params.get("scenario") ?? "ready") as Scenario;
@@ -108,7 +111,12 @@ const main = async () => {
       await seed("live", [fixtureFactory(), fixtureFactory()]);
   }
 
-  const activeTab = tab ?? (scenario === "changes" ? "changes" : scenario === "week" ? "week" : "focus");
+  const activeTab = tab ?? (scenario === "changes" ? "changes" : scenario === "week" ? "week" : scenario === "ask" ? "ask" : "focus");
+  const api = params.get("api");
+  if (scenario === "ask" || api) {
+    await setPreference(db, ASK_SETTINGS_PREFERENCE, { enabled: true, apiBaseUrl: api ?? "http://localhost:8787", token: null } satisfies AskSettings);
+  }
+  const askClientFactory: AskClientFactory = api ? defaultAskClientFactory : () => new LocalAskClient(new ScriptedModel(demoRouter));
   const theme = params.get("theme") === "dark" ? "dark" : "light";
   if (params.get("mode") === "demo") {
     // Label everything as demo data: the preference for future syncs and the persisted status the freshness line reads.
@@ -119,7 +127,7 @@ const main = async () => {
 
   createRoot(document.getElementById("root") as HTMLElement).render(
     <StrictMode>
-      <App db={db} host={host} now={fixedNow ? now : undefined} transportFactory={factory} autoSync={autoSync} />
+      <App db={db} host={host} now={fixedNow ? now : undefined} transportFactory={factory} autoSync={autoSync} askClientFactory={askClientFactory} />
     </StrictMode>,
   );
 };

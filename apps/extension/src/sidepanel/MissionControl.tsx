@@ -1,9 +1,12 @@
 import type { FeasibilityReport } from "@nova-agent/brightspace";
 import { isSafeTenantLink } from "@nova-agent/brightspace";
-import type { DeadlineBucket } from "@nova-agent/core";
+import { compactSnapshot } from "@nova-agent/agent";
+import type { ChangeEvent, DeadlineBucket } from "@nova-agent/core";
+import type { ChatMessage, ChatRequest } from "@nova-agent/protocol";
 import { CheckCheck, EyeOff } from "lucide-react";
 import { Tabs, Tooltip } from "radix-ui";
 import { useCallback, useEffect, useState } from "react";
+import { AskChips, AskView, useAskThread, type AskClient, type AskClientFactory, type AskSettings } from "./ask";
 import type { SyncStatusRecord } from "../storage/novaDb";
 import { PHASE_LABELS, isRunningPhase, isStale, type SyncRuntimeState } from "../sync/syncState";
 import { StateBanners, SyncProgress } from "./components/Banners";
@@ -21,11 +24,11 @@ import { WeekView } from "./components/WeekView";
 import { countDismissed, type SessionDismissals } from "./dismissals";
 import { format } from "date-fns";
 import { pluralize } from "./format";
-import { changesHero, weekHero } from "./heroes";
+import { askHero, changesHero, weekHero } from "./heroes";
 import type { CourseFilter as CourseFilterValue, Dashboard } from "./model";
 import { applyTheme, type Theme } from "./theme";
 
-export type TabId = "focus" | "week" | "changes";
+export type TabId = "focus" | "week" | "changes" | "ask";
 
 export type UiPreferences = { activeTab: TabId; courseFilter: CourseFilterValue; collapsedSections: DeadlineBucket[]; theme: Theme };
 
@@ -48,6 +51,16 @@ export type MissionControlActions = {
   restoreDismissed: () => void;
 };
 
+/** Everything the Ask tab needs. Optional so existing callers and tests are untouched. */
+export type AskProps = {
+  client: AskClient | null;
+  settings: AskSettings;
+  setSettings: (patch: Partial<AskSettings>) => void;
+  clientFactory: AskClientFactory;
+  /** Raw change events; the compact snapshot is built from them, ignoring the course filter. */
+  events: readonly ChangeEvent[];
+};
+
 export type MissionControlProps = {
   dashboard: Dashboard | null;
   status: SyncStatusRecord;
@@ -60,10 +73,13 @@ export type MissionControlProps = {
   tenantOrigin: string;
   dismissals: SessionDismissals;
   actions: MissionControlActions;
+  ask?: AskProps;
 };
 
+const CLIENT_VERSION = "0.1.0";
+
 /** Presentational root. Everything it needs arrives through props so tests and the preview harness can drive every state. */
-export const MissionControl = ({ dashboard, status, runtime, feasibility, preferences, hasEverSynced, announcement, now, tenantOrigin, dismissals, actions }: MissionControlProps) => {
+export const MissionControl = ({ dashboard, status, runtime, feasibility, preferences, hasEverSynced, announcement, now, tenantOrigin, dismissals, actions, ask }: MissionControlProps) => {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const phase = runtime.phase === "idle" ? status.phase : runtime.phase;
@@ -72,6 +88,21 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
   const canOpen = useCallback((url: string | null) => isSafeTenantLink(url, tenantOrigin), [tenantOrigin]);
   const collapsed = new Set(preferences.collapsedSections);
   const tab: TabId = preferences.activeTab;
+
+  // The thread lives here so the hero's suggestion chips and the tab body share one conversation. Inert without `ask`.
+  const buildRequest = useCallback(
+    (message: string, history: ChatMessage[]): ChatRequest | null =>
+      dashboard && ask
+        ? {
+            message,
+            history,
+            snapshot: compactSnapshot(dashboard.snapshot, ask.events, now, { mode: status.mode === "fixture" ? "demo" : "live", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+            client: { name: "nova-extension", version: CLIENT_VERSION },
+          }
+        : null,
+    [ask, dashboard, now, status.mode],
+  );
+  const thread = useAskThread(ask?.client ?? null, buildRequest);
 
   useEffect(() => {
     setExpandedKey(null);
@@ -107,13 +138,15 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
   const fresh = freshness(status.mode, phase, status.lastSuccessfulSyncAt, stale, now);
 
   const hero = showFirstRun ? (
-    <Hero title="Know what changed. Know what matters next." meta="Nova · Mission Control for Brightspace" text="Nova reads your Brightspace courses through your own logged-in session, keeps everything on this device, and never sends academic data anywhere." />
+    <Hero title="Know what changed. Know what matters next." meta="Nova · Mission Control for Brightspace" text="Nova reads your Brightspace courses through your own logged-in session and keeps everything on this device. Nothing leaves it unless you turn on Ask Nova." />
   ) : !dashboard ? (
     running ? (
       <Hero title="Loading your courses" meta={PHASE_LABELS[phase]} text="Your last snapshot appears here as soon as a refresh completes." />
     ) : (
       <Hero title="No data yet" meta={PHASE_LABELS[phase]} text="Nova could not complete a first refresh. Fix the connection below and retry." />
     )
+  ) : tab === "ask" && ask ? (
+    <Hero {...askHero(dashboard, ask.settings.enabled, status.lastSuccessfulSyncAt, now)} extra={ask.settings.enabled ? <AskChips dashboard={dashboard} disabled={thread.status === "streaming" || !ask.client} onPick={thread.send} /> : undefined} />
   ) : tab === "week" ? (
     <Hero {...weekHero(dashboard, selectedDay)} extra={<WeekStrip week={dashboard.week} courseById={dashboard.courseById} selected={selectedDay} onSelect={setSelectedDay} />} />
   ) : tab === "changes" ? (
@@ -151,6 +184,11 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
           </span>
         ) : null}
       </Tabs.Trigger>
+      {ask ? (
+        <Tabs.Trigger className="tab-trigger" value="ask">
+          Ask
+        </Tabs.Trigger>
+      ) : null}
     </Tabs.List>
   );
 
@@ -204,11 +242,13 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                   </button>
                 </div>
               ) : null}
-              <div className="filter-row">
-                <CourseFilter courses={dashboard?.courses ?? []} value={preferences.courseFilter} onChange={(courseFilter) => actions.setPreferences({ courseFilter })} />
-                <span className="spacer" />
-                <span className="filter-note">{filterNote}</span>
-              </div>
+              {tab !== "ask" ? (
+                <div className="filter-row">
+                  <CourseFilter courses={dashboard?.courses ?? []} value={preferences.courseFilter} onChange={(courseFilter) => actions.setPreferences({ courseFilter })} />
+                  <span className="spacer" />
+                  <span className="filter-note">{filterNote}</span>
+                </div>
+              ) : null}
               <Tabs.Content className="tab-content" value="focus">
                 <div className="stack">
                   <StateBanners
@@ -255,6 +295,21 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
               <Tabs.Content className="tab-content" value="changes">
                 {dashboard ? <ChangesFeed dashboard={dashboard} now={now} baselineOnly={dashboard.totalChanges === 0 && hasEverSynced} canOpen={canOpen} onOpen={actions.openUrl} onSetRead={actions.setEventRead} onDelete={actions.deleteEvent} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
               </Tabs.Content>
+              {ask ? (
+                // Force-mounted and hidden so the conversation survives a switch to another tab.
+                <Tabs.Content className="tab-content tab-content-ask" value="ask" forceMount hidden={tab !== "ask"}>
+                  {dashboard ? (
+                    <AskView thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} />
+                  ) : showSkeleton ? (
+                    <FocusSkeleton />
+                  ) : (
+                    <div className="empty">
+                      <strong>No data yet</strong>
+                      <span>Ask Nova needs a completed refresh first.</span>
+                    </div>
+                  )}
+                </Tabs.Content>
+              ) : null}
             </>
           )}
         </Tabs.Root>
