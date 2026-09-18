@@ -7,6 +7,9 @@
   "scripts": {
     "dev": "npm run dev --workspace @nova-agent/web",
     "dev:extension": "npm run dev --workspace @nova-agent/extension",
+    "dev:api": "npm run dev --workspace @nova-agent/api",
+    "probe:api": "npm run probe --workspace @nova-agent/api --",
+    "smoke:api": "npm run smoke --workspace @nova-agent/api --",
     "build": "npm run build --workspaces --if-present",
     "lint": "eslint .",
     "typecheck": "tsc -b",

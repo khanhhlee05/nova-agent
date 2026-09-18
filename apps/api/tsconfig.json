@@ -1,5 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "composite": true, "rootDir": "src", "outDir": "dist", "declaration": true },
-  "include": ["src"]
+  "compilerOptions": { "composite": true, "rootDir": "src", "outDir": "dist", "declaration": true, "types": ["node"] },
+  "include": ["src"],
+  "references": [
+    { "path": "../../packages/agent" },
+    { "path": "../../packages/protocol" },
+    { "path": "../../packages/brightspace" },
+    { "path": "../../packages/core" }
+  ]
 }

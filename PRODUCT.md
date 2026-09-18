@@ -16,14 +16,14 @@ Nova Agent is an unofficial, local-first academic assistant delivered as a Chrom
 
 ## Positioning
 
-Deterministic and explainable: every number is derived from Brightspace data on the device, every priority carries its reasons in words, and nothing is sent to a server or a model. "Since your last visit" is a real diff of normalized snapshots, not a notification feed. The feasibility of live access is stated honestly (demo data is always labeled).
+Deterministic and explainable: every number is derived from Brightspace data on the device, every priority carries its reasons in words, and nothing leaves the device unless the student turns Ask Nova on; once it is on, every question sends a compact copy of the course data on the device (course names, item titles, due dates, statuses, announcement titles, links) to a self-hosted Nova API, which forwards it to a model on OpenRouter and keeps it in memory for that request only. "Since your last visit" is a real diff of normalized snapshots, not a notification feed. The feasibility of live access is stated honestly (demo data is always labeled).
 
 ## Operating Context
 
 - Chrome 116+, Manifest V3 side panel, 380 to 440 px wide, beside `brightspace.villanova.edu`.
 - Data source: read-only Brightspace routes through the student's own session, or clearly labeled fictional demo data.
-- Three views: Focus (workload and next move), Week (seven-day agenda), Changes (signal feed since last visit).
-- States the UI must carry: first run, loading, ready, empty, stale, partial sync, offline, session expired, permission required, demo mode, hidden-for-session items.
+- Four views: Focus (workload and next move), Week (seven-day agenda), Changes (signal feed since last visit), Ask (questions in plain words over the same data, answered through the Nova API).
+- States the UI must carry: first run, loading, ready, empty, stale, partial sync, offline, session expired, permission required, demo mode, hidden-for-session items; on Ask: off (setup), API unreachable, API without a key, answering, stopped, answer errors, demo-labeled answers.
 - Refresh is explicit or on open when data is older than 15 minutes; no polling.
 
 ## Capabilities and Constraints

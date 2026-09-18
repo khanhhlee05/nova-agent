@@ -1,5 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "composite": true, "rootDir": "src", "outDir": "dist", "declaration": true },
-  "include": ["src"]
+  "include": ["src"],
+  "references": [{ "path": "../core" }, { "path": "../planner" }, { "path": "../protocol" }]
 }

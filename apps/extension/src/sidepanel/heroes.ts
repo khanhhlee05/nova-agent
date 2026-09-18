@@ -1,6 +1,6 @@
 import type { ChangeEvent } from "@nova-agent/core";
 import { format } from "date-fns";
-import { formatDeadline, formatRelative } from "./format";
+import { formatAge, formatDeadline, formatRelative } from "./format";
 import type { Dashboard, NextMove } from "./model";
 
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
@@ -90,4 +90,17 @@ export const changesHero = (dashboard: Dashboard, lastVisitAt: string | null, no
   ].filter((part): part is string => part !== null);
   const text = rest.length > 0 ? `Also ${rest.join(", ")}.` : "That is the only change.";
   return { title: `${cap(plural(events.length, "change"))}, ${lead}`, meta, text };
+};
+
+/** The Ask headline states scope and freshness, computed like every other tab's. */
+export const askHero = (dashboard: Dashboard, enabled: boolean, lastSuccessfulSyncAt: string | null, now: Date): Hero => {
+  if (!enabled) {
+    return { title: "Ask Nova is off", meta: "Turn it on below after reading what is sent", text: "Questions in plain words over the same data as the other tabs, answered through a Nova API you run." };
+  }
+  const courses = dashboard.courses.length;
+  return {
+    title: courses === 0 ? "Nothing to ask about yet" : `Ask across ${plural(courses, "course")}`,
+    meta: lastSuccessfulSyncAt ? `Answers use data refreshed ${formatAge(lastSuccessfulSyncAt, now)}` : "Answers need a refresh first",
+    text: "Deadlines, changes, what to start first. Nova reads every course, filtered or not, and cannot change anything in Brightspace.",
+  };
 };
