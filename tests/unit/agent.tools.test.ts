@@ -36,6 +36,8 @@ describe("tool schemas", () => {
     const deadlines = defs.find((def) => def.function.name === "list_deadlines")?.function.parameters as { required?: string[]; properties: Record<string, { description?: string }> };
     expect(deadlines.required ?? []).toEqual([]);
     expect(deadlines.properties.range?.description).toContain("week");
+    expect(JSON.stringify(deadlines)).toContain("next-week");
+    expect(deadlines.properties.from?.description).toContain("YYYY-MM-DD");
   });
 
   it("rejects unknown tools and invalid arguments without throwing", async () => {
@@ -104,6 +106,43 @@ describe("list_deadlines", () => {
     const limited = ok(run("list_deadlines", { range: "all", limit: 2 }, baseline));
     expect(limited.rows).toHaveLength(2);
     expect(limited.summary).toContain("showing 2");
+  });
+});
+
+describe("list_deadlines periods", () => {
+  it("returns only next week's items for 'next-week', and says which week", async () => {
+    await load();
+    const base = ok(run("list_deadlines", { range: "next-week" }, baseline));
+    expect(titles(base.rows)).toEqual(["Project Proposal"]);
+    expect(base.summary).toBe("1 item due next week (Sep 14 to Sep 20).");
+    const now = ok(run("list_deadlines", { range: "next-week" }, changed));
+    expect(titles(now.rows)).toEqual(["Quiz 3: Serial Protocols", "Project Proposal"]);
+    expect(now.summary).toBe("2 items due next week (Sep 14 to Sep 20).");
+    const micro = ok(run("list_deadlines", { range: "next-week", course: "micro" }, changed));
+    expect(micro.rows.every((row) => row.courseName === "Microcontrollers")).toBe(true);
+    expect(micro.summary).toContain("in Microcontrollers");
+  });
+
+  it("filters any other period with from and to, inclusive", async () => {
+    await load();
+    const late = ok(run("list_deadlines", { from: "2026-09-21" }, baseline));
+    expect(titles(late.rows)).toEqual(["Problem Set 7: Sampling", "Case Study Reflection"]);
+    expect(late.summary).toBe("2 items due on or after 2026-09-21.");
+    const upTo = ok(run("list_deadlines", { to: "2026-09-14" }, baseline));
+    const weekAndOverdue = [...ok(run("list_deadlines", { range: "overdue" }, baseline)).rows, ...ok(run("list_deadlines", { range: "week" }, baseline)).rows];
+    expect(titles(upTo.rows).sort()).toEqual(titles(weekAndOverdue).sort());
+    const between = ok(run("list_deadlines", { from: "2026-09-14", to: "2026-09-20" }, changed));
+    expect(titles(between.rows)).toEqual(["Quiz 3: Serial Protocols", "Project Proposal"]);
+    expect(between.summary).toBe("2 items due between 2026-09-14 and 2026-09-20.");
+    const withDone = ok(run("list_deadlines", { to: "2026-09-08", includeDone: true, course: "ECE-2042-001" }, baseline));
+    expect(titles(withDone.rows)).toContain("Lab 1: Toolchain Setup");
+  });
+
+  it("rejects malformed or reversed windows, naming the field", async () => {
+    await load();
+    expect(run("list_deadlines", { from: "2026-09-21", to: "2026-09-14" }, baseline)).toMatchObject({ ok: false, error: expect.stringContaining("from (2026-09-21) is after to") });
+    expect(run("list_deadlines", { from: "next monday" }, baseline)).toMatchObject({ ok: false, error: expect.stringContaining("from must be a date") });
+    expect(run("list_deadlines", { to: "2026-9-8" }, baseline)).toMatchObject({ ok: false, error: expect.stringContaining("to must be a date") });
   });
 });
 

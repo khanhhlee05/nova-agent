@@ -2,7 +2,7 @@ import type { AskErrorEvent, ToolName } from "@nova-agent/protocol";
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { Dashboard } from "../model";
-import { AskRows } from "./AskRows";
+import { AskRowsDisclosure } from "./AskRows";
 import { hostOf } from "./askSettings";
 import type { AskMessage, AskStatus } from "./useAskThread";
 
@@ -76,7 +76,7 @@ export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpe
               <ul className="ask-tools" aria-label="Lookups">
                 {message.tools.map((tool) => (
                   <li key={tool.id} className="ask-tool" data-state={tool.status}>
-                    {tool.status === "running" ? `Looking up ${TOOL_LABELS[tool.name]}…` : tool.status === "ok" ? `Looked up ${TOOL_LABELS[tool.name]} · ${tool.rows} ${tool.rows === 1 ? "row" : "rows"}` : `Could not look up ${TOOL_LABELS[tool.name]}: ${tool.summary ?? ""}`}
+                    {tool.status === "running" ? `Looking up ${TOOL_LABELS[tool.name]}…` : tool.status === "ok" ? (tool.summary ? `Looked up ${TOOL_LABELS[tool.name]}: ${tool.summary.replace(/\.$/, "")}` : `Looked up ${TOOL_LABELS[tool.name]} · ${tool.rows} ${tool.rows === 1 ? "row" : "rows"}`) : `Could not look up ${TOOL_LABELS[tool.name]}: ${tool.summary ?? ""}`}
                   </li>
                 ))}
               </ul>
@@ -92,7 +92,7 @@ export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpe
                 <span className="ask-caret" aria-hidden="true" />
               </p>
             ) : null}
-            <AskRows rows={message.rows} dashboard={dashboard} now={now} canOpen={canOpen} onOpen={onOpen} />
+            <AskRowsDisclosure rows={message.rows} dashboard={dashboard} now={now} canOpen={canOpen} onOpen={onOpen} />
             {message.stopped ? <p className="ask-note">Stopped before Nova finished.</p> : null}
             {message.grounded === false ? <p className="ask-note">Nova could not verify every item named above against your data.</p> : null}
             {copy && message.error ? (

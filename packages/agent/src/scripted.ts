@@ -80,7 +80,7 @@ export const demoRouter: ScriptedRouter = (input) => {
   if (/\b(announce|announcements?|posted|news)\b/.test(question)) return { toolCalls: [{ name: "get_recent_announcements", args: {} }] };
   if (/\b(change|changed|changes|new|moved|since)\b/.test(question)) return { toolCalls: [{ name: "get_changes", args: { since: "week" } }] };
   if (/\b(due|deadline|week|tomorrow|today|overdue)\b/.test(question)) {
-    const range = /overdue/.test(question) ? "overdue" : /tomorrow/.test(question) ? "tomorrow" : /today/.test(question) ? "today" : "week";
+    const range = /next week/.test(question) ? "next-week" : /overdue/.test(question) ? "overdue" : /tomorrow/.test(question) ? "tomorrow" : /today/.test(question) ? "today" : "week";
     return { toolCalls: [{ name: "list_deadlines", args: { range } }] };
   }
   return { toolCalls: [{ name: "get_brief", args: {} }] };

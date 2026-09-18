@@ -6,7 +6,8 @@ A fourth tab in Mission Control where a student asks a question in plain words a
 
 - The student types a question (or taps a suggestion in the field). The side panel builds a **compact snapshot** of the course data on this device and sends it with the question to the Nova API.
 - The API runs a small agent loop: the model may call read-only tools (`get_brief`, `list_deadlines`, `get_item_details`, `get_recent_announcements`, `get_changes`) over that snapshot, then writes a short answer. Events stream back as server-sent events.
-- The panel shows the lookups it made, the answer, and the matching rows rendered with the same markup as the Focus and Changes tabs. Rows come from tool results, never from the model's text.
+- `list_deadlines` takes a `range` (`overdue`, `today`, `tomorrow`, `week` for the panel's next 7 days, `next-week` for Monday to Sunday of next calendar week, `later`, `no-date`, `all` for totals only) or an inclusive `from`/`to` window in `YYYY-MM-DD` for any other period. It filters on the local calendar date by string comparison, so the server does no date math, and the prompt tells the model never to fetch `all` or `later` and narrow the result itself.
+- The panel shows the lookups it made (each with the tool's own summary, such as "2 items due next week (Sep 14 to Sep 20)"), the answer, and a "Show N matching items" toggle. The rows behind it, collapsed by default, use the same markup as the Focus and Changes tabs and come from tool results, never from the model's text.
 - Nothing is written to Brightspace. The only actions are opening a Brightspace page the student could open themselves.
 
 ## What is sent, and what never leaves the device
@@ -16,7 +17,8 @@ Sent with every question, whatever the question is about (nothing is filtered by
 | Field | Notes |
 |---|---|
 | Course names, ids, codes, home links | Active courses only |
-| Item titles, kinds, due dates (ISO and local), buckets, statuses, points, links, priority and reasons | Visible items; hidden and expired items are dropped |
+| Item titles, kinds, due dates (ISO, local text, and local calendar date), buckets, statuses, points, links, priority and reasons | Visible items; hidden and expired items are dropped |
+| Calendar: today, the Monday of this week, the panel's next 7 days, and next week (Monday to Sunday), all as `YYYY-MM-DD` | Computed in the browser in the student's zone |
 | Announcement titles, dates, pinned flag, links | No body text |
 | Change events: kind, title, before and after values, detected date, read flag | Last 14 days |
 | Counts, refresh time, whether the refresh was complete, mode (live or demo) | |
@@ -79,7 +81,7 @@ Record here which ids worked once the live test runs:
 
 ## How a turn works
 
-1. `compactSnapshot` (`packages/agent`) runs in the browser: buckets, local dates, and days-ago follow the student's time zone, so the server never does date math.
+1. `compactSnapshot` (`packages/agent`) runs in the browser: buckets, local dates, days-ago, and the calendar ranges (today, the next 7 days, next week) follow the student's time zone, so the server never does date math. The system prompt states those ranges with their weekdays.
 2. `POST /v1/chat` validates the body (`packages/protocol`), reserves the turn's worst-case tokens against the daily cap, and starts the loop (`runTurn`); the reservation is settled to real usage when the turn ends.
 3. The system prompt carries the date, the courses, counts, and a brief (next move, overdue, today, upcoming), so a weak model still answers from real facts. Tools cover everything deeper.
 4. Up to `MAX_ROUNDS` rounds: tool calls run over the snapshot, results go back to the model. The last round forces a text answer.

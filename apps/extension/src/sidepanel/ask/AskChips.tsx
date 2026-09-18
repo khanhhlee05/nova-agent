@@ -3,7 +3,7 @@ import type { Dashboard } from "../model";
 /** Three questions worth asking right now, derived from the data. */
 export const suggestedQuestions = (dashboard: Dashboard): string[] => {
   const first = "What should I start first?";
-  const second = dashboard.counts.overdue > 0 ? "What is overdue?" : dashboard.counts.thisWeek > 0 ? "What is due in the next 7 days?" : "What is due later?";
+  const second = dashboard.counts.overdue > 0 ? "What is overdue?" : dashboard.counts.thisWeek > 0 ? "What is due in the next 7 days?" : "What is due next week?";
   const third = dashboard.totalChanges > 0 ? "What changed since my last visit?" : "Any new announcements?";
   return [first, second, third];
 };
