@@ -29,6 +29,7 @@ export type Dashboard = {
   itemByKey: Map<string, AcademicItem>;
   items: AcademicItem[];
   buckets: BucketedItems;
+  /** `thisWeek` is today plus the next six days, the same seven days the Week tab shows. */
   counts: { overdue: number; today: number; thisWeek: number; unread: number };
   ranked: Map<string, RankedItem>;
   nextMove: NextMove | null;
@@ -47,6 +48,9 @@ export type BuildDashboardInput = {
   /** Session-only task dismissals. Hidden everywhere: counts, sections, next move, and week. */
   dismissedItemKeys?: ReadonlySet<string>;
 };
+
+/** Still to do and not yet late. The Week tab counts only these, so its numbers match the counts strip. */
+export const isUpcoming = (bucket: DeadlineBucket): boolean => bucket === "today" || bucket === "tomorrow" || bucket === "this-week";
 
 /**
  * A change stays in the feed for the session in which it was read, then
@@ -143,7 +147,7 @@ export const SECTION_LABELS: Record<DeadlineBucket, string> = {
   overdue: "Overdue",
   today: "Today",
   tomorrow: "Tomorrow",
-  "this-week": "This week",
+  "this-week": "Later this week",
   later: "Later",
   "no-date": "No date",
   completed: "Completed",

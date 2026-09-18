@@ -50,7 +50,7 @@ The unread badge only ever counts unread changes, so neither action can leave a 
 
 ## Ask tab
 
-Ask Nova is off until the student turns it on in the tab. The setup card states what is sent (a compact copy of course data: titles, dates, statuses, links), where (the Nova API address the student enters), and what never leaves the device (cookies, raw responses, announcement text, the student's name). Once on, the field offers three suggested questions, the thread streams answers with the lookups Nova made, and matching rows render like Focus and Changes rows. Stop replaces Send while an answer streams. The conversation lives for the session only and survives switching tabs. See [docs/ASK_NOVA.md](../../docs/ASK_NOVA.md) for running the API.
+Ask Nova is off until the student turns it on in the tab. The setup card states what is sent (a compact copy of course data: titles, dates, statuses, links), where (the Nova server address, prefilled with the local default and editable under Change), and what never leaves the device (cookies, raw responses, announcement text, the student's name). Once on, the field offers three suggested questions, the thread streams answers with the lookups Nova made, and matching rows render like Focus and Changes rows. Stop replaces Send while an answer streams. The conversation lives for the session only and survives switching tabs. See [docs/ASK_NOVA.md](../../docs/ASK_NOVA.md) for running the API.
 
 ## Preview harness
 

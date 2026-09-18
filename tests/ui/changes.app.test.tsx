@@ -26,7 +26,7 @@ describe("changes feed: end to end", () => {
     db = createNovaDb(`changes-${Date.now()}`);
     let clock = NOW;
     const factory: TransportFactory = (_mode, { now, demoScenario }) => new FixtureTransport(demoResolver(buildDemoTenant(now, demoScenario)));
-    render(<App db={db} host={createStubHost()} now={() => clock} transportFactory={factory} autoSync={false} />);
+    render(<App db={db} host={createStubHost()} now={() => clock} transportFactory={factory} autoSync={false} undoMs={400} />);
 
     const user = userEvent.setup();
     const refreshable = () => waitFor(() => expect((screen.getByRole("button", { name: /refresh now/i }) as HTMLButtonElement).disabled).toBe(false), LONG);
@@ -50,14 +50,25 @@ describe("changes feed: end to end", () => {
     expect(screen.getAllByRole("button", { name: /^Delete change "/ })).toHaveLength(total);
     await waitFor(() => expect(screen.getByRole("tab", { name: /changes/i }).textContent).toContain(String(total - 1)));
 
-    // Delete another: gone from the feed and from the database immediately.
+    // Delete another, then Undo: it leaves the feed at once, focus moves to Undo, and nothing is removed from the database.
     const remaining = screen.getAllByRole("button", { name: /^Delete change "/ }).filter((button) => !button.getAttribute("aria-label")?.includes(readTitle));
     const deleteTitle = /^Delete change "(.*)"$/.exec(remaining[0]?.getAttribute("aria-label") ?? "")?.[1] as string;
-    fireEvent.click(remaining[0] as HTMLButtonElement);
+    await user.click(remaining[0] as HTMLButtonElement);
     await waitFor(() => expect(screen.getAllByRole("button", { name: /^Delete change "/ })).toHaveLength(total - 1));
-    expect(await screen.findByText(`Deleted the change for "${deleteTitle}".`)).toBeTruthy();
+    const undo = screen.getByRole("button", { name: /^undo$/i });
+    expect(document.activeElement).toBe(undo);
+    fireEvent.click(undo);
+    expect(await screen.findByText(`Restored the change for "${deleteTitle}".`)).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /^Delete change "/ })).toHaveLength(total);
+    expect(await db?.changeEvents.count()).toBe(total);
+
+    // Delete it again and let the Undo window close: now it is gone from the database too.
+    fireEvent.click(screen.getByRole("button", { name: `Delete change "${deleteTitle}"` }));
+    expect(await screen.findByText(`Deleted the change for "${deleteTitle}". Undo to restore it.`)).toBeTruthy();
     expect(screen.queryByText(/hidden until the next refresh/i)).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("button", { name: /^undo$/i })).toBeNull(), LONG);
     await waitFor(async () => expect(await db?.changeEvents.count()).toBe(total - 1));
+    expect(screen.getAllByRole("button", { name: /^Delete change "/ })).toHaveLength(total - 1);
 
     // Next refresh: the read change leaves the feed, the deleted one does not come back.
     clock = new Date(NOW.getTime() + 40 * 60_000);

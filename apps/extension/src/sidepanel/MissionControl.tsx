@@ -10,6 +10,7 @@ import { AskChips, AskView, useAskThread, type AskClient, type AskClientFactory,
 import type { SyncStatusRecord } from "../storage/novaDb";
 import { PHASE_LABELS, isRunningPhase, isStale, type SyncRuntimeState } from "../sync/syncState";
 import { StateBanners, SyncProgress } from "./components/Banners";
+import { UndoToast } from "./components/UndoToast";
 import { ChangesFeed } from "./components/ChangesFeed";
 import { CountsStrip } from "./components/CountsStrip";
 import { CourseFilter } from "./components/CourseFilter";
@@ -49,6 +50,8 @@ export type MissionControlActions = {
   deleteEvent: (id: string, title: string) => void;
   dismissBanner: (id: string) => void;
   restoreDismissed: () => void;
+  /** Brings back a change deleted within the last few seconds. Optional so callers without Undo still work. */
+  undoDelete?: () => void;
 };
 
 /** Everything the Ask tab needs. Optional so existing callers and tests are untouched. */
@@ -74,12 +77,14 @@ export type MissionControlProps = {
   dismissals: SessionDismissals;
   actions: MissionControlActions;
   ask?: AskProps;
+  /** A change deleted moments ago that can still be restored. */
+  pendingDelete?: { id: string; title: string } | null;
 };
 
 const CLIENT_VERSION = "0.1.0";
 
 /** Presentational root. Everything it needs arrives through props so tests and the preview harness can drive every state. */
-export const MissionControl = ({ dashboard, status, runtime, feasibility, preferences, hasEverSynced, announcement, now, tenantOrigin, dismissals, actions, ask }: MissionControlProps) => {
+export const MissionControl = ({ dashboard, status, runtime, feasibility, preferences, hasEverSynced, announcement, now, tenantOrigin, dismissals, actions, ask, pendingDelete = null }: MissionControlProps) => {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const phase = runtime.phase === "idle" ? status.phase : runtime.phase;
@@ -136,6 +141,32 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
   const showSkeleton = !dashboard && running;
   const hiddenCount = dashboard ? dashboard.hidden.items + dismissals.banners.size : countDismissed(dismissals);
   const fresh = freshness(status.mode, phase, status.lastSuccessfulSyncAt, stale, now);
+
+  // The same notices head every tab: a broken connection must be visible wherever the student is looking.
+  const stateBanners = (
+    <div className="state-banners">
+      <StateBanners
+        mode={status.mode}
+        showDemo={tab !== "ask"}
+        phase={phase}
+        error={runtime.error ?? status.error}
+        warnings={runtime.warnings.length > 0 ? runtime.warnings : status.warnings}
+        failedCourseIds={runtime.failedCourseIds.length > 0 ? runtime.failedCourseIds : status.failedCourseIds}
+        courses={dashboard?.courseById ?? new Map()}
+        lastSuccessfulSyncAt={status.lastSuccessfulSyncAt}
+        lastAttemptedSyncAt={status.lastAttemptedSyncAt}
+        stale={stale}
+        hasData={!!dashboard}
+        now={now}
+        onRefresh={actions.refresh}
+        onConnectLive={actions.connectLive}
+        onOpenBrightspace={() => actions.openUrl(`${tenantOrigin}/d2l/home`)}
+        onUseDemo={actions.useDemoData}
+        dismissed={dismissals.banners}
+        onDismiss={actions.dismissBanner}
+      />
+    </div>
+  );
 
   const hero = showFirstRun ? (
     <Hero title="Know what changed. Know what matters next." meta="Nova · Mission Control for Brightspace" text="Nova reads your Brightspace courses through your own logged-in session and keeps everything on this device. Nothing leaves it unless you turn on Ask Nova." />
@@ -210,6 +241,16 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
   return (
     <Tooltip.Provider delayDuration={300}>
       <div className="panel">
+        <a
+          href="#panel-main"
+          className="skip-link"
+          onClick={(event) => {
+            event.preventDefault();
+            document.getElementById("panel-main")?.focus();
+          }}
+        >
+          Skip to content
+        </a>
         <Tabs.Root className="panel-root" value={tab} onValueChange={(value) => actions.setPreferences({ activeTab: value as TabId })}>
           <FieldHeader
             freshness={fresh}
@@ -227,6 +268,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
           <p className="sr-only" aria-live="polite" aria-atomic="true">
             {announcement ?? ""}
           </p>
+          <main id="panel-main" className="panel-main" tabIndex={-1} aria-label="Content">
           {showFirstRun ? (
             <div className="tab-content">
               <FirstRun busy={running} onConnectLive={actions.connectLive} onUseDemo={actions.useDemoData} />
@@ -251,25 +293,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
               ) : null}
               <Tabs.Content className="tab-content" value="focus">
                 <div className="stack">
-                  <StateBanners
-                    mode={status.mode}
-                    phase={phase}
-                    error={runtime.error ?? status.error}
-                    warnings={runtime.warnings.length > 0 ? runtime.warnings : status.warnings}
-                    failedCourseIds={runtime.failedCourseIds.length > 0 ? runtime.failedCourseIds : status.failedCourseIds}
-                    courses={dashboard?.courseById ?? new Map()}
-                    lastSuccessfulSyncAt={status.lastSuccessfulSyncAt}
-                    lastAttemptedSyncAt={status.lastAttemptedSyncAt}
-                    stale={stale}
-                    hasData={!!dashboard}
-                    now={now}
-                    onRefresh={actions.refresh}
-                    onConnectLive={actions.connectLive}
-                    onOpenBrightspace={() => actions.openUrl(`${tenantOrigin}/d2l/home`)}
-                    onUseDemo={actions.useDemoData}
-                    dismissed={dismissals.banners}
-                    onDismiss={actions.dismissBanner}
-                  />
+                  {stateBanners}
                   {showSkeleton ? (
                     <FocusSkeleton />
                   ) : dashboard ? (
@@ -290,29 +314,36 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                 </div>
               </Tabs.Content>
               <Tabs.Content className="tab-content" value="week">
+                {stateBanners}
                 {dashboard ? <WeekView dashboard={dashboard} now={now} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} selectedDay={selectedDay} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
               </Tabs.Content>
               <Tabs.Content className="tab-content" value="changes">
+                {stateBanners}
                 {dashboard ? <ChangesFeed dashboard={dashboard} now={now} baselineOnly={dashboard.totalChanges === 0 && hasEverSynced} canOpen={canOpen} onOpen={actions.openUrl} onSetRead={actions.setEventRead} onDelete={actions.deleteEvent} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
               </Tabs.Content>
               {ask ? (
                 // Force-mounted and hidden so the conversation survives a switch to another tab.
                 <Tabs.Content className="tab-content tab-content-ask" value="ask" forceMount hidden={tab !== "ask"}>
                   {dashboard ? (
-                    <AskView thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} />
+                    <AskView notices={tab === "ask" ? stateBanners : null} thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} />
                   ) : showSkeleton ? (
                     <FocusSkeleton />
                   ) : (
-                    <div className="empty">
-                      <strong>No data yet</strong>
-                      <span>Ask Nova needs a completed refresh first.</span>
+                    <div className="ask-thread">
+                      {stateBanners}
+                      <div className="empty">
+                        <strong>No data yet</strong>
+                        <span>Ask Nova needs a completed refresh first.</span>
+                      </div>
                     </div>
                   )}
                 </Tabs.Content>
               ) : null}
             </>
           )}
+          </main>
         </Tabs.Root>
+        {pendingDelete && actions.undoDelete ? <UndoToast key={pendingDelete.id} message={`Deleted "${pendingDelete.title}"`} onUndo={actions.undoDelete} /> : null}
       </div>
     </Tooltip.Provider>
   );

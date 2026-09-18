@@ -39,7 +39,7 @@ export class HttpAskClient implements AskClient {
     try {
       response = await this.fetchImpl(`${this.baseUrl}/v1/chat`, { method: "POST", headers: this.headers(true), body: JSON.stringify(request), signal });
     } catch {
-      yield signal.aborted ? errorEvent("aborted", "Stopped.", true) : errorEvent("unreachable", `Nova API is not reachable at ${this.baseUrl}.`, true);
+      yield signal.aborted ? errorEvent("aborted", "Stopped.", true) : errorEvent("unreachable", `Nothing answered at ${this.baseUrl}.`, true);
       return;
     }
     if (!response.ok) {
@@ -48,12 +48,12 @@ export class HttpAskClient implements AskClient {
       if (parsed.success) {
         yield errorEvent(parsed.data.error.code, parsed.data.error.message, parsed.data.error.retryable ?? response.status >= 500, parsed.data.error.retryAfterSeconds);
       } else {
-        yield errorEvent(response.status === 401 ? "unauthorized" : "upstream_error", `Nova API answered ${response.status}.`, response.status >= 500);
+        yield errorEvent(response.status === 401 ? "unauthorized" : "upstream_error", `The Nova server answered with an error (${response.status}). Try again in a moment.`, response.status >= 500);
       }
       return;
     }
     if (!response.body) {
-      yield errorEvent("upstream_error", "Nova API sent an empty reply.", true);
+      yield errorEvent("upstream_error", "The Nova server sent back an empty answer. Try again.", true);
       return;
     }
     let terminal = false;
@@ -81,12 +81,12 @@ export class HttpAskClient implements AskClient {
   async health(signal?: AbortSignal): Promise<AskHealth> {
     try {
       const response = await this.fetchImpl(`${this.baseUrl}/healthz`, { headers: this.headers(false), signal });
-      if (!response.ok) return { ok: false, configured: false, model: null, message: `Nova API answered ${response.status}.` };
+      if (!response.ok) return { ok: false, configured: false, model: null, message: response.status === 401 || response.status === 403 ? "The Nova server didn't accept the access code. Check it and try again." : `The Nova server answered with an error (${response.status}). Check the address and try again.` };
       const parsed = healthResponseSchema.safeParse(await response.json());
-      if (!parsed.success) return { ok: false, configured: false, model: null, message: "That address did not answer like the Nova API." };
+      if (!parsed.success) return { ok: false, configured: false, model: null, message: "Something answered at that address, but it isn't a Nova server. Check the address." };
       return { ok: true, configured: parsed.data.configured, model: parsed.data.model, message: null };
     } catch {
-      return { ok: false, configured: false, model: null, message: `Nova API is not reachable at ${this.baseUrl}.` };
+      return { ok: false, configured: false, model: null, message: `Nothing answered at ${this.baseUrl}. If the server runs on this computer, make sure it's started.` };
     }
   }
 }

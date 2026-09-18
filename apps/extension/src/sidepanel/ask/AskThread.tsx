@@ -3,6 +3,7 @@ import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { Dashboard } from "../model";
 import { AskRows } from "./AskRows";
+import { hostOf } from "./askSettings";
 import type { AskMessage, AskStatus } from "./useAskThread";
 
 const TOOL_LABELS: Record<ToolName, string> = {
@@ -16,19 +17,19 @@ const TOOL_LABELS: Record<ToolName, string> = {
 export const errorCopy = (error: AskErrorEvent, apiBaseUrl: string): { title: string; text: string; retry: boolean; settings: boolean } => {
   switch (error.code) {
     case "unreachable":
-      return { title: "Nova API is not reachable", text: `Nothing answered at ${apiBaseUrl}. Start it with npm run dev:api, or change the address in Settings.`, retry: true, settings: true };
+      return { title: "Can't reach the Nova server", text: `Nothing answered at ${hostOf(apiBaseUrl)}. If the server runs on this computer, make sure it's started, then retry. Otherwise, check the address in Settings.`, retry: true, settings: true };
     case "not_configured":
-      return { title: "The Nova API has no model key yet", text: "Add OPENROUTER_API_KEY to apps/api/.env and restart the API.", retry: true, settings: false };
+      return { title: "The Nova server can't answer yet", text: "It still needs a model key. Whoever set up the server can add one, then retry.", retry: true, settings: false };
     case "unauthorized":
-      return { title: "The Nova API refused the request", text: error.message, retry: false, settings: true };
+      return { title: "The Nova server didn't accept your access code", text: "Check the access code in Settings. It's missing or doesn't match the one the server expects.", retry: false, settings: true };
     case "rate_limited":
-      return { title: "The model is rate limited", text: error.retryAfterSeconds ? `Try again in ${Math.ceil(error.retryAfterSeconds)} seconds.` : "Try again in a moment.", retry: true, settings: false };
+      return { title: "The AI model is busy", text: error.retryAfterSeconds ? `Try again in ${Math.ceil(error.retryAfterSeconds)} seconds.` : "Try again in a moment.", retry: true, settings: false };
     case "budget_exhausted":
-      return { title: "Today's token budget is used up", text: "The Nova API caps tokens per day. Try again tomorrow.", retry: false, settings: false };
+      return { title: "Ask Nova has hit today's limit", text: "The Nova server allows a set amount of use per day, and it's used up. Try again tomorrow.", retry: false, settings: false };
     case "upstream_timeout":
-      return { title: "The model took too long", text: "Try a shorter question or ask again.", retry: true, settings: false };
+      return { title: "The answer took too long", text: "Try a shorter question or ask again.", retry: true, settings: false };
     case "bad_request":
-      return { title: "The Nova API rejected the question", text: error.message, retry: false, settings: false };
+      return { title: "Nova couldn't send that question", text: "Try asking it again in fewer words.", retry: false, settings: false };
     default:
       return { title: "Nova could not answer", text: error.message, retry: error.retryable, settings: false };
   }

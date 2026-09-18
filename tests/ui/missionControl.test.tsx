@@ -4,6 +4,8 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import { EMPTY_DISMISSALS } from "../../apps/extension/src/sidepanel/dismissals";
+import { weekHero } from "../../apps/extension/src/sidepanel/heroes";
+import { isUpcoming } from "../../apps/extension/src/sidepanel/model";
 import { DEFAULT_PREFERENCES, MissionControl, type MissionControlActions, type MissionControlProps } from "../../apps/extension/src/sidepanel/MissionControl";
 import { INITIAL_SYNC_STATUS } from "../../apps/extension/src/storage/repositories";
 import { IDLE_STATE } from "../../apps/extension/src/sync/syncState";
@@ -62,14 +64,14 @@ describe("Mission Control states", () => {
     render(<MissionControl {...baseProps({ status: { ...INITIAL_SYNC_STATUS, mode: "live", lastAttemptedSyncAt: NOW.toISOString() }, runtime: { ...IDLE_STATE, phase: "loading-course-data", progress: { completed: 1, total: 4 } }, hasEverSynced: false })} />);
     expect(screen.getByTestId("skeleton")).toBeTruthy();
     expect(screen.getByText("Refreshing…")).toBeTruthy();
-    expect(screen.getByRole("status", { name: /connection: refreshing/i })).toBeTruthy();
+    expect(screen.getByRole("status", { name: /^refreshing\. no successful refresh yet/i })).toBeTruthy();
     expect((screen.getByRole("button", { name: /refresh now/i }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("labels demo data clearly and never as live", async () => {
     const { dashboard } = await demoDashboard();
     render(<MissionControl {...baseProps({ dashboard, status: { ...baseProps().status, mode: "fixture" } })} />);
-    expect(screen.getByRole("status", { name: /connection: demo data/i })).toBeTruthy();
+    expect(screen.getByRole("status", { name: /^demo data, not your brightspace/i })).toBeTruthy();
     expect(screen.getByText(/these courses are fictional/i)).toBeTruthy();
     expect(screen.queryByText(/^Live$/)).toBeNull();
   });
@@ -77,13 +79,13 @@ describe("Mission Control states", () => {
   it("renders the ready state with counts, next move, and sections", async () => {
     const { dashboard } = await demoDashboard();
     render(<MissionControl {...baseProps({ dashboard })} />);
-    expect(screen.getByRole("status", { name: /connection: live/i })).toBeTruthy();
+    expect(screen.getByRole("status", { name: /^live brightspace data\. last successful refresh/i })).toBeTruthy();
     expect(screen.getByText(/live · 4m ago/i)).toBeTruthy();
     const summary = screen.getByRole("group", { name: /workload summary/i });
     expect(within(summary).getByText("Overdue").previousSibling?.textContent).toBe(String(dashboard.counts.overdue));
     expect(within(summary).getByText("Today").previousSibling?.textContent).toBe(String(dashboard.counts.today));
     expect(screen.getByRole("heading", { level: 2, name: dashboard.nextMove?.item.title as string })).toBeTruthy();
-    expect(screen.getAllByText(/suggested priority/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/why this first\?/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/AI priority/i)).toBeNull();
     expect(screen.getByRole("button", { name: /^Overdue/ })).toBeTruthy();
   });
@@ -123,7 +125,50 @@ describe("Mission Control states", () => {
     const { dashboard } = await demoDashboard({ courseFilter: "does-not-exist" });
     render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, courseFilter: "does-not-exist" } })} />);
     expect(screen.getByText(/no assignments or quizzes yet/i)).toBeTruthy();
-    expect(screen.getByText(/nothing active right now/i)).toBeTruthy();
+    expect(screen.getByText(/you're all caught up/i)).toBeTruthy();
+  });
+});
+
+describe("trustworthy state and focus", () => {
+  it("shows a broken connection on every tab and never offers to hide it", async () => {
+    const { dashboard } = await demoDashboard();
+    const status = { ...baseProps().status, phase: "session-expired" as const, error: { kind: "session-expired" as const } };
+    for (const activeTab of ["focus", "week", "changes"] as const) {
+      render(<MissionControl {...baseProps({ dashboard, status, preferences: { ...DEFAULT_PREFERENCES, activeTab, collapsedSections: [] } })} />);
+      const alert = screen.getByRole("alert");
+      expect(alert.textContent).toContain("Brightspace session expired");
+      expect(within(alert).queryByRole("button", { name: /hide/i })).toBeNull();
+      cleanup();
+    }
+    render(<MissionControl {...baseProps({ dashboard, status: { ...baseProps().status, phase: "offline", error: { kind: "network", retryable: true, operation: "fetch" } } })} />);
+    expect(within(screen.getByRole("alert")).queryByRole("button", { name: /hide/i })).toBeNull();
+  });
+
+  it("never shows demo data as freshly refreshed when the last refresh failed", async () => {
+    const { dashboard } = await demoDashboard();
+    render(<MissionControl {...baseProps({ dashboard, status: { ...baseProps().status, mode: "fixture", phase: "failed", lastSuccessfulSyncAt: NOW.toISOString() } })} />);
+    const fresh = screen.getByRole("status", { name: /^demo data\. the last refresh failed/i });
+    expect(fresh.textContent).toBe("Demo · Refresh failed");
+  });
+
+  it("offers a skip link and keeps the kind icon out of the tab order", async () => {
+    const { dashboard } = await demoDashboard();
+    render(<MissionControl {...baseProps({ dashboard })} />);
+    const skip = screen.getByRole("link", { name: /skip to content/i });
+    fireEvent.click(skip);
+    expect(document.activeElement?.id).toBe("panel-main");
+    expect(document.querySelectorAll(".kind-chip[tabindex]")).toHaveLength(0);
+  });
+});
+
+describe("one definition of this week", () => {
+  it("gives the counts strip, the sections, and the Week headline the same seven-day number", async () => {
+    const { dashboard } = await demoDashboard({ withChanges: true });
+    const { buckets, counts } = dashboard;
+    const upcomingOnWeekTab = dashboard.week.flatMap((day) => day.entries).filter((entry) => isUpcoming(entry.bucket)).length;
+    expect(counts.thisWeek).toBe(buckets.today.length + buckets.tomorrow.length + buckets["this-week"].length);
+    expect(upcomingOnWeekTab).toBe(counts.thisWeek);
+    expect(weekHero(dashboard).title).toMatch(new RegExp(`^${["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"][counts.thisWeek] ?? counts.thisWeek} deadlines?`, "i"));
   });
 });
 
@@ -181,7 +226,7 @@ describe("keyboard navigation", () => {
     expect(screen.getByRole("list", { name: /next seven days/i }).children).toHaveLength(7);
     const chip = screen.getAllByRole("button", { name: /Lab 3: Timer Interrupts/ })[0] as HTMLButtonElement;
     await user.click(chip);
-    expect(screen.getByRole("dialog")).toHaveProperty("textContent", expect.stringContaining("Suggested priority"));
+    expect(screen.getByRole("dialog")).toHaveProperty("textContent", expect.stringContaining("Priority, out of 100"));
   });
 });
 

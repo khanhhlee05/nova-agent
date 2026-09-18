@@ -27,7 +27,7 @@ const RANGE_LABEL: Record<z.infer<typeof rangeSchema>, string> = {
   overdue: "overdue",
   today: "due today",
   tomorrow: "due tomorrow",
-  week: "due this week",
+  week: "due in the next 7 days",
   later: "due later",
   "no-date": "without a due date",
   all: "in total",
@@ -35,9 +35,9 @@ const RANGE_LABEL: Record<z.infer<typeof rangeSchema>, string> = {
 
 export const listDeadlines = defineTool({
   name: "list_deadlines",
-  description: "Lists assignments and quizzes by time range, optionally for one course or one kind. Default range is 'week' (today through Sunday). Completed items are excluded unless includeDone is true.",
+  description: "Lists assignments and quizzes by time range, optionally for one course or one kind. Default range is 'week' (today plus the next six days). Completed items are excluded unless includeDone is true.",
   input: z.object({
-    range: rangeSchema.optional().describe("Time range. 'week' means today through the end of the student's week. 'all' means every known item."),
+    range: rangeSchema.optional().describe("Time range. 'week' means today plus the next six days, the same seven days as the Week tab. 'all' means every known item."),
     course: z.string().max(120).optional().describe("Course id, code, or part of the course name."),
     kind: z.enum(["assignment", "quiz"]).optional().describe("Only this kind of item."),
     includeDone: z.boolean().optional().describe("Include submitted and completed items. Default false."),

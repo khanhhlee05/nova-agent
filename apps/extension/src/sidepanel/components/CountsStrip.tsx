@@ -16,7 +16,7 @@ export const CountsStrip = ({ counts, onSelect }: CountsStripProps) => (
     </button>
     <button type="button" className="count" onClick={() => onSelect("this-week")}>
       <strong>{counts.thisWeek}</strong>
-      <span>This week</span>
+      <span>Next 7 days</span>
     </button>
     <button type="button" className="count" onClick={() => onSelect("changes")}>
       <strong>{counts.unread}</strong>

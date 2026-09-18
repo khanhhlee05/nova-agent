@@ -119,17 +119,23 @@ describe("Ask tab", () => {
     expect(screen.getByRole("heading", { level: 2, name: /ask nova is off/i })).toBeTruthy();
     expect(screen.getByText(/what leaves this device/i)).toBeTruthy();
     expect(screen.getByText(/never leave this device/i)).toBeTruthy();
-    expect((screen.getByRole("textbox", { name: /ask nova a question/i }) as HTMLTextAreaElement).disabled).toBe(true);
+    const offInput = screen.getByRole("textbox", { name: /ask nova a question/i }) as HTMLTextAreaElement;
+    expect(offInput.readOnly).toBe(true);
+    expect(offInput.getAttribute("aria-disabled")).toBe("true");
     expect(screen.queryByRole("group", { name: /suggested questions/i })).toBeNull();
-    const address = screen.getByRole("textbox", { name: /nova api address/i });
+    expect(screen.queryByRole("textbox", { name: /nova server address/i })).toBeNull();
+    expect(screen.getByText("localhost:8787")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /change nova server address/i }));
+    const address = screen.getByRole("textbox", { name: /nova server address/i }) as HTMLInputElement;
+    expect(address.value).toBe("http://localhost:8787");
     fireEvent.change(address, { target: { value: "not a url" } });
-    expect(screen.getByText(/enter an http or https address/i)).toBeTruthy();
+    expect(screen.getByText(/enter the full address/i)).toBeTruthy();
     expect((screen.getByRole("button", { name: /turn on ask nova/i }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(address, { target: { value: "http://nova.example:8787" } });
-    expect(screen.getByText(/remote addresses must use https/i)).toBeTruthy();
+    expect(screen.getByText(/must start with https/i)).toBeTruthy();
     expect((screen.getByRole("button", { name: /turn on ask nova/i }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(address, { target: { value: "https://nova.example:8787" } });
-    expect(screen.queryByText(/must use https/i)).toBeNull();
+    expect(screen.queryByText(/must start with https/i)).toBeNull();
     expect((screen.getByRole("button", { name: /turn on ask nova/i }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.change(address, { target: { value: " http://localhost:8787/ " } });
     fireEvent.click(screen.getByRole("button", { name: /turn on ask nova/i }));
@@ -140,7 +146,7 @@ describe("Ask tab", () => {
     const { dashboard, events } = await demoDashboard();
     render(<MissionControl {...baseProps({ dashboard, ask: askProps(null, events, DEFAULT_ASK_SETTINGS) })} />);
     fireEvent.click(screen.getByRole("button", { name: /test connection/i }));
-    expect(await screen.findByText(/connected\. model: scripted/i)).toBeTruthy();
+    expect(await screen.findByText(/connected\. answers come from scripted/i)).toBeTruthy();
   });
 
   it("answers a suggested question with text and rows that match the tool result", async () => {
@@ -151,7 +157,7 @@ describe("Ask tab", () => {
     const conversation = await screen.findByRole("list", { name: /conversation/i });
     expect(within(conversation).getByText("What should I start first?")).toBeTruthy();
     await screen.findByText(/looked up your workload/i);
-    await screen.findByText(/the rows below come straight from your brightspace data/i);
+    await within(conversation).findByText(/the rows below come straight from your brightspace data/i);
     const compact = compactSnapshot(snapshot, events, NOW, { mode: "live" });
     const expected = executeTool("get_brief", {}, { snapshot: compact });
     if (!expected.ok) throw new Error(expected.error);
@@ -161,7 +167,8 @@ describe("Ask tab", () => {
     expect(screen.getByRole("button", { name: `Open ${expected.rows[0]?.title} in Brightspace` })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: `Open ${expected.rows[0]?.title} in Brightspace` }));
     expect((props.actions as ReturnType<typeof actions>).calls.openUrl?.[0]?.[0]).toContain(TENANT);
-    await waitFor(() => expect(screen.getByText("Nova answered.")).toBeTruthy());
+    // The live region carries the answer itself, not just "Nova answered."
+    await waitFor(() => expect(screen.getByText(/^Nova answered: .*the rows below come straight from your brightspace data/i)).toBeTruthy());
   });
 
   it("sends on Enter, keeps Shift+Enter as a newline, and rejects empty questions", async () => {
@@ -169,7 +176,7 @@ describe("Ask tab", () => {
     const { dashboard, events } = await demoDashboard({ withChanges: true });
     render(<MissionControl {...baseProps({ dashboard, ask: askProps(scripted(), events) })} />);
     const input = screen.getByRole("textbox", { name: /ask nova a question/i }) as HTMLTextAreaElement;
-    expect((screen.getByRole("button", { name: /send question/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: /send question/i }).getAttribute("aria-disabled")).toBe("true");
     await user.type(input, "What changed{Shift>}{Enter}{/Shift}today?");
     expect(input.value).toBe("What changed\ntoday?");
     expect(screen.queryByRole("list", { name: /conversation/i })).toBeNull();
@@ -187,12 +194,16 @@ describe("Ask tab", () => {
     fireEvent.click(screen.getByRole("button", { name: /send question/i }));
     await screen.findByText(/looked up your workload/i);
     expect(screen.getByText(/thinking/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /stop answering/i }));
+    // One button: Send turns into Stop in place, and the textarea stays editable for the next question.
+    const stop = screen.getByRole("button", { name: /stop answering/i });
+    expect(screen.queryByRole("button", { name: /send question/i })).toBeNull();
+    expect((screen.getByRole("textbox", { name: /ask nova a question/i }) as HTMLTextAreaElement).readOnly).toBe(false);
+    fireEvent.click(stop);
     release();
     expect(await screen.findByText(/stopped before nova finished/i)).toBeTruthy();
     expect(screen.queryByText("First part.")).toBeNull();
     expect(screen.queryByText(/second part/i)).toBeNull();
-    expect(screen.getByRole("button", { name: /send question/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /send question/i })).toBe(stop);
   });
 
   it("renders typed error copy with retry and settings actions", async () => {
@@ -202,7 +213,7 @@ describe("Ask tab", () => {
     fireEvent.change(screen.getByRole("textbox", { name: /ask nova a question/i }), { target: { value: "Hi" } });
     fireEvent.click(screen.getByRole("button", { name: /send question/i }));
     const alert = await screen.findByRole("alert");
-    expect(within(alert).getByText(/nova api is not reachable/i)).toBeTruthy();
+    expect(within(alert).getByText(/can't reach the nova server/i)).toBeTruthy();
     expect(within(alert).getByText(/localhost:8787/)).toBeTruthy();
     expect(within(alert).getByRole("button", { name: /retry/i })).toBeTruthy();
     fireEvent.click(within(alert).getByRole("button", { name: /settings/i }));
