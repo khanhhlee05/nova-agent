@@ -87,13 +87,18 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
   // A deleted change leaves the feed at once but stays in the database until its Undo window closes.
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const pending = useRef<{ entry: PendingDelete; timer: ReturnType<typeof setTimeout> } | null>(null);
+  // Ids whose delete has been sent to the database. The live query trails a write by a tick, so a
+  // committed row stays hidden until it has actually left the query instead of flashing back first.
+  const [deleting, setDeleting] = useState<ReadonlySet<string>>(() => new Set());
   const commitDelete = useCallback(() => {
     const current = pending.current;
     if (!current) return;
     clearTimeout(current.timer);
     pending.current = null;
     setPendingDelete(null);
-    void deleteChangeEvent(db, current.entry.id).then(publishBadge);
+    const { id } = current.entry;
+    setDeleting((prev) => new Set(prev).add(id));
+    void deleteChangeEvent(db, id).then(publishBadge);
   }, [db, publishBadge]);
   // Closing the panel inside the window still deletes: the student asked for it and never pressed Undo.
   const commitLatest = useRef(commitDelete);
@@ -107,7 +112,15 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
     };
   }, []);
 
-  const visibleEvents = useMemo(() => (events && pendingDelete ? events.filter((event) => event.id !== pendingDelete.id) : events), [events, pendingDelete]);
+  const visibleEvents = useMemo(() => {
+    if (!events || (!pendingDelete && deleting.size === 0)) return events;
+    return events.filter((event) => event.id !== pendingDelete?.id && !deleting.has(event.id));
+  }, [deleting, events, pendingDelete]);
+  useEffect(() => {
+    if (!events || deleting.size === 0) return;
+    const gone = [...deleting].filter((id) => !events.some((event) => event.id === id));
+    if (gone.length > 0) setDeleting((prev) => new Set([...prev].filter((id) => !gone.includes(id))));
+  }, [deleting, events]);
 
   const dashboard = useMemo(
     () =>
