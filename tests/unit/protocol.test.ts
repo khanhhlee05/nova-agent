@@ -49,7 +49,7 @@ describe("parseSseStream", () => {
 });
 
 const minimalSnapshot = (): CompactSnapshot => ({
-  version: 1,
+  version: 2,
   mode: "demo",
   now: "2026-09-08T18:00:00.000Z",
   timezone: "America/New_York",
@@ -65,6 +65,7 @@ const minimalSnapshot = (): CompactSnapshot => ({
       title: "Lab 3: Timer Interrupts",
       dueAt: "2026-09-11T03:59:00.000Z",
       dueLocal: "Thu, Sep 10, 11:59 PM",
+      dueDate: "2026-09-10",
       bucket: "this-week",
       status: "not-started",
       visibility: "visible",
@@ -77,12 +78,21 @@ const minimalSnapshot = (): CompactSnapshot => ({
   announcements: [],
   changes: [],
   counts: { overdue: 0, today: 0, thisWeek: 1, unread: 0, activeItems: 1 },
+  calendar: { today: "2026-09-08", weekStart: "2026-09-07", thisWeek: { from: "2026-09-08", to: "2026-09-14" }, nextWeek: { from: "2026-09-14", to: "2026-09-20" } },
 });
 
 describe("chat request schema", () => {
   it("accepts a well-formed request", () => {
     const parsed = chatRequestSchema.safeParse({ message: "What is due?", history: [], snapshot: minimalSnapshot(), client: { name: "nova-extension", version: "0.1.0" } });
     expect(parsed.success).toBe(true);
+  });
+
+  it("accepts version 2 only, so an older extension gets a clear bad_request", () => {
+    expect(compactSnapshotSchema.safeParse({ ...minimalSnapshot(), version: 1 }).success).toBe(false);
+    expect(compactSnapshotSchema.safeParse(minimalSnapshot()).success).toBe(true);
+    const { calendar: _calendar, ...withoutCalendar } = minimalSnapshot();
+    void _calendar;
+    expect(compactSnapshotSchema.safeParse(withoutCalendar).success).toBe(false);
   });
 
   it("rejects oversize arrays, bad urls, and unknown modes", () => {
@@ -92,6 +102,7 @@ describe("chat request schema", () => {
     const item = base.items[0] as CompactSnapshot["items"][number];
     expect(compactSnapshotSchema.safeParse({ ...base, items: Array.from({ length: 201 }, (_, i) => ({ ...item, id: `a${i}` })) }).success).toBe(false);
     expect(chatRequestSchema.safeParse({ message: "   ", history: [], snapshot: base, client: { name: "nova-extension", version: "0.1.0" } }).success).toBe(false);
+    expect(compactSnapshotSchema.safeParse({ ...base, items: [{ ...item, dueDate: "2026-9-8" }] }).success).toBe(false);
     expect(chatRequestSchema.safeParse({ message: "hi", history: Array.from({ length: 13 }, () => ({ role: "user", content: "x" })), snapshot: base, client: { name: "nova-extension", version: "0.1.0" } }).success).toBe(false);
   });
 });

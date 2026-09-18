@@ -384,6 +384,8 @@ h1, h2, h3, h4, p { margin: 0; }
 .ask-tool { font-size: 12.5px; color: var(--nova-muted); }
 .ask-tool[data-state="running"] { color: var(--nova-accent); }
 .ask-tool[data-state="error"] { color: var(--nova-overdue); }
+.ask-rows-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 8px 0 4px; margin-left: -4px; border: 0; border-radius: var(--nova-radius-sm); background: transparent; color: var(--nova-muted); font-size: 12.5px; font-weight: 600; }
+.ask-rows-toggle:hover { color: var(--nova-accent); background: var(--nova-accent-soft); }
 .ask-rows { display: flex; flex-direction: column; margin-top: 2px; border-top: 1px solid var(--nova-rule); }
 .ask-note { font-size: 12.5px; color: var(--nova-muted); }
 .ask-composer { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--nova-rule); background: var(--nova-bg); }

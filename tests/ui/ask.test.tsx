@@ -5,12 +5,14 @@ import type { AskEvent, ChatRequest } from "@nova-agent/protocol";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
+import { suggestedQuestions } from "../../apps/extension/src/sidepanel/ask/AskChips";
 import { LocalAskClient, type AskClient } from "../../apps/extension/src/sidepanel/ask/askClient";
 import { DEFAULT_ASK_SETTINGS, type AskSettings } from "../../apps/extension/src/sidepanel/ask/askSettings";
 import { EMPTY_DISMISSALS } from "../../apps/extension/src/sidepanel/dismissals";
 import { DEFAULT_PREFERENCES, MissionControl, type AskProps, type MissionControlActions, type MissionControlProps } from "../../apps/extension/src/sidepanel/MissionControl";
 import { INITIAL_SYNC_STATUS } from "../../apps/extension/src/storage/repositories";
 import { IDLE_STATE } from "../../apps/extension/src/sync/syncState";
+import type { Dashboard } from "../../apps/extension/src/sidepanel/model";
 import { NOW, TENANT, demoDashboard } from "../helpers/demoDashboard";
 
 afterEach(cleanup);
@@ -156,11 +158,19 @@ describe("Ask tab", () => {
     fireEvent.click(within(screen.getByRole("group", { name: /suggested questions/i })).getByRole("button", { name: /what should i start first/i }));
     const conversation = await screen.findByRole("list", { name: /conversation/i });
     expect(within(conversation).getByText("What should I start first?")).toBeTruthy();
-    await screen.findByText(/looked up your workload/i);
     await within(conversation).findByText(/the rows below come straight from your brightspace data/i);
     const compact = compactSnapshot(snapshot, events, NOW, { mode: "live" });
     const expected = executeTool("get_brief", {}, { snapshot: compact });
     if (!expected.ok) throw new Error(expected.error);
+    // The lookup line carries the tool's own summary, so a mismatch with the answer is visible.
+    expect(within(conversation).getByText(`Looked up your workload: ${expected.summary.replace(/\.$/, "")}`)).toBeTruthy();
+    // Rows sit behind a toggle, collapsed by default.
+    expect(screen.queryByRole("list", { name: /matching items/i })).toBeNull();
+    const toggle = screen.getByRole("button", { name: `Show ${expected.rows.length} matching items` });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(toggle.textContent).toBe("Hide matching items");
     const rows = within(screen.getByRole("list", { name: /matching items/i })).getAllByRole("listitem");
     expect(rows.map((row) => row.querySelector(".task-title")?.textContent)).toEqual(expected.rows.map((row) => row.title));
     expect(rows.length).toBeGreaterThan(0);
@@ -249,6 +259,7 @@ describe("Ask tab", () => {
     expect(screen.getByText(/answers describe fictional demo courses/i)).toBeTruthy();
     fireEvent.change(screen.getByRole("textbox", { name: /ask nova a question/i }), { target: { value: "Hi" } });
     fireEvent.click(screen.getByRole("button", { name: /send question/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Show 1 matching item" }));
     await screen.findByText("Foreign item");
     expect(screen.queryByRole("button", { name: /open foreign item/i })).toBeNull();
   });
@@ -295,5 +306,10 @@ describe("Ask tab", () => {
     expect(seen[0]?.snapshot.changes.length).toBe(events.length);
     expect(seen[0]?.client).toEqual({ name: "nova-extension", version: "0.1.0" });
     expect(JSON.stringify(seen[0])).not.toContain("2001");
+  });
+
+  it("suggests next week when nothing is overdue or due in the next 7 days", () => {
+    const quiet = { counts: { overdue: 0, today: 0, thisWeek: 0, unread: 0 }, totalChanges: 0 } as unknown as Dashboard;
+    expect(suggestedQuestions(quiet)[1]).toBe("What is due next week?");
   });
 });
