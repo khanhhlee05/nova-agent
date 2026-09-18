@@ -122,7 +122,7 @@ const TaskRow = ({ item, bucket, dashboard, now, expandedKey, onExpand, canOpen,
         </div>
         <div className="task-aside">
           <Tip label={`${item.kind === "quiz" ? "Quiz" : "Assignment"} · ${STATUS_LABELS[item.status]}`}>
-            <span className="kind-chip" data-status={item.status} tabIndex={0} role="img" aria-label={`${item.kind === "quiz" ? "Quiz" : "Assignment"}, ${STATUS_LABELS[item.status]}`}>
+            <span className="kind-chip" data-status={item.status} role="img" aria-label={`${item.kind === "quiz" ? "Quiz" : "Assignment"}, ${STATUS_LABELS[item.status]}`}>
               {done ? <StatusIcon status={item.status} size={15} /> : <KindIcon kind={item.kind} size={15} />}
             </span>
           </Tip>

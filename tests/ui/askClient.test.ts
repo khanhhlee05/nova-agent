@@ -95,7 +95,7 @@ describe("HttpAskClient", () => {
     const down = fetchWith(() => {
       throw new TypeError("fetch failed");
     });
-    expect((await new HttpAskClient({ baseUrl: "http://x", token: null, fetch: down.fetchImpl }).health()).message).toContain("not reachable");
+    expect((await new HttpAskClient({ baseUrl: "http://x", token: null, fetch: down.fetchImpl }).health()).message).toContain("Nothing answered at http://x");
   });
 });
 

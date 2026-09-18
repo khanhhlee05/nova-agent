@@ -1,4 +1,4 @@
-import { addDays, endOfDay, endOfWeek, startOfDay } from "date-fns";
+import { addDays, endOfDay, startOfDay } from "date-fns";
 import { isDone, type AcademicItem, type DeadlineBucket } from "./models";
 
 export type BucketOptions = {
@@ -10,8 +10,11 @@ export type DeadlineWindow = {
   now: Date;
   endOfToday: Date;
   endOfTomorrow: Date;
-  /** Sunday 23:59:59.999 in the local timezone. */
-  endOfWeekSunday: Date;
+  /**
+   * End of the sixth day after today, 23:59:59.999 local time. "This week"
+   * means these seven days everywhere: counts, sections, the Week tab, and Ask.
+   */
+  endOfWeek: Date;
 };
 
 /**
@@ -22,7 +25,7 @@ export const deadlineWindow = (now: Date = new Date()): DeadlineWindow => ({
   now,
   endOfToday: endOfDay(now),
   endOfTomorrow: endOfDay(addDays(startOfDay(now), 1)),
-  endOfWeekSunday: endOfWeek(now, { weekStartsOn: 1 }),
+  endOfWeek: endOfDay(addDays(startOfDay(now), 6)),
 });
 
 const toDate = (iso: string | null): Date | null => {
@@ -38,8 +41,8 @@ const toDate = (iso: string | null): Date | null => {
  * - `overdue`: due strictly before now.
  * - `today`: due from now through the end of the local day.
  * - `tomorrow`: due on the next local calendar day.
- * - `this-week`: due after tomorrow through Sunday 23:59:59 local time.
- * - `later`: due after this week.
+ * - `this-week`: due after tomorrow through the end of the sixth day after today.
+ * - `later`: due after those seven days.
  * - `no-date`: no due date.
  */
 export const classifyDeadline = (
@@ -53,7 +56,7 @@ export const classifyDeadline = (
   if (due.getTime() < window.now.getTime()) return "overdue";
   if (due.getTime() <= window.endOfToday.getTime()) return "today";
   if (due.getTime() <= window.endOfTomorrow.getTime()) return "tomorrow";
-  if (due.getTime() <= window.endOfWeekSunday.getTime()) return "this-week";
+  if (due.getTime() <= window.endOfWeek.getTime()) return "this-week";
   return "later";
 };
 
@@ -102,7 +105,7 @@ export type WorkloadCounts = {
   thisWeek: number;
 };
 
-/** Summary chip counts. "This week" includes today and tomorrow so the number reads as "due by Sunday". */
+/** Summary chip counts. `thisWeek` includes today and tomorrow so the number reads as "due in the next 7 days". */
 export const workloadCounts = (items: readonly AcademicItem[], options: BucketOptions = {}): WorkloadCounts => {
   const buckets = bucketItems(items, options);
   return {

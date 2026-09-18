@@ -191,7 +191,7 @@ describe("demoRouter", () => {
     expect(events[0]).toMatchObject({ type: "tool_call", name: "list_deadlines" });
     const toolResult = events[1];
     expect(toolResult?.type === "tool_result" && toolResult.ok).toBe(true);
-    expect(result.text).toContain("due this week");
+    expect(result.text).toContain("due in the next 7 days");
     expect(result.grounded).toBe(true);
   });
 

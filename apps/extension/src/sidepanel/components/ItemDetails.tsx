@@ -52,9 +52,9 @@ export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headin
         ) : null}
       </dl>
       {ranked ? (
-        <section className="priority-box" aria-label="Suggested priority">
+        <section className="priority-box" aria-label="Priority">
           <header>
-            <span>Suggested priority</span>
+            <span>Priority, out of 100</span>
             <strong className="mono">{ranked.priority.score}</strong>
           </header>
           <ul className="reasons">
