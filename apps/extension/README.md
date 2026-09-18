@@ -26,7 +26,7 @@ The seven-day strip in the field is tappable. Selecting a day shows only what is
 
 ## Collapsing sections
 
-Each deadline section (Overdue, Today, Tomorrow, This week, Later, Completed) collapses on its own, and a **Collapse all** / **Expand all** control above the list does all six at once. Both are remembered between opens.
+Each deadline section (Overdue, Today, Tomorrow, Later this week, Later, Completed) collapses on its own, and a **Collapse all** / **Expand all** control above the list does all six at once. Both are remembered between opens.
 
 ## Hiding things for a session
 
