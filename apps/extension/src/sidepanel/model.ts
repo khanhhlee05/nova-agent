@@ -4,6 +4,7 @@ import {
   classifyDeadline,
   deadlineWindow,
   isDone,
+  isLongOverdue,
   type AcademicItem,
   type AcademicSnapshot,
   type BucketedItems,
@@ -48,7 +49,10 @@ export type Dashboard = {
   courseById: Map<string, Course>;
   itemByKey: Map<string, AcademicItem>;
   items: AcademicItem[];
+  /** `overdue` holds the last two weeks only; older overdue items are in `longOverdue`. */
   buckets: BucketedItems;
+  /** Overdue for more than `LONG_OVERDUE_AFTER_DAYS`. Hidden by default, never ranked, not counted as overdue. */
+  longOverdue: AcademicItem[];
   /** `thisWeek` is today plus the next six days, the same seven days the Week tab shows. */
   counts: { overdue: number; today: number; thisWeek: number; unread: number };
   ranked: Map<string, RankedItem>;
@@ -106,8 +110,11 @@ export const buildDashboard = ({ snapshot, events, now, courseFilter, dismissedI
   if (localDone.size > 0) {
     buckets.completed = [...buckets.completed, ...items.filter((item) => localDone.has(item.key))].sort(byDueThenTitle);
   }
+  // Months-old items would otherwise outrank everything: the planner gives any overdue item the top urgency.
+  const longOverdue = buckets.overdue.filter((item) => isLongOverdue(item, now));
+  if (longOverdue.length > 0) buckets.overdue = buckets.overdue.filter((item) => !isLongOverdue(item, now));
 
-  const rankedList = rankItems(active, { now });
+  const rankedList = rankItems(longOverdue.length > 0 ? active.filter((item) => !isLongOverdue(item, now)) : active, { now });
   const ranked = new Map(rankedList.map((entry) => [entry.item.key, entry]));
   const top = rankedList[0];
   const nextMove = top ? { item: top.item, ranked: top, reasons: explainPriority(top.item, top.priority) } : null;
@@ -147,6 +154,7 @@ export const buildDashboard = ({ snapshot, events, now, courseFilter, dismissedI
     itemByKey,
     items,
     buckets,
+    longOverdue,
     counts: { overdue: buckets.overdue.length, today: buckets.today.length, thisWeek: buckets.today.length + buckets.tomorrow.length + buckets["this-week"].length, unread },
     ranked,
     nextMove,

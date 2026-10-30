@@ -2,7 +2,7 @@ import type { CompactBucket } from "@nova-agent/protocol";
 import { z } from "zod";
 import { MAX_ROWS, defineTool, dueOrder, itemData, itemRow, plural, resolveCourse } from "./shared";
 
-const rangeSchema = z.enum(["overdue", "today", "tomorrow", "week", "next-week", "later", "no-date", "all"]);
+const rangeSchema = z.enum(["overdue", "long-overdue", "today", "tomorrow", "week", "next-week", "later", "no-date", "all"]);
 type Range = z.infer<typeof rangeSchema>;
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -13,6 +13,7 @@ const dateSchema = z.string().max(40);
 const bucketsFor = (range: Range): CompactBucket[] | null => {
   switch (range) {
     case "overdue":
+    case "long-overdue":
       return ["overdue"];
     case "today":
       return ["today"];
@@ -32,6 +33,7 @@ const bucketsFor = (range: Range): CompactBucket[] | null => {
 
 const RANGE_LABEL: Record<Range, string> = {
   overdue: "overdue",
+  "long-overdue": "long overdue (more than two weeks)",
   today: "due today",
   tomorrow: "due tomorrow",
   week: "due in the next 7 days",
@@ -52,7 +54,7 @@ export const shortDate = (date: string): string => {
 export const listDeadlines = defineTool({
   name: "list_deadlines",
   description:
-    "Lists assignments and quizzes due in one period, optionally for one course or one kind. Ranges: 'overdue', 'today', 'tomorrow', 'week' (today plus the next six days, the default), 'next-week' (Monday to Sunday of the calendar week after this one), 'later' (after the next seven days), 'no-date', and 'all' (for totals only). For any other period, such as a month or before or after a date, pass from and/or to as YYYY-MM-DD. Completed items are excluded unless includeDone is true.",
+    "Lists assignments and quizzes due in one period, optionally for one course or one kind. Ranges: 'overdue' (the last two weeks), 'long-overdue' (older than that, usually closed or never updated by the instructor), 'today', 'tomorrow', 'week' (today plus the next six days, the default), 'next-week' (Monday to Sunday of the calendar week after this one), 'later' (after the next seven days), 'no-date', and 'all' (for totals only). For any other period, such as a month or before or after a date, pass from and/or to as YYYY-MM-DD. Completed items are excluded unless includeDone is true.",
   input: z.object({
     range: rangeSchema
       .optional()
@@ -91,6 +93,8 @@ export const listDeadlines = defineTool({
       .filter((item) => (input.kind ? item.kind === input.kind : true))
       .filter((item) => (input.includeDone ? true : item.bucket !== "completed"))
       .filter((item) => (buckets ? buckets.includes(item.bucket) : true))
+      // Both ranges share the overdue bucket; the flag, set in the browser, tells them apart.
+      .filter((item) => (range === "overdue" ? !item.longOverdue : range === "long-overdue" ? item.longOverdue === true : true))
       .filter((item) => inWindow(item.dueDate))
       .sort(dueOrder);
     const shown = matches.slice(0, limit);
@@ -98,7 +102,8 @@ export const listDeadlines = defineTool({
     const period = next ? ` (${shortDate(next.from)} to ${shortDate(next.to)})` : "";
     const between = !windowed ? "" : input.from && input.to ? ` between ${input.from} and ${input.to}` : input.from ? ` on or after ${input.from}` : ` on or before ${input.to}`;
     const label = windowed && range === "all" ? "due" : RANGE_LABEL[range];
-    const summary = `${plural(matches.length, input.kind ?? "item")} ${label}${period}${between}${where}${matches.length > shown.length ? ` (showing ${shown.length})` : ""}.`;
+    const older = range === "overdue" ? snapshot.items.filter((item) => item.longOverdue && item.bucket !== "completed" && (course ? item.courseId === course.id : true) && (input.kind ? item.kind === input.kind : true)).length : 0;
+    const summary = `${plural(matches.length, input.kind ?? "item")} ${label}${period}${between}${where}${matches.length > shown.length ? ` (showing ${shown.length})` : ""}${older > 0 ? `, plus ${older} long overdue not listed` : ""}.`;
     return {
       ok: true,
       summary,

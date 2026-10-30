@@ -104,6 +104,8 @@ const CLIENT_VERSION = "0.1.0";
 export const MissionControl = ({ dashboard, status, runtime, feasibility, preferences, hasEverSynced, announcement, now, tenantOrigin, dismissals, actions, ask, pendingDelete = null }: MissionControlProps) => {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  // Session-only: items overdue for more than two weeks stay folded away until asked for, every time the panel opens.
+  const [showLongOverdue, setShowLongOverdue] = useState(false);
   const phase = runtime.phase === "idle" ? status.phase : runtime.phase;
   const running = isRunningPhase(phase);
   const stale = isStale(status.lastSuccessfulSyncAt, now);
@@ -327,7 +329,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                         <span>{preferences.courseFilter ? "This course has nothing visible. Try All courses." : "Nova found no visible assignments or quizzes in your active courses."}</span>
                       </div>
                     ) : (
-                      <FocusList dashboard={dashboard} category={category} sort={preferences.sort} now={now} courseFiltered={preferences.courseFilter !== null} expandedKey={expandedKey} onExpand={setExpandedKey} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} onSetDone={actions.setLocalDone} />
+                      <FocusList dashboard={dashboard} category={category} sort={preferences.sort} now={now} courseFiltered={preferences.courseFilter !== null} expandedKey={expandedKey} onExpand={setExpandedKey} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} onSetDone={actions.setLocalDone} showLongOverdue={showLongOverdue} onToggleLongOverdue={() => setShowLongOverdue((value) => !value)} />
                     )
                   ) : (
                     <div className="empty">

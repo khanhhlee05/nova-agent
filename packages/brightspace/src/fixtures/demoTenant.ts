@@ -186,10 +186,14 @@ export const buildDemoTenant = (now: Date, scenario: DemoScenario = "baseline"):
       submissions: { "4301": [submission(2, false)], "4302": [submission(0, false)], "4303": [submission(0, false)] },
     },
     "31004": {
-      folders: [folder(4401, "Case Study Reflection", days(20, now), { ScoreDenominator: 15 })],
+      folders: [
+        folder(4401, "Case Study Reflection", days(20, now), { ScoreDenominator: 15 }),
+        // Weeks overdue and never closed by the instructor: the "long overdue" case the Focus tab folds away.
+        folder(4402, "Reading Response 1: Codes of Ethics", days(-24, now, 23, 59), { ScoreDenominator: 10 }),
+      ],
       quizzes: [quiz(5401, "Syllabus Quiz", days(-30, now), { EndDate: days(-29, now) })],
       news: [news(6401, "Guest lecture Thursday", "A practicing engineer will discuss the Citicorp Center case.", days(-1, now, 8, 0))],
-      submissions: { "4401": [submission(0, false)] },
+      submissions: { "4401": [submission(0, false)], "4402": [submission(0, false)] },
     },
   };
 

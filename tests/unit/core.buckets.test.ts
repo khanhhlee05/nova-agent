@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bucketItems, classifyDeadline, deadlineWindow, workloadCounts } from "@nova-agent/core";
+import { LONG_OVERDUE_AFTER_DAYS, bucketItems, classifyDeadline, deadlineWindow, isLongOverdue, workloadCounts } from "@nova-agent/core";
 import { makeItem } from "../helpers/factories";
 
 // TZ is pinned to America/New_York in vitest.config.ts.
@@ -81,5 +81,24 @@ describe("deadline buckets (local timezone)", () => {
       completed: 1,
     });
     expect(workloadCounts(items, { now })).toEqual({ overdue: 1, today: 1, thisWeek: 3 });
+  });
+});
+
+describe("long overdue", () => {
+  const now = local("2026-09-08T14:00:00-04:00");
+  const daysAgo = (days: number) => new Date(now.getTime() - days * 86_400_000).toISOString();
+
+  it("starts strictly after fourteen days and ignores done items and items without a date", () => {
+    expect(isLongOverdue(makeItem({ sourceId: "a", courseId: "1", dueAt: daysAgo(13) }), now)).toBe(false);
+    expect(isLongOverdue(makeItem({ sourceId: "b", courseId: "1", dueAt: daysAgo(14) }), now)).toBe(false);
+    expect(isLongOverdue(makeItem({ sourceId: "c", courseId: "1", dueAt: daysAgo(14.01) }), now)).toBe(true);
+    expect(isLongOverdue(makeItem({ sourceId: "d", courseId: "1", dueAt: daysAgo(60) }), now)).toBe(true);
+    expect(isLongOverdue(makeItem({ sourceId: "e", courseId: "1", dueAt: daysAgo(60), status: "submitted" }), now)).toBe(false);
+    expect(isLongOverdue(makeItem({ sourceId: "f", courseId: "1", dueAt: null }), now)).toBe(false);
+    expect(LONG_OVERDUE_AFTER_DAYS).toBe(14);
+  });
+
+  it("keeps the shared bucket contract: a long overdue item is still in the overdue bucket", () => {
+    expect(classifyDeadline(makeItem({ sourceId: "g", courseId: "1", dueAt: daysAgo(40) }), { now })).toBe("overdue");
   });
 });

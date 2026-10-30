@@ -1,6 +1,6 @@
-import { isDone, type AcademicItem, type Course, type DeadlineBucket } from "@nova-agent/core";
+import { LONG_OVERDUE_AFTER_DAYS, isDone, type AcademicItem, type Course, type DeadlineBucket } from "@nova-agent/core";
 import type { RankedItem } from "@nova-agent/planner";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { formatDeadline, formatRelative, pluralize } from "../format";
 import { SECTION_LABELS, STATUS_LABELS, UPCOMING_BUCKETS, sortItems, type Dashboard, type FocusCategory, type SortKey } from "../model";
 import { courseSwatch } from "../theme";
@@ -21,6 +21,9 @@ export type FocusListProps = {
   onDismiss: (key: string, title: string) => void;
   /** Sets or clears the on-device done mark. */
   onSetDone: (key: string, title: string, done: boolean) => void;
+  /** Session-only: whether items overdue for more than two weeks are listed under Overdue. */
+  showLongOverdue: boolean;
+  onToggleLongOverdue: () => void;
 };
 
 const GROUP_LABELS: Partial<Record<DeadlineBucket, string>> = { ...SECTION_LABELS, "no-date": "No due date" };
@@ -32,15 +35,45 @@ const EMPTY_COPY: Record<FocusCategory, { title: string; text: (courseFiltered: 
 };
 
 /** The one list under the category control. Only the Upcoming view groups by day, and only when sorted by due date. */
-export const FocusList = ({ dashboard, category, sort, now, courseFiltered, expandedKey, onExpand, canOpen, onOpen, onDismiss, onSetDone }: FocusListProps) => {
+export const FocusList = ({ dashboard, category, sort, now, courseFiltered, expandedKey, onExpand, canOpen, onOpen, onDismiss, onSetDone, showLongOverdue, onToggleLongOverdue }: FocusListProps) => {
   const rowProps = { dashboard, now, expandedKey, onExpand, canOpen, onOpen, onDismiss, onSetDone };
   const items = category === "overdue" ? dashboard.buckets.overdue : category === "completed" ? dashboard.buckets.completed : UPCOMING_BUCKETS.flatMap((bucket) => dashboard.buckets[bucket]);
+  const older = category === "overdue" ? dashboard.longOverdue : [];
+  const fold =
+    older.length > 0 ? (
+      <button type="button" className="button button-ghost button-sm fold" aria-expanded={showLongOverdue} aria-controls="long-overdue" onClick={onToggleLongOverdue}>
+        {showLongOverdue ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+        {showLongOverdue ? "Hide long overdue" : `Show ${pluralize(older.length, "long overdue item")}`}
+      </button>
+    ) : null;
+  // Weeks-old deadlines are usually closed or no longer tracked. They stay out of the way until asked for.
+  const olderGroup =
+    older.length > 0 && showLongOverdue ? (
+      <section className="group" id="long-overdue" aria-labelledby="group-long-overdue">
+        <h3 className="group-label" id="group-long-overdue">
+          Long overdue
+          <span className="count mono" aria-label={pluralize(older.length, "item")}>
+            {older.length}
+          </span>
+        </h3>
+        <p className="group-note">Overdue for more than {LONG_OVERDUE_AFTER_DAYS / 7 === 2 ? "two weeks" : `${LONG_OVERDUE_AFTER_DAYS} days`}. These are often closed or no longer tracked by the instructor.</p>
+        <ul className="tasks">
+          {sortItems(older, sort, dashboard, "overdue").map((item) => (
+            <TaskRow key={item.key} item={item} bucket="overdue" {...rowProps} />
+          ))}
+        </ul>
+      </section>
+    ) : null;
   if (items.length === 0) {
     const copy = EMPTY_COPY[category];
     return (
-      <div className="empty" role="status">
-        <strong>{copy.title}</strong>
-        <span>{copy.text(courseFiltered)}</span>
+      <div className="groups">
+        <div className="empty" role="status">
+          <strong>{older.length > 0 ? `Nothing overdue in the last ${LONG_OVERDUE_AFTER_DAYS / 7 === 2 ? "two weeks" : `${LONG_OVERDUE_AFTER_DAYS} days`}` : copy.title}</strong>
+          <span>{older.length > 0 ? `${pluralize(older.length, "older item is", "older items are")} hidden.` : copy.text(courseFiltered)}</span>
+          {fold}
+        </div>
+        {olderGroup}
       </div>
     );
   }
@@ -76,12 +109,20 @@ export const FocusList = ({ dashboard, category, sort, now, courseFiltered, expa
   }
   const bucketOf = new Map<string, DeadlineBucket>();
   for (const bucket of Object.keys(dashboard.buckets) as DeadlineBucket[]) for (const item of dashboard.buckets[bucket]) bucketOf.set(item.key, bucket);
-  return (
+  const list = (
     <ul className="tasks" aria-label={category === "overdue" ? "Overdue" : category === "completed" ? "Completed" : "Upcoming"}>
       {sortItems(items, sort, dashboard, category).map((item) => (
         <TaskRow key={item.key} item={item} bucket={bucketOf.get(item.key) ?? "no-date"} {...rowProps} />
       ))}
     </ul>
+  );
+  if (!fold) return list;
+  return (
+    <div className="groups">
+      {list}
+      <div className="fold-row">{fold}</div>
+      {olderGroup}
+    </div>
   );
 };
 

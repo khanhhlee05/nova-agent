@@ -230,6 +230,11 @@ h1, h2, h3, h4, p { margin: 0; }
 .group-label[data-tone="today"] { color: var(--nova-today); }
 .group-label .count { font-size: 12.5px; font-weight: 600; color: var(--nova-faint); font-variant-numeric: tabular-nums; }
 .group-empty { padding: 6px 0 10px; color: var(--nova-muted); font-size: 13.5px; }
+.group-note { margin: -2px 0 6px; color: var(--nova-muted); font-size: 13px; line-height: 1.45; }
+.fold-row { display: flex; justify-content: center; padding-top: 2px; }
+.fold { color: var(--nova-muted); }
+.fold:hover:not(:disabled) { color: var(--nova-ink); background: var(--nova-surface); }
+.empty .fold { margin-top: 6px; }
 .tasks { display: flex; flex-direction: column; }
 .task { border-bottom: 1px solid var(--nova-rule); }
 .task:last-child { border-bottom: 0; }

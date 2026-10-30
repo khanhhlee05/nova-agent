@@ -39,6 +39,15 @@ Brightspace is read-only, so the checkbox is a mark kept on this device.
 - An item Brightspace already reports as done shows a checked, disabled checkbox labeled "Submitted in Brightspace".
 - Marks produce no change events and are not part of the Ask Nova snapshot. Ask answers from Brightspace data only.
 
+## Long overdue
+
+Instructors often leave items open for months after the due date. Overdue therefore means the last `LONG_OVERDUE_AFTER_DAYS` (14) days; older open items are "long overdue".
+
+- The core bucket stays `overdue`, so the planner, the Ask tools, and the compact snapshot schema keep their contract. `isLongOverdue(item, now)` in `packages/core` decides; `buildDashboard` splits `buckets.overdue` into recent items and `dashboard.longOverdue`.
+- Long overdue items are excluded from the ranking input (any overdue item takes the top urgency, so a months-old item would otherwise be "Do this first"), from `counts.overdue`, and from the category badge.
+- Under Overdue, a "Show N long overdue items" line at the bottom of the list (or inside the empty state) reveals a "Long overdue" group with a one-line caption. Rows are ordinary rows. The reveal is React state, not a preference: every panel open starts folded.
+- Ask Nova: the compact snapshot carries an optional `longOverdue` flag per item and an optional `counts.longOverdue`, both additive. The prompt's brief, `get_brief`, and the `overdue` range of `list_deadlines` exclude them and say how many were left out; a new `long-overdue` range lists them; explicit `from`/`to` windows include them.
+
 ## Sorting
 
 - Due date: ascending in Overdue and Upcoming, descending in Completed; no due date last.
