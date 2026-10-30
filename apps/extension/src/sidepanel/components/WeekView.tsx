@@ -36,18 +36,20 @@ export const WeekView = ({ dashboard, now, canOpen, onOpen, onDismiss, selectedD
             ) : (
               day.entries.map(({ item, bucket }) => {
                 const course = dashboard.courseById.get(item.courseId);
-                const done = item.status === "submitted" || item.status === "completed";
+                const marked = dashboard.localDone.has(item.key);
+                const done = marked || item.status === "submitted" || item.status === "completed";
+                const doneLabel = marked ? "Marked done" : "Submitted";
                 return (
                   <Popover.Root key={item.key}>
                     <Popover.Trigger asChild>
-                      <button type="button" className="event-chip" data-tone={bucket === "overdue" ? "overdue" : undefined} data-done={done} aria-label={`${item.title}, ${course?.name ?? "course"}, ${formatTime(item.dueAt as string)}${bucket === "overdue" ? ", overdue" : done ? ", submitted" : ""}`}>
+                      <button type="button" className="event-chip" data-tone={bucket === "overdue" ? "overdue" : undefined} data-done={done} aria-label={`${item.title}, ${course?.name ?? "course"}, ${formatTime(item.dueAt as string)}${bucket === "overdue" ? ", overdue" : done ? `, ${doneLabel.toLowerCase()}` : ""}`}>
                         <span className="time mono">{formatTime(item.dueAt as string)}</span>
                         <span className="event-main">
                           <span className="title">{item.title}</span>
                           <span className="event-sub">
                             <span className="course-dot" style={{ background: course ? courseSwatch(course.color) : undefined }} aria-hidden="true" />
                             <span className="course-name">{course?.name ?? "Unknown course"}</span>
-                            {done ? <span className="done-label">· Submitted</span> : null}
+                            {done ? <span className="done-label">· {doneLabel}</span> : null}
                           </span>
                         </span>
                         <KindIcon kind={item.kind} size={14} />
@@ -58,7 +60,7 @@ export const WeekView = ({ dashboard, now, canOpen, onOpen, onDismiss, selectedD
                         <Popover.Close className="icon-button icon-button-sm popover-close" aria-label="Close details">
                           <X size={14} aria-hidden="true" />
                         </Popover.Close>
-                        <ItemDetails item={item} course={course} ranked={dashboard.ranked.get(item.key)} now={now} canOpen={canOpen(item.url)} onOpen={onOpen} headingLevel="h3" onDismiss={() => onDismiss(item.key, item.title)} />
+                        <ItemDetails item={item} course={course} ranked={dashboard.ranked.get(item.key)} now={now} canOpen={canOpen(item.url)} onOpen={onOpen} headingLevel="h3" onDismiss={() => onDismiss(item.key, item.title)} markedAt={dashboard.localDone.get(item.key) ?? null} />
                       </Popover.Content>
                     </Popover.Portal>
                   </Popover.Root>

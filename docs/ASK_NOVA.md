@@ -24,7 +24,7 @@ Sent with every question, whatever the question is about (nothing is filtered by
 | Counts, refresh time, whether the refresh was complete, mode (live or demo) | |
 | The question and up to twelve prior messages of this session's thread | Text only |
 
-Never sent: cookies, raw Brightspace responses, the tenant origin, the student id or name, announcement bodies, observation metadata, anything from a course the student is not enrolled in. The API stores nothing academic; its logs carry counts only (`LOG_PROMPTS=0`).
+Never sent: cookies, raw Brightspace responses, the tenant origin, the student id or name, announcement bodies, observation metadata, anything from a course the student is not enrolled in, and the "marked done on this device" checkmarks from the Focus tab (Ask answers from Brightspace statuses only, so an item the student ticked off locally still counts as open in an answer). The API stores nothing academic; its logs carry counts only (`LOG_PROMPTS=0`).
 
 Ask Nova is off until the student turns it on in the tab, after reading the same statement there.
 

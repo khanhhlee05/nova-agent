@@ -24,9 +24,13 @@ Design decisions were made with [Impeccable](https://impeccable.style): `PRODUCT
 
 The seven-day strip in the field is tappable. Selecting a day shows only what is due that day, with a headline for that day; tapping it again, or **Show all days**, returns to the whole week. Nothing selected is the default and shows every day.
 
-## Collapsing sections
+## Focus: one category at a time
 
-Each deadline section (Overdue, Today, Tomorrow, Later this week, Later, Completed) collapses on its own, and a **Collapse all** / **Expand all** control above the list does all six at once. Both are remembered between opens.
+Under the field, a category control shows **Overdue**, **Upcoming**, or **Completed**, one at a time, each with its count. The panel opens on Overdue when anything is overdue and on Upcoming otherwise, then remembers whatever the student last picked. Upcoming groups rows under Today (always shown, even when empty), Tomorrow, Later this week, Later, and No due date. A toolbar above the list holds the course filter and a sort control (**Due date**, **Course**, **Recently updated**); sorting by anything other than due date flattens the groups into one list. Only the list scrolls; the field, the category control, and the toolbar stay put. Rows that appear in the current change feed carry a **Changed** mark. The category and sort are remembered between opens.
+
+## Marking something done on this device
+
+Every open row has a checkbox. Checking it records a mark in local storage only: Brightspace is never written to. A marked item leaves Overdue and Upcoming, the counts, the next move, and the Week agenda's active entries, and appears under Completed labeled **Marked done by you**, with its real Brightspace status still shown. Unchecking removes the mark. The mark is deleted automatically as soon as a refresh reports the item as submitted or completed, or no longer lists it. Items Brightspace already reports as done show a checked, disabled box. Marks are not part of what Ask Nova sends, so Ask answers from Brightspace data only.
 
 ## Hiding things for a session
 

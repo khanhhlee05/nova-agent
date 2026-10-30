@@ -3,7 +3,7 @@ import { DEMO_LE_VERSION, DEMO_LP_VERSION, FixtureTransport, buildDemoTenant, de
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createStubHost } from "../../apps/extension/src/platform/host";
 import { createNovaDb, type NovaDb } from "../../apps/extension/src/storage/novaDb";
-import { deleteChangeEvent, getSyncStatus, listChangeEvents, listSnapshots, markAllRead, saveSyncOutcome, setPreference, unreadCount } from "../../apps/extension/src/storage/repositories";
+import { deleteChangeEvent, getSyncStatus, listChangeEvents, listLocalMarks, listSnapshots, markAllRead, saveSyncOutcome, setLocalMark, setPreference, unreadCount } from "../../apps/extension/src/storage/repositories";
 import { DATA_MODE_PREFERENCE, SyncCoordinator, type TransportFactory } from "../../apps/extension/src/sync/syncCoordinator";
 import { makeItem, makeSnapshot } from "../helpers/factories";
 import { NOW, TENANT } from "../helpers/demoDashboard";
@@ -70,6 +70,25 @@ describe("repositories", () => {
     // A later sync with no new events does not resurrect it.
     await saveSyncOutcome(db, { snapshot: makeSnapshot(T(5).toISOString(), []), events: [], status: {}, now: T(5) });
     expect((await listChangeEvents(db, scope)).map((event) => event.id)).toEqual(["e2"]);
+  });
+
+  it("keeps a local done mark while Brightspace lists the item as open and drops it once the LMS agrees or forgets the item", async () => {
+    const scope = `${TENANT}|2001`;
+    const open = makeItem({ sourceId: "1", courseId: "c1" });
+    const other = makeItem({ sourceId: "2", courseId: "c1" });
+    const gone = makeItem({ sourceId: "3", courseId: "c1" });
+    await saveSyncOutcome(db, { snapshot: makeSnapshot(NOW.toISOString(), [open, other, gone]), events: [], status: {}, now: NOW });
+    await setLocalMark(db, scope, open.key, NOW.toISOString());
+    await setLocalMark(db, scope, other.key, NOW.toISOString());
+    await setLocalMark(db, scope, gone.key, NOW.toISOString());
+    expect((await listLocalMarks(db, scope)).map((mark) => mark.key).sort()).toEqual([open.key, other.key, gone.key].sort());
+
+    // Next refresh: `other` is now submitted in Brightspace and `gone` is no longer listed; `open` is still open.
+    await saveSyncOutcome(db, { snapshot: makeSnapshot(T(5).toISOString(), [open, { ...other, status: "submitted" }]), events: [], status: {}, now: T(5) });
+    expect((await listLocalMarks(db, scope)).map((mark) => mark.key)).toEqual([open.key]);
+
+    await setLocalMark(db, scope, open.key, null);
+    expect(await listLocalMarks(db, scope)).toEqual([]);
   });
 });
 
