@@ -24,7 +24,7 @@ export const dayOf = (date: string): string => `${WEEKDAYS[new Date(`${date}T00:
 
 /** Titles the model may name without a tool call, because the prompt itself lists them. */
 export const briefTitles = (snapshot: CompactSnapshot): string[] => {
-  const active = snapshot.items.filter((item) => item.bucket !== "completed");
+  const active = snapshot.items.filter((item) => item.bucket !== "completed" && !item.longOverdue);
   const ranked = [...active].filter((item) => item.priority !== null).sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
   const upcoming = active.filter((item) => item.bucket === "tomorrow" || item.bucket === "this-week").sort((a, b) => (a.dueAt ?? "~").localeCompare(b.dueAt ?? "~"));
   return [...new Set([...(ranked[0] ? [ranked[0].title] : []), ...active.filter((item) => item.bucket === "overdue" || item.bucket === "today").map((item) => item.title), ...upcoming.slice(0, 5).map((item) => item.title)])];
@@ -41,7 +41,8 @@ export const briefTitles = (snapshot: CompactSnapshot): string[] => {
  * marker line or a line that starts with "system:".
  */
 export const buildSystemPrompt = (snapshot: CompactSnapshot): string => {
-  const active = snapshot.items.filter((item) => item.bucket !== "completed");
+  const active = snapshot.items.filter((item) => item.bucket !== "completed" && !item.longOverdue);
+  const longOverdue = snapshot.counts.longOverdue ?? snapshot.items.filter((item) => item.longOverdue).length;
   const ranked = [...active].filter((item) => item.priority !== null).sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
   const next = ranked[0];
   const courseName = (id: string) => snapshot.courses.find((course) => course.id === id)?.name ?? "Course";
@@ -66,6 +67,7 @@ export const buildSystemPrompt = (snapshot: CompactSnapshot): string => {
     `Counts: ${snapshot.counts.overdue} overdue, ${snapshot.counts.today} due today, ${snapshot.counts.thisWeek} due in the next 7 days, ${snapshot.counts.unread} unread changes, ${snapshot.counts.activeItems} active items.`,
     `Next move: ${next ? `${line(next)}. Reasons: ${next.reasons.map(cleanText).join(" ") || "highest priority."}` : "nothing active."}`,
     `Overdue: ${list(overdue, 5)}.`,
+    `Long overdue (more than two weeks, usually closed or not updated by the instructor, not counted above): ${longOverdue} item${longOverdue === 1 ? "" : "s"}. Mention them only when asked about old or long overdue work, via list_deadlines with range 'long-overdue'.`,
     `Due today: ${list(today, 5)}.`,
     `Upcoming: ${list(upcoming, 5)}.`,
     DATA_END,

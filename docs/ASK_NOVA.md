@@ -6,7 +6,7 @@ A fourth tab in Mission Control where a student asks a question in plain words a
 
 - The student types a question (or taps a suggestion in the field). The side panel builds a **compact snapshot** of the course data on this device and sends it with the question to the Nova API.
 - The API runs a small agent loop: the model may call read-only tools (`get_brief`, `list_deadlines`, `get_item_details`, `get_recent_announcements`, `get_changes`) over that snapshot, then writes a short answer. Events stream back as server-sent events.
-- `list_deadlines` takes a `range` (`overdue`, `today`, `tomorrow`, `week` for the panel's next 7 days, `next-week` for Monday to Sunday of next calendar week, `later`, `no-date`, `all` for totals only) or an inclusive `from`/`to` window in `YYYY-MM-DD` for any other period. It filters on the local calendar date by string comparison, so the server does no date math, and the prompt tells the model never to fetch `all` or `later` and narrow the result itself.
+- `list_deadlines` takes a `range` (`overdue` for the last two weeks, `long-overdue` for older open items, `today`, `tomorrow`, `week` for the panel's next 7 days, `next-week` for Monday to Sunday of next calendar week, `later`, `no-date`, `all` for totals only) or an inclusive `from`/`to` window in `YYYY-MM-DD` for any other period. It filters on the local calendar date by string comparison, so the server does no date math, and the prompt tells the model never to fetch `all` or `later` and narrow the result itself.
 - The panel shows the lookups it made (each with the tool's own summary, such as "2 items due next week (Sep 14 to Sep 20)"), the answer, and a "Show N matching items" toggle. The rows behind it, collapsed by default, use the same markup as the Focus and Changes tabs and come from tool results, never from the model's text.
 - Nothing is written to Brightspace. The only actions are opening a Brightspace page the student could open themselves.
 
@@ -17,14 +17,14 @@ Sent with every question, whatever the question is about (nothing is filtered by
 | Field | Notes |
 |---|---|
 | Course names, ids, codes, home links | Active courses only |
-| Item titles, kinds, due dates (ISO, local text, and local calendar date), buckets, statuses, points, links, priority and reasons | Visible items; hidden and expired items are dropped |
+| Item titles, kinds, due dates (ISO, local text, and local calendar date), buckets, a long-overdue flag (overdue for more than two weeks), statuses, points, links, priority and reasons | Visible items; hidden and expired items are dropped |
 | Calendar: today, the Monday of this week, the panel's next 7 days, and next week (Monday to Sunday), all as `YYYY-MM-DD` | Computed in the browser in the student's zone |
 | Announcement titles, dates, pinned flag, links | No body text |
 | Change events: kind, title, before and after values, detected date, read flag | Last 14 days |
 | Counts, refresh time, whether the refresh was complete, mode (live or demo) | |
 | The question and up to twelve prior messages of this session's thread | Text only |
 
-Never sent: cookies, raw Brightspace responses, the tenant origin, the student id or name, announcement bodies, observation metadata, anything from a course the student is not enrolled in. The API stores nothing academic; its logs carry counts only (`LOG_PROMPTS=0`).
+Never sent: cookies, raw Brightspace responses, the tenant origin, the student id or name, announcement bodies, observation metadata, anything from a course the student is not enrolled in, and the "marked done on this device" checkmarks from the Focus tab (Ask answers from Brightspace statuses only, so an item the student ticked off locally still counts as open in an answer). The API stores nothing academic; its logs carry counts only (`LOG_PROMPTS=0`).
 
 Ask Nova is off until the student turns it on in the tab, after reading the same statement there.
 

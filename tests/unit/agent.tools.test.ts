@@ -103,6 +103,10 @@ describe("list_deadlines", () => {
     expect(quizzes.rows.every((row) => row.kind === "item" && row.itemKind === "quiz")).toBe(true);
     const overdue = ok(run("list_deadlines", { range: "overdue" }, baseline));
     expect(titles(overdue.rows)).toEqual(["Lab 2: GPIO and Debouncing"]);
+    expect(overdue.summary).toBe("1 item overdue, plus 1 long overdue not listed.");
+    const longOverdue = ok(run("list_deadlines", { range: "long-overdue" }, baseline));
+    expect(titles(longOverdue.rows)).toEqual(["Reading Response 1: Codes of Ethics"]);
+    expect(longOverdue.summary).toBe("1 item long overdue (more than two weeks).");
     const limited = ok(run("list_deadlines", { range: "all", limit: 2 }, baseline));
     expect(limited.rows).toHaveLength(2);
     expect(limited.summary).toContain("showing 2");
@@ -129,7 +133,8 @@ describe("list_deadlines periods", () => {
     expect(titles(late.rows)).toEqual(["Problem Set 7: Sampling", "Case Study Reflection"]);
     expect(late.summary).toBe("2 items due on or after 2026-09-21.");
     const upTo = ok(run("list_deadlines", { to: "2026-09-14" }, baseline));
-    const weekAndOverdue = [...ok(run("list_deadlines", { range: "overdue" }, baseline)).rows, ...ok(run("list_deadlines", { range: "week" }, baseline)).rows];
+    // An explicit date window is the student asking for a period, so it includes long overdue items too.
+    const weekAndOverdue = [...ok(run("list_deadlines", { range: "long-overdue" }, baseline)).rows, ...ok(run("list_deadlines", { range: "overdue" }, baseline)).rows, ...ok(run("list_deadlines", { range: "week" }, baseline)).rows];
     expect(titles(upTo.rows).sort()).toEqual(titles(weekAndOverdue).sort());
     const between = ok(run("list_deadlines", { from: "2026-09-14", to: "2026-09-20" }, changed));
     expect(titles(between.rows)).toEqual(["Quiz 3: Serial Protocols", "Project Proposal"]);

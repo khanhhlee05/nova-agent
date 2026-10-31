@@ -30,6 +30,13 @@ export type VersionCacheRecord = { tenantOrigin: string; value: ResolvedVersions
 
 export type FeasibilityRecord = { tenantOrigin: string; report: FeasibilityReport };
 
+/**
+ * A "done" mark the student set on this device. Brightspace is read-only, so
+ * this never reaches the LMS; it is deleted as soon as Brightspace reports the
+ * item as submitted or completed, or stops listing it.
+ */
+export type LocalMarkRecord = { key: string; scope: string; markedAt: string };
+
 export class NovaDb extends Dexie {
   snapshots!: EntityTable<StoredSnapshot, "id">;
   changeEvents!: EntityTable<StoredChangeEvent, "id">;
@@ -37,6 +44,7 @@ export class NovaDb extends Dexie {
   preferences!: EntityTable<PreferenceRecord, "key">;
   versionCache!: EntityTable<VersionCacheRecord, "tenantOrigin">;
   feasibility!: EntityTable<FeasibilityRecord, "tenantOrigin">;
+  localMarks!: EntityTable<LocalMarkRecord, "key">;
 
   constructor(name = "nova-agent") {
     super(name);
@@ -48,6 +56,7 @@ export class NovaDb extends Dexie {
       versionCache: "tenantOrigin",
       feasibility: "tenantOrigin",
     });
+    this.version(2).stores({ localMarks: "key, scope" });
   }
 }
 

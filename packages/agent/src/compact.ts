@@ -3,6 +3,7 @@ import {
   deadlineWindow,
   isActive,
   isDone,
+  isLongOverdue,
   normalizeText,
   parseStableKey,
   sortEventsNewestFirst,
@@ -122,7 +123,8 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
   const window = deadlineWindow(now);
   const visible = snapshot.items.filter((item) => courseIds.has(item.courseId) && item.visibility !== "hidden" && item.visibility !== "expired");
   const eligible = visible.filter((item) => isActive(item) || (isDone(item) && withinDays(item.dueAt, now, completedWithinDays)));
-  const ranked = new Map(rankItems(visible.filter(isActive), { now }).map((entry) => [entry.item.key, entry]));
+  // Long overdue items are not ranked, the same as on the Focus tab: the planner would put any of them first.
+  const ranked = new Map(rankItems(visible.filter((item) => isActive(item) && !isLongOverdue(item, now)), { now }).map((entry) => [entry.item.key, entry]));
 
   const dueTime = (item: AcademicItem): number => (item.dueAt ? new Date(item.dueAt).getTime() : Number.POSITIVE_INFINITY);
   const items: CompactItem[] = [...eligible]
@@ -139,6 +141,7 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
         dueLocal: localOf(item.dueAt),
         dueDate: dateOf(item.dueAt),
         bucket: classifyDeadline(item, window),
+        longOverdue: isLongOverdue(item, now),
         status: item.status,
         visibility: compactVisibility(item),
         pointsPossible: item.pointsPossible,
@@ -186,7 +189,7 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
     });
 
   const activeItems = items.filter((item) => item.bucket !== "completed");
-  const count = (bucket: CompactItem["bucket"]) => activeItems.filter((item) => item.bucket === bucket).length;
+  const count = (bucket: CompactItem["bucket"]) => activeItems.filter((item) => item.bucket === bucket && !item.longOverdue).length;
   const today = count("today");
   return {
     version: 2,
@@ -202,6 +205,7 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
     changes,
     counts: {
       overdue: count("overdue"),
+      longOverdue: activeItems.filter((item) => item.longOverdue).length,
       today,
       thisWeek: today + count("tomorrow") + count("this-week"),
       unread: changes.filter((change) => !change.read).length,

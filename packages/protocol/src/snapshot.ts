@@ -45,6 +45,8 @@ export const compactItemSchema = z.object({
   /** The due date's local calendar day, "YYYY-MM-DD", for period filters by string comparison. */
   dueDate: calendarDateSchema.nullable(),
   bucket: compactBucketSchema,
+  /** Overdue for more than two weeks (usually closed or never updated). Still in the `overdue` bucket; optional for older clients. */
+  longOverdue: z.boolean().optional(),
   status: compactItemStatusSchema,
   visibility: z.enum(["visible", "scheduled", "unknown"]),
   pointsPossible: z.number().nullable(),
@@ -102,7 +104,10 @@ export const compactChangeSchema = z.object({
 export type CompactChange = z.infer<typeof compactChangeSchema>;
 
 export const compactCountsSchema = z.object({
+  /** Overdue within the last two weeks, the same number the panel shows. */
   overdue: z.number().int().min(0),
+  /** Overdue for longer than that; not included in `overdue`. Optional for older clients. */
+  longOverdue: z.number().int().min(0).optional(),
   today: z.number().int().min(0),
   thisWeek: z.number().int().min(0),
   unread: z.number().int().min(0),

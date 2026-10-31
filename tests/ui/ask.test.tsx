@@ -35,6 +35,7 @@ const actions = (): MissionControlActions & { calls: Record<string, unknown[][]>
     useDemoData: track("useDemoData"),
     clearData: track("clearData"),
     dismissItem: track("dismissItem"),
+    setLocalDone: track("setLocalDone"),
     deleteEvent: track("deleteEvent"),
     dismissBanner: track("dismissBanner"),
     restoreDismissed: track("restoreDismissed"),
@@ -53,7 +54,7 @@ const baseProps = (overrides: Partial<MissionControlProps> = {}): MissionControl
   status: { ...INITIAL_SYNC_STATUS, mode: "live", phase: "ready", scope: `${TENANT}|2001`, lastSuccessfulSyncAt: new Date(NOW.getTime() - 4 * 60_000).toISOString(), lastAttemptedSyncAt: NOW.toISOString(), lastOutcome: "ready" },
   runtime: IDLE_STATE,
   feasibility: null,
-  preferences: { ...DEFAULT_PREFERENCES, activeTab: "ask", collapsedSections: [] },
+  preferences: { ...DEFAULT_PREFERENCES, activeTab: "ask" },
   hasEverSynced: true,
   announcement: null,
   now: NOW,
@@ -271,7 +272,7 @@ describe("Ask tab", () => {
     fireEvent.change(screen.getByRole("textbox", { name: /ask nova a question/i }), { target: { value: "What is due today?" } });
     fireEvent.click(screen.getByRole("button", { name: /send question/i }));
     await screen.findByText(/looked up deadlines/i);
-    rerender(<MissionControl {...baseProps({ dashboard, ask, preferences: { ...DEFAULT_PREFERENCES, activeTab: "focus", collapsedSections: [] } })} />);
+    rerender(<MissionControl {...baseProps({ dashboard, ask, preferences: { ...DEFAULT_PREFERENCES, activeTab: "focus" } })} />);
     const panel = screen.getByText("What is due today?").closest(".tab-content-ask") as HTMLElement;
     expect(panel.hidden).toBe(true);
     rerender(<MissionControl {...baseProps({ dashboard, ask })} />);
@@ -281,7 +282,7 @@ describe("Ask tab", () => {
 
   it("does not add the tab when Ask is not wired", async () => {
     const { dashboard } = await demoDashboard();
-    render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, collapsedSections: [] } })} />);
+    render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES } })} />);
     expect(screen.getAllByRole("tab")).toHaveLength(3);
   });
 

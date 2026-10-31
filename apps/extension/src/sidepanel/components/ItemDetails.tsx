@@ -15,10 +15,12 @@ export type ItemDetailsProps = {
   headingLevel?: "h3" | "h4";
   /** Session-only dismissal; the item returns on the next refresh. */
   onDismiss?: () => void;
+  /** When the student marked the item done on this device, if they did. */
+  markedAt?: string | null;
 };
 
 /** Shared detail body used by the Focus row expansion and the Week popover. */
-export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headingLevel = "h4", onDismiss }: ItemDetailsProps) => {
+export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headingLevel = "h4", onDismiss, markedAt = null }: ItemDetailsProps) => {
   const [showBreakdown, setShowBreakdown] = useState(false);
   const reasons = ranked ? explainPriority(item, ranked.priority) : [];
   const Heading = headingLevel;
@@ -38,6 +40,12 @@ export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headin
         </dd>
         <dt>Status</dt>
         <dd>{STATUS_LABELS[item.status]}{item.status === "unknown" ? <span className="muted"> · Brightspace did not share submission state</span> : null}</dd>
+        {markedAt ? (
+          <>
+            <dt>On this device</dt>
+            <dd>Marked done by you {formatRelative(markedAt, now)}. Brightspace still lists it as open.</dd>
+          </>
+        ) : null}
         {item.pointsPossible !== null ? (
           <>
             <dt>Points</dt>
@@ -82,7 +90,7 @@ export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headin
           ) : null}
         </section>
       ) : (
-        <p className="muted">Not ranked: {item.status === "submitted" || item.status === "completed" ? "already done." : "not yet available."}</p>
+        <p className="muted">Not ranked: {item.status === "submitted" || item.status === "completed" || markedAt ? "already done." : "not yet available."}</p>
       )}
       <div className="card-actions">
         {link ? (

@@ -115,6 +115,21 @@ export const workloadCounts = (items: readonly AcademicItem[], options: BucketOp
   };
 };
 
+/**
+ * Overdue items older than this are "long overdue": usually closed, or never
+ * updated by the instructor. They stay in the `overdue` bucket (the shared
+ * contract does not change) and the panel decides how to show them.
+ */
+export const LONG_OVERDUE_AFTER_DAYS = 14;
+
+/** True when the item is overdue by more than `LONG_OVERDUE_AFTER_DAYS`, measured against `now`. */
+export const isLongOverdue = (item: Pick<AcademicItem, "dueAt" | "status">, now: Date): boolean => {
+  if (isDone(item)) return false;
+  const due = toDate(item.dueAt);
+  if (!due) return false;
+  return now.getTime() - due.getTime() > LONG_OVERDUE_AFTER_DAYS * 86_400_000;
+};
+
 export const hoursUntil = (dueAt: string | null, now: Date): number | null => {
   const due = toDate(dueAt);
   if (!due) return null;

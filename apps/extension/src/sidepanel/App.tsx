@@ -3,13 +3,13 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExtensionHost } from "../platform/host";
 import type { NovaDb } from "../storage/novaDb";
-import { clearAllData, deleteChangeEvent, getPreference, getSyncStatus, listChangeEvents, latestSnapshot, markAllRead, setEventRead, setPreference, unreadCount } from "../storage/repositories";
+import { clearAllData, deleteChangeEvent, getPreference, getSyncStatus, listChangeEvents, listLocalMarks, latestSnapshot, markAllRead, setEventRead, setLocalMark, setPreference, unreadCount } from "../storage/repositories";
 import { DATA_MODE_PREFERENCE, DEMO_SCENARIO_PREFERENCE, SyncCoordinator, type TransportFactory } from "../sync/syncCoordinator";
 import { IDLE_STATE, isRunningPhase, type SyncRuntimeState } from "../sync/syncState";
 import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, defaultAskClientFactory, effectiveAskSettings, type AskClientFactory, type AskSettings } from "./ask";
 import { connectLive as runConnectLive } from "./connect";
 import { useSessionDismissals } from "./dismissals";
-import { DEFAULT_PREFERENCES, MissionControl, type UiPreferences } from "./MissionControl";
+import { DEFAULT_PREFERENCES, MissionControl, withPreferenceDefaults, type UiPreferences } from "./MissionControl";
 import { buildDashboard } from "./model";
 import { useNow } from "./useNow";
 
@@ -43,11 +43,12 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
   useEffect(() => coordinator.subscribe(setRuntime), [coordinator]);
 
   const status = useLiveQuery(() => getSyncStatus(db), [db]);
-  const preferences = useLiveQuery(() => getPreference<UiPreferences>(db, PREFERENCES_KEY, DEFAULT_PREFERENCES), [db]);
+  const preferences = useLiveQuery(async () => withPreferenceDefaults(await getPreference<Partial<UiPreferences>>(db, PREFERENCES_KEY, DEFAULT_PREFERENCES)), [db]);
   const feasibility = useLiveQuery(async () => (await db.feasibility.get(host.tenantOrigin))?.report ?? null, [db, host.tenantOrigin]) as FeasibilityReport | null | undefined;
   const scope = status?.scope ?? null;
   const snapshot = useLiveQuery(() => (scope ? latestSnapshot(db, scope) : Promise.resolve(null)), [db, scope]);
   const events = useLiveQuery(() => (scope ? listChangeEvents(db, scope) : Promise.resolve([])), [db, scope]);
+  const localMarks = useLiveQuery(async () => (scope ? new Map((await listLocalMarks(db, scope)).map((mark) => [mark.key, mark.markedAt])) : new Map<string, string>()), [db, scope]);
   // A saved address that no longer passes the https rule turns Ask off rather than producing a client.
   const askSettings = useLiveQuery(async () => effectiveAskSettings(await getPreference<AskSettings>(db, ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS)), [db]);
   const askClient = useMemo(() => (askSettings?.enabled ? askClientFactory(askSettings) : null), [askClientFactory, askSettings]);
@@ -125,9 +126,9 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
   const dashboard = useMemo(
     () =>
       snapshot && visibleEvents && preferences
-        ? buildDashboard({ snapshot, events: visibleEvents, now, courseFilter: preferences.courseFilter, dismissedItemKeys: dismissals.items })
+        ? buildDashboard({ snapshot, events: visibleEvents, now, courseFilter: preferences.courseFilter, dismissedItemKeys: dismissals.items, localMarks })
         : null,
-    [snapshot, visibleEvents, now, preferences, dismissals],
+    [snapshot, visibleEvents, now, preferences, dismissals, localMarks],
   );
 
   const setPreferences = useCallback(
@@ -148,6 +149,11 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
       dismissItem: (key: string, title: string) => {
         dismissItem(key);
         setAnnouncement(`Hid "${title}" until the next refresh.`);
+      },
+      setLocalDone: (key: string, title: string, done: boolean) => {
+        if (!scope) return;
+        void setLocalMark(db, scope, key, done ? clock().toISOString() : null);
+        setAnnouncement(done ? `Marked "${title}" done on this device. Brightspace still lists it as open.` : `"${title}" is back in your list.`);
       },
       deleteEvent: (id: string, title: string) => {
         // One Undo at a time: a second delete makes the first one final.
