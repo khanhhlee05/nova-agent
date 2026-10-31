@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import { EMPTY_DISMISSALS } from "../../apps/extension/src/sidepanel/dismissals";
 import { weekHero } from "../../apps/extension/src/sidepanel/heroes";
-import { STATUS_LABELS, buildDashboard, isUpcoming } from "../../apps/extension/src/sidepanel/model";
+import { STATUS_LABELS, buildDashboard, isUpcoming, lastWeekOffset, weekPage } from "../../apps/extension/src/sidepanel/model";
 import { DEFAULT_PREFERENCES, MissionControl, type MissionControlActions, type MissionControlProps } from "../../apps/extension/src/sidepanel/MissionControl";
 import { INITIAL_SYNC_STATUS } from "../../apps/extension/src/storage/repositories";
 import { IDLE_STATE } from "../../apps/extension/src/sync/syncState";
@@ -477,6 +477,71 @@ describe("long overdue", () => {
     render(<MissionControl {...baseProps({ dashboard })} />);
     expect(screen.getByRole("radio", { name: /^Upcoming,/ }).getAttribute("aria-checked")).toBe("true");
     expect(screen.getByRole("heading", { level: 2, name: "Due tonight" })).toBeTruthy();
+  });
+});
+
+describe("week paging", () => {
+  it("builds later pages from the same items, forward only, up to the last known deadline", async () => {
+    const { dashboard } = await demoDashboard();
+    const page0 = weekPage(dashboard, NOW, 0);
+    expect(page0.days).toBe(dashboard.week);
+    const page1 = weekPage(dashboard, NOW, 1);
+    expect(page1.days).toHaveLength(7);
+    expect(page1.days[0]?.date.getTime()).toBe(dashboard.week[6]!.date.getTime() + 86_400_000);
+    expect(page1.days.every((day) => !day.isToday)).toBe(true);
+    const onPage1 = page1.days.flatMap((day) => day.entries.map((entry) => entry.item.title));
+    expect(onPage1).toContain("Problem Set 7: Sampling");
+    expect(page1.days.flatMap((day) => day.entries).every((entry) => entry.bucket === "later")).toBe(true);
+    const last = lastWeekOffset(dashboard, NOW);
+    expect(last).toBeGreaterThanOrEqual(2);
+    expect(weekPage(dashboard, NOW, last).days.flatMap((day) => day.entries).length).toBeGreaterThan(0);
+    expect(weekPage(dashboard, NOW, last + 1).days.flatMap((day) => day.entries)).toHaveLength(0);
+  });
+
+  it("pages with the arrows, disables forward at the last deadline, clears the picked day, and returns with Today", async () => {
+    const { dashboard } = await demoDashboard();
+    const p = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, activeTab: "week" } });
+    render(<MissionControl {...p} />);
+    const previous = () => screen.getByRole("button", { name: /previous 7 days/i }) as HTMLButtonElement;
+    const next = () => screen.getByRole("button", { name: /^next 7 days$/i }) as HTMLButtonElement;
+    expect(previous().disabled).toBe(true);
+    expect(next().disabled).toBe(false);
+    expect(screen.getByText(/^Sep 8 to Sep 14/)).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toMatch(/deadlines?/i);
+
+    // Pick a day, then page: the selection does not carry over.
+    fireEvent.click(screen.getByRole("button", { name: /^Wednesday, September 9/ }));
+    expect(screen.getByRole("button", { name: /show all days/i })).toBeTruthy();
+    fireEvent.click(next());
+    expect(screen.queryByRole("button", { name: /show all days/i })).toBeNull();
+    expect(screen.getByText(/^Sep 15 to Sep 21/)).toBeTruthy();
+    expect(screen.getAllByText(/1 week ahead/).length).toBeGreaterThan(0);
+    expect(previous().disabled).toBe(false);
+    expect(screen.getByRole("list", { name: /seven days starting September 15/i })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /Problem Set 7: Sampling/ }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("heading", { level: 3, name: /^Today/ })).toBeNull();
+
+    // Forward until the last deadline, then the arrow is disabled with a reason.
+    const last = lastWeekOffset(dashboard, NOW);
+    for (let offset = 1; offset < last; offset++) fireEvent.click(next());
+    expect(next().disabled).toBe(true);
+    expect(screen.getAllByText(new RegExp(`${last} weeks ahead`)).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Today$/ }));
+    expect(screen.getByText(/^Sep 8 to Sep 14/)).toBeTruthy();
+    expect(previous().disabled).toBe(true);
+  });
+
+  it("writes the hero for a later page from that page's items", async () => {
+    const { dashboard } = await demoDashboard();
+    const page1 = weekPage(dashboard, NOW, 1);
+    const hero = weekHero(dashboard, null, page1);
+    expect(hero.meta).toBe("1 week ahead · Sep 15 to Sep 21");
+    const open = page1.days.flatMap((day) => day.entries).filter((entry) => entry.bucket !== "completed").length;
+    expect(hero.title).toMatch(new RegExp(`^${["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"][open] ?? open} deadlines?`, "i"));
+    const empty = weekHero(dashboard, null, weekPage(dashboard, NOW, lastWeekOffset(dashboard, NOW) + 1));
+    expect(empty.title).toMatch(/^Nothing due /);
+    expect(weekHero(dashboard, null, weekPage(dashboard, NOW, 0))).toEqual(weekHero(dashboard));
   });
 });
 

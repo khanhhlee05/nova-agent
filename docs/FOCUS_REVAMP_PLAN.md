@@ -70,3 +70,7 @@ Instructors often leave items open for months after the due date. Overdue theref
 - `apps/extension/src/sidepanel/components/FocusList.tsx`, `FocusCategories.tsx`, `SortSelect.tsx`: new. `DeadlineSections.tsx`: removed.
 - `apps/extension/src/sidepanel/MissionControl.tsx`, `App.tsx`, `components/CountsStrip.tsx`, `components/WeekView.tsx`, `styles.css`, `dev/preview.tsx`.
 - Tests under `tests/ui` and `tests/unit`.
+
+## Week tab paging
+
+Rolling seven-day pages from today, forward only. `buildWeekDays(items, localDone, now, offset)` in `model.ts` builds any page from the dashboard's filtered items; `dashboard.week` is page 0, so the "one definition of this week" shared with the count strip and Ask Nova is untouched. `lastWeekOffset` bounds the forward arrow at the latest due date. The page offset is session state in `MissionControl`, cleared to 0 by the count strip's "This week" jump; paging clears the picked day. `weekHero` takes the page and writes the headline from that page's open items.

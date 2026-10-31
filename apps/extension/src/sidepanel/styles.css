@@ -282,7 +282,12 @@ h1, h2, h3, h4, p { margin: 0; }
 .card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
 /* Week */
-.week-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--nova-field-rule); }
+.week-nav { display: flex; align-items: center; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--nova-field-rule); }
+.week-nav-range { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--nova-field-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.week-nav-ahead { font-weight: 500; color: var(--nova-field-muted); }
+.week-nav .button-on-field.button-sm { min-height: 30px; }
+.week-nav .icon-button:disabled { opacity: 0.4; }
+.week-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin-top: 8px; }
 .week-day { display: flex; flex-direction: column; align-items: center; gap: 1px; width: 100%; padding: 6px 0 5px; border: 0; border-radius: var(--nova-radius-sm); background: transparent; color: var(--nova-field-ink); }
 .week-day:hover { background: var(--nova-field-chip); }
 .week-day-name { font-size: 12px; font-weight: 600; color: var(--nova-field-muted); }

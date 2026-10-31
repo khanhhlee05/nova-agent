@@ -7,6 +7,8 @@ export const dayKey = (date: Date): string => format(date, "yyyy-MM-dd");
 
 export type WeekStripProps = {
   week: WeekDay[];
+  /** Page offset in weeks; 0 is the next seven days. */
+  offset?: number;
   courseById: ReadonlyMap<string, Course>;
   /** Day key of the selected day, or null for the whole week. */
   selected: string | null;
@@ -19,11 +21,12 @@ export type WeekStripProps = {
  * whole-week view and the "today" view never look the same; today keeps its
  * underline and marker in both.
  */
-export const WeekStrip = ({ week, courseById, selected, onSelect }: WeekStripProps) => (
-  <div className="week-strip" role="list" aria-label="Next seven days">
+export const WeekStrip = ({ week, offset = 0, courseById, selected, onSelect }: WeekStripProps) => (
+  <div className="week-strip" role="list" aria-label={offset === 0 ? "Next seven days" : `Seven days starting ${format(week[0]?.date ?? new Date(), "MMMM d")}`}>
     {week.map((day) => {
       const key = dayKey(day.date);
-      const active = day.entries.filter((entry) => isUpcoming(entry.bucket));
+      // Beyond page 0 everything open sits in the "later" bucket, so the dots count open items there.
+      const active = day.entries.filter((entry) => (offset === 0 ? isUpcoming(entry.bucket) : entry.bucket !== "completed" && entry.bucket !== "overdue"));
       const isSelected = selected === key;
       return (
         <div key={key} role="listitem">

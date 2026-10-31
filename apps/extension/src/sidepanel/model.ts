@@ -23,6 +23,9 @@ export type WeekEntry = { item: AcademicItem; bucket: DeadlineBucket };
 
 export type WeekDay = { date: Date; isToday: boolean; entries: WeekEntry[] };
 
+/** Seven days starting `offset` weeks after today. Offset 0 is the panel's "next 7 days". */
+export type WeekPage = { offset: number; days: WeekDay[]; from: Date; to: Date };
+
 export type ChangeGroups = { today: ChangeEvent[]; yesterday: ChangeEvent[]; earlier: ChangeEvent[] };
 
 /** The three views of the Focus tab. One is shown at a time. */
@@ -119,16 +122,8 @@ export const buildDashboard = ({ snapshot, events, now, courseFilter, dismissedI
   const top = rankedList[0];
   const nextMove = top ? { item: top.item, ranked: top, reasons: explainPriority(top.item, top.priority) } : null;
 
-  const window = deadlineWindow(now);
   const start = startOfDay(now);
-  const week: WeekDay[] = Array.from({ length: 7 }, (_, offset) => {
-    const date = addDays(start, offset);
-    const entries = items
-      .filter((item) => item.dueAt && isSameDay(new Date(item.dueAt), date))
-      .map((item) => ({ item, bucket: localDone.has(item.key) ? ("completed" as const) : classifyDeadline(item, window) }))
-      .sort((a, b) => new Date(a.item.dueAt as string).getTime() - new Date(b.item.dueAt as string).getTime() || a.item.title.localeCompare(b.item.title));
-    return { date, isToday: offset === 0, entries };
-  });
+  const week = buildWeekDays(items, localDone, now, 0);
 
   const filteredEvents = events.filter((event) => !isReadBefore(event, snapshot.capturedAt) && (courseFilter === null || event.courseId === courseFilter));
   const yesterdayStart = subDays(start, 1);
@@ -165,6 +160,39 @@ export const buildDashboard = ({ snapshot, events, now, courseFilter, dismissedI
     localDone,
     changedAt,
   };
+};
+
+/** The seven days starting `offset` weeks after today, each with its due items. Pure, so any page can be built on demand. */
+export const buildWeekDays = (items: readonly AcademicItem[], localDone: ReadonlyMap<string, string>, now: Date, offset: number): WeekDay[] => {
+  const window = deadlineWindow(now);
+  const start = addDays(startOfDay(now), offset * 7);
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = addDays(start, index);
+    const entries = items
+      .filter((item) => item.dueAt && isSameDay(new Date(item.dueAt), date))
+      .map((item) => ({ item, bucket: localDone.has(item.key) ? ("completed" as const) : classifyDeadline(item, window) }))
+      .sort((a, b) => new Date(a.item.dueAt as string).getTime() - new Date(b.item.dueAt as string).getTime() || a.item.title.localeCompare(b.item.title));
+    return { date, isToday: isSameDay(date, now), entries };
+  });
+};
+
+/** One page of the Week tab. Offset 0 is `dashboard.week`; later pages are built from the same filtered items. */
+export const weekPage = (dashboard: Pick<Dashboard, "items" | "localDone" | "week">, now: Date, offset: number): WeekPage => {
+  const days = offset === 0 ? dashboard.week : buildWeekDays(dashboard.items, dashboard.localDone, now, offset);
+  return { offset, days, from: days[0]?.date ?? startOfDay(now), to: days[days.length - 1]?.date ?? startOfDay(now) };
+};
+
+/** The last page with a deadline on it, so the Week tab never pages into empty weeks. Never below 0. */
+export const lastWeekOffset = (dashboard: Pick<Dashboard, "items">, now: Date): number => {
+  const start = startOfDay(now).getTime();
+  let latest = 0;
+  for (const item of dashboard.items) {
+    if (!item.dueAt) continue;
+    const due = startOfDay(new Date(item.dueAt)).getTime();
+    if (due > latest) latest = due;
+  }
+  if (latest <= start) return 0;
+  return Math.floor((latest - start) / (7 * 86_400_000));
 };
 
 const dueTime = (item: AcademicItem): number => (item.dueAt ? new Date(item.dueAt).getTime() : Number.POSITIVE_INFINITY);

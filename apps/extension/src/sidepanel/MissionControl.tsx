@@ -5,7 +5,7 @@ import type { ChangeEvent } from "@nova-agent/core";
 import type { ChatMessage, ChatRequest } from "@nova-agent/protocol";
 import { CheckCheck, EyeOff } from "lucide-react";
 import { Tabs, Tooltip } from "radix-ui";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AskChips, AskView, useAskThread, type AskClient, type AskClientFactory, type AskSettings } from "./ask";
 import type { SyncStatusRecord } from "../storage/novaDb";
 import { PHASE_LABELS, isRunningPhase, isStale, type SyncRuntimeState } from "../sync/syncState";
@@ -22,12 +22,13 @@ import { FocusList } from "./components/FocusList";
 import { Menu } from "./components/Menu";
 import { FocusSkeleton } from "./components/Skeleton";
 import { SortSelect } from "./components/SortSelect";
+import { WeekNav } from "./components/WeekNav";
 import { WeekStrip } from "./components/WeekStrip";
 import { WeekView } from "./components/WeekView";
 import { countDismissed, type SessionDismissals } from "./dismissals";
 import { pluralize } from "./format";
 import { askHero, changesHero, weekHero } from "./heroes";
-import { focusCategoryOf, type CourseFilter as CourseFilterValue, type Dashboard, type FocusCategory, type SortKey } from "./model";
+import { focusCategoryOf, lastWeekOffset, weekPage, type CourseFilter as CourseFilterValue, type Dashboard, type FocusCategory, type SortKey } from "./model";
 import { applyTheme, type Theme } from "./theme";
 
 export type TabId = "focus" | "week" | "changes" | "ask";
@@ -104,6 +105,14 @@ const CLIENT_VERSION = "0.1.0";
 export const MissionControl = ({ dashboard, status, runtime, feasibility, preferences, hasEverSynced, announcement, now, tenantOrigin, dismissals, actions, ask, pendingDelete = null }: MissionControlProps) => {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  // Session-only: which seven days the Week tab shows. Paging drops any selected day, since it belongs to the page it was picked on.
+  const [weekOffset, setWeekOffset] = useState(0);
+  const page = useMemo(() => (dashboard ? weekPage(dashboard, now, weekOffset) : null), [dashboard, now, weekOffset]);
+  const lastOffset = useMemo(() => (dashboard ? lastWeekOffset(dashboard, now) : 0), [dashboard, now]);
+  const goToWeek = (offset: number) => {
+    setWeekOffset(Math.max(0, Math.min(offset, lastOffset)));
+    setSelectedDay(null);
+  };
   // Session-only: items overdue for more than two weeks stay folded away until asked for, every time the panel opens.
   const [showLongOverdue, setShowLongOverdue] = useState(false);
   const phase = runtime.phase === "idle" ? status.phase : runtime.phase;
@@ -153,6 +162,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
       actions.setPreferences({ activeTab: "focus", focusCategory: "overdue" });
       return;
     }
+    if (target === "this-week") goToWeek(0);
     actions.setPreferences({ activeTab: target === "changes" ? "changes" : "week" });
   };
 
@@ -197,8 +207,16 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
     )
   ) : tab === "ask" && ask ? (
     <Hero {...askHero(dashboard, ask.settings.enabled, status.lastSuccessfulSyncAt, now)} extra={ask.settings.enabled ? <AskChips dashboard={dashboard} disabled={thread.status === "streaming" || !ask.client} onPick={thread.send} /> : undefined} />
-  ) : tab === "week" ? (
-    <Hero {...weekHero(dashboard, selectedDay)} extra={<WeekStrip week={dashboard.week} courseById={dashboard.courseById} selected={selectedDay} onSelect={setSelectedDay} />} />
+  ) : tab === "week" && page ? (
+    <Hero
+      {...weekHero(dashboard, selectedDay, page)}
+      extra={
+        <>
+          <WeekNav page={page} lastOffset={lastOffset} onChange={goToWeek} />
+          <WeekStrip week={page.days} offset={page.offset} courseById={dashboard.courseById} selected={selectedDay} onSelect={setSelectedDay} />
+        </>
+      }
+    />
   ) : tab === "changes" ? (
     <Hero
       {...changesHero(dashboard, null, now)}
@@ -341,7 +359,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
               </Tabs.Content>
               <Tabs.Content className="tab-content" value="week">
                 {stateBanners}
-                {dashboard ? <WeekView dashboard={dashboard} now={now} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} selectedDay={selectedDay} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
+                {dashboard && page ? <WeekView dashboard={dashboard} days={page.days} now={now} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} selectedDay={selectedDay} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
               </Tabs.Content>
               <Tabs.Content className="tab-content" value="changes">
                 {stateBanners}

@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { Popover } from "radix-ui";
 import { format } from "date-fns";
 import { formatTime } from "../format";
-import type { Dashboard } from "../model";
+import type { Dashboard, WeekDay } from "../model";
 import { courseSwatch } from "../theme";
 import { ItemDetails } from "./ItemDetails";
 import { dayKey } from "./WeekStrip";
@@ -10,6 +10,8 @@ import { KindIcon } from "./icons";
 
 export type WeekViewProps = {
   dashboard: Dashboard;
+  /** The seven days to list; defaults to the next seven. */
+  days?: WeekDay[];
   now: Date;
   canOpen: (url: string | null) => boolean;
   onOpen: (url: string) => void;
@@ -19,9 +21,9 @@ export type WeekViewProps = {
 };
 
 /** Time-led agenda. The seven-day strip lives in the field above; this is the list under it. */
-export const WeekView = ({ dashboard, now, canOpen, onOpen, onDismiss, selectedDay }: WeekViewProps) => {
-  const nextBusy = dashboard.week.find((day) => !day.isToday && day.entries.some((entry) => entry.bucket !== "completed"));
-  const days = selectedDay ? dashboard.week.filter((day) => dayKey(day.date) === selectedDay) : dashboard.week;
+export const WeekView = ({ dashboard, days: page = dashboard.week, now, canOpen, onOpen, onDismiss, selectedDay }: WeekViewProps) => {
+  const nextBusy = page.find((day) => !day.isToday && day.entries.some((entry) => entry.bucket !== "completed"));
+  const days = selectedDay ? page.filter((day) => dayKey(day.date) === selectedDay) : page;
   return (
     <div className="agenda">
       {days.map((day) => (
