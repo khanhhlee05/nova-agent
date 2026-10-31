@@ -3,7 +3,7 @@ import { DEMO_LE_VERSION, DEMO_LP_VERSION, FixtureTransport, buildDemoTenant, de
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createStubHost } from "../../apps/extension/src/platform/host";
 import { createNovaDb, type NovaDb } from "../../apps/extension/src/storage/novaDb";
-import { deleteChangeEvent, getSyncStatus, listChangeEvents, listLocalMarks, listSnapshots, markAllRead, saveSyncOutcome, setLocalMark, setPreference, unreadCount } from "../../apps/extension/src/storage/repositories";
+import { MAX_PERSONAL_ITEMS, clearAllData, deleteChangeEvent, deletePersonalItem, getSyncStatus, listChangeEvents, listLocalMarks, listPersonalItems, listSnapshots, markAllRead, putPersonalItem, saveSyncOutcome, setLocalMark, setPreference, unreadCount } from "../../apps/extension/src/storage/repositories";
 import { DATA_MODE_PREFERENCE, SyncCoordinator, type TransportFactory } from "../../apps/extension/src/sync/syncCoordinator";
 import { makeItem, makeSnapshot } from "../helpers/factories";
 import { NOW, TENANT } from "../helpers/demoDashboard";
@@ -89,6 +89,53 @@ describe("repositories", () => {
 
     await setLocalMark(db, scope, open.key, null);
     expect(await listLocalMarks(db, scope)).toEqual([]);
+  });
+});
+
+describe("personal deadlines", () => {
+  const scope = `${TENANT}|2001`;
+  const record = (id: string, extra: Partial<{ title: string; dueAt: string; courseId: string | null; completedAt: string | null }> = {}) => ({
+    id,
+    scope,
+    title: `Own ${id}`,
+    dueAt: T(60).toISOString(),
+    courseId: null,
+    completedAt: null,
+    createdAt: NOW.toISOString(),
+    updatedAt: NOW.toISOString(),
+    ...extra,
+  });
+
+  it("adds, edits, completes, deletes, and never touches snapshots or change events", async () => {
+    await saveSyncOutcome(db, { snapshot: makeSnapshot(NOW.toISOString(), [makeItem({ sourceId: "1", courseId: "c1" })]), events: [], status: {}, now: NOW });
+    await putPersonalItem(db, record("p1", { title: "Study for the midterm" }));
+    await putPersonalItem(db, record("p2", { courseId: "c1" }));
+    expect((await listPersonalItems(db, scope)).map((item) => item.id).sort()).toEqual(["p1", "p2"]);
+    expect(await listPersonalItems(db, "other|scope")).toEqual([]);
+
+    await putPersonalItem(db, record("p1", { title: "Study harder", completedAt: T(5).toISOString() }));
+    const edited = (await listPersonalItems(db, scope)).find((item) => item.id === "p1");
+    expect(edited?.title).toBe("Study harder");
+    expect(edited?.completedAt).toBe(T(5).toISOString());
+
+    // A refresh leaves them alone, and they never appear as snapshot items or change events.
+    await saveSyncOutcome(db, { snapshot: makeSnapshot(T(10).toISOString(), [makeItem({ sourceId: "1", courseId: "c1" })]), events: [], status: {}, now: T(10) });
+    expect(await listPersonalItems(db, scope)).toHaveLength(2);
+    expect((await listSnapshots(db, scope)).every((snapshot) => snapshot.items.every((item) => !item.title.startsWith("Own ") && item.title !== "Study harder"))).toBe(true);
+    expect(await listChangeEvents(db, scope)).toEqual([]);
+
+    await deletePersonalItem(db, "p2");
+    expect((await listPersonalItems(db, scope)).map((item) => item.id)).toEqual(["p1"]);
+    await clearAllData(db);
+    expect(await listPersonalItems(db, scope)).toEqual([]);
+  });
+
+  it("caps how many the student can add", async () => {
+    for (let i = 0; i < MAX_PERSONAL_ITEMS; i++) await putPersonalItem(db, record(`cap-${i}`));
+    await expect(putPersonalItem(db, record("one-too-many"))).rejects.toThrow(/at most/);
+    // Editing an existing one is still allowed at the cap.
+    await putPersonalItem(db, record("cap-0", { title: "Renamed" }));
+    expect((await listPersonalItems(db, scope)).find((item) => item.id === "cap-0")?.title).toBe("Renamed");
   });
 });
 

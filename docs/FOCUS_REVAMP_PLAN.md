@@ -74,3 +74,7 @@ Instructors often leave items open for months after the due date. Overdue theref
 ## Week tab paging
 
 Rolling seven-day pages from today, forward only. `buildWeekDays(items, localDone, now, offset)` in `model.ts` builds any page from the dashboard's filtered items; `dashboard.week` is page 0, so the "one definition of this week" shared with the count strip and Ask Nova is untouched. `lastWeekOffset` bounds the forward arrow at the latest due date. The page offset is session state in `MissionControl`, cleared to 0 by the count strip's "This week" jump; paging clears the picked day. `weekHero` takes the page and writes the headline from that page's open items.
+
+## Your own deadlines (Week tab only)
+
+Student-typed deadlines, kept apart from Brightspace data by construction: their own `personalItems` table (schema version 3), their own done flag, a `personal` list on the dashboard that no bucket, count, ranking, or Ask snapshot reads, and a `custom` list on each `WeekDay` beside the Brightspace `entries`. Adding needs a tapped day (the dialog takes name, time, optional course; the date is fixed). The agenda merges both lists by time, and the row marks ownership with a pen icon and an "Added by you" tag; the strip shows a hollow dot; the hero appends "plus N of your own". Delete shares the Undo toast with change deletes. At most 200 per account. Refresh never writes to the table; "Clear local data" empties it.

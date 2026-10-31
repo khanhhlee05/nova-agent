@@ -9,7 +9,7 @@ import {
   type AcademicSnapshot,
   type ChangeEvent,
 } from "@nova-agent/core";
-import type { LocalMarkRecord, NovaDb, StoredChangeEvent, StoredSnapshot, SyncStatusRecord } from "./novaDb";
+import type { LocalMarkRecord, NovaDb, PersonalItemRecord, StoredChangeEvent, StoredSnapshot, SyncStatusRecord } from "./novaDb";
 
 export const INITIAL_SYNC_STATUS: SyncStatusRecord = {
   key: "current",
@@ -123,6 +123,26 @@ export const listLocalMarks = async (db: NovaDb, scope: string): Promise<LocalMa
 export const setLocalMark = async (db: NovaDb, scope: string, key: string, markedAt: string | null): Promise<void> => {
   if (markedAt) await db.localMarks.put({ key, scope, markedAt });
   else await db.localMarks.delete(key);
+};
+
+/** How many deadlines a student can add by hand. Plenty for a term, small enough that the panel never needs paging logic for them. */
+export const MAX_PERSONAL_ITEMS = 200;
+
+export const listPersonalItems = async (db: NovaDb, scope: string): Promise<PersonalItemRecord[]> => db.personalItems.where("scope").equals(scope).toArray();
+
+/** Adds or replaces one student-added deadline. Rejects beyond `MAX_PERSONAL_ITEMS` so a stuck script cannot fill the store. */
+export const putPersonalItem = async (db: NovaDb, item: PersonalItemRecord): Promise<void> => {
+  await db.transaction("rw", db.personalItems, async () => {
+    const exists = (await db.personalItems.get(item.id)) !== undefined;
+    if (!exists && (await db.personalItems.where("scope").equals(item.scope).count()) >= MAX_PERSONAL_ITEMS) {
+      throw new Error(`Nova keeps at most ${MAX_PERSONAL_ITEMS} deadlines you add yourself.`);
+    }
+    await db.personalItems.put(item);
+  });
+};
+
+export const deletePersonalItem = async (db: NovaDb, id: string): Promise<void> => {
+  await db.personalItems.delete(id);
 };
 
 export const getPreference = async <T>(db: NovaDb, key: string, fallback: T): Promise<T> => {

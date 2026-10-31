@@ -27,6 +27,7 @@ export const WeekStrip = ({ week, offset = 0, courseById, selected, onSelect }: 
       const key = dayKey(day.date);
       // Beyond page 0 everything open sits in the "later" bucket, so the dots count open items there.
       const active = day.entries.filter((entry) => (offset === 0 ? isUpcoming(entry.bucket) : entry.bucket !== "completed" && entry.bucket !== "overdue"));
+      const own = day.custom.filter((deadline) => deadline.completedAt === null);
       const isSelected = selected === key;
       return (
         <div key={key} role="listitem">
@@ -36,7 +37,7 @@ export const WeekStrip = ({ week, offset = 0, courseById, selected, onSelect }: 
             data-today={day.isToday}
             data-selected={isSelected}
             aria-pressed={isSelected}
-            aria-label={`${format(day.date, "EEEE, MMMM d")}: ${active.length} due${isSelected ? ", selected" : ""}`}
+            aria-label={`${format(day.date, "EEEE, MMMM d")}: ${active.length} due${own.length > 0 ? `, ${own.length} of your own` : ""}${isSelected ? ", selected" : ""}`}
             onClick={() => onSelect(isSelected ? null : key)}
           >
             <span className="week-day-name">{day.isToday ? "Today" : format(day.date, "EEE")}</span>
@@ -46,6 +47,9 @@ export const WeekStrip = ({ week, offset = 0, courseById, selected, onSelect }: 
                 const course = courseById.get(entry.item.courseId);
                 return <i key={entry.item.key} style={isSelected && course ? { background: courseSwatch(course.color) } : undefined} />;
               })}
+              {own.slice(0, Math.max(0, 4 - Math.min(active.length, 4))).map((deadline) => (
+                <i key={deadline.id} data-hollow="true" />
+              ))}
             </span>
           </button>
         </div>

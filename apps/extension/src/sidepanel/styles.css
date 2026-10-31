@@ -294,6 +294,8 @@ h1, h2, h3, h4, p { margin: 0; }
 .week-day strong { font-size: 16px; font-weight: 800; }
 .week-day .dots { display: flex; gap: 3px; min-height: 6px; margin-top: 3px; }
 .week-day .dots i { display: block; width: 5px; height: 5px; border-radius: 50%; background: rgba(255, 255, 255, 0.75); }
+.week-day .dots i[data-hollow="true"] { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.85); }
+.week-day[data-selected="true"] .dots i[data-hollow="true"] { box-shadow: inset 0 0 0 1.5px var(--nova-field); }
 .week-day[data-today="true"] strong { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
 .week-day[data-selected="true"] { background: var(--nova-field-ink); color: var(--nova-field); }
 .week-day[data-selected="true"]:hover { background: var(--nova-field-ink); }
@@ -318,6 +320,12 @@ h1, h2, h3, h4, p { margin: 0; }
 .event-chip[data-done="true"] .time, .event-chip[data-done="true"] .title { color: var(--nova-muted); }
 .event-chip[data-done="true"] .title { text-decoration: line-through; }
 .event-chip > svg { color: var(--nova-muted); }
+.event-chip[data-personal="true"] > svg { color: var(--nova-accent); }
+.own-tag { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 9px; background: var(--nova-accent-soft); color: var(--nova-accent); font-size: 11px; font-weight: 700; letter-spacing: 0.01em; white-space: nowrap; }
+.course-dot[data-hollow="true"] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--nova-faint); }
+.agenda-add { align-self: flex-start; margin: 4px 0 2px -10px; }
+.button-danger-ghost { color: var(--nova-overdue); }
+.button-danger-ghost:hover:not(:disabled) { background: var(--nova-overdue-soft); }
 .popover { z-index: 30; width: min(340px, calc(100vw - 24px)); padding: 14px; border: 1px solid var(--nova-rule-strong); border-radius: var(--nova-radius-md); background: var(--nova-surface-raised); box-shadow: var(--nova-shadow); animation: fade-in 140ms ease-out; color: var(--nova-ink); }
 .popover-close { position: absolute; top: 6px; right: 6px; }
 
@@ -389,6 +397,13 @@ h1, h2, h3, h4, p { margin: 0; }
 .dialog h2 { font-size: 16px; font-weight: 700; }
 .dialog p { margin-top: 6px; color: var(--nova-muted); }
 .dialog .card-actions { justify-content: flex-end; margin-top: 16px; }
+.deadline-form { display: flex; flex-direction: column; gap: 12px; }
+.deadline-form p { margin-top: 0; }
+.deadline-row { display: grid; grid-template-columns: minmax(0, 120px) minmax(0, 1fr); gap: 10px; }
+.deadline-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--nova-muted); }
+.input { width: 100%; min-height: 36px; padding: 0 10px; border: 1px solid var(--nova-rule-strong); border-radius: var(--nova-radius-sm); background: var(--nova-bg); color: var(--nova-ink); font: inherit; font-size: 14px; }
+.input:focus-visible { outline: none; box-shadow: var(--nova-focus); }
+.deadline-error { color: var(--nova-overdue); font-size: 13px; font-weight: 600; }
 .report { max-height: 220px; overflow: auto; padding: 8px 10px; border: 1px solid var(--nova-rule); border-radius: var(--nova-radius-sm); background: var(--nova-surface); font-family: var(--nova-font); font-size: 12.5px; white-space: pre-wrap; color: var(--nova-muted); }
 
 /* Ask tab */

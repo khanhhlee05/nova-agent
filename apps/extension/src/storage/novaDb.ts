@@ -37,6 +37,22 @@ export type FeasibilityRecord = { tenantOrigin: string; report: FeasibilityRepor
  */
 export type LocalMarkRecord = { key: string; scope: string; markedAt: string };
 
+/**
+ * A deadline the student typed in. Lives only here: never part of a snapshot,
+ * never diffed, never sent to Ask Nova, and shown only on the Week tab.
+ */
+export type PersonalItemRecord = {
+  id: string;
+  scope: string;
+  title: string;
+  dueAt: string;
+  /** A course of the student's, or null for "no course". */
+  courseId: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export class NovaDb extends Dexie {
   snapshots!: EntityTable<StoredSnapshot, "id">;
   changeEvents!: EntityTable<StoredChangeEvent, "id">;
@@ -45,6 +61,7 @@ export class NovaDb extends Dexie {
   versionCache!: EntityTable<VersionCacheRecord, "tenantOrigin">;
   feasibility!: EntityTable<FeasibilityRecord, "tenantOrigin">;
   localMarks!: EntityTable<LocalMarkRecord, "key">;
+  personalItems!: EntityTable<PersonalItemRecord, "id">;
 
   constructor(name = "nova-agent") {
     super(name);
@@ -57,6 +74,7 @@ export class NovaDb extends Dexie {
       feasibility: "tenantOrigin",
     });
     this.version(2).stores({ localMarks: "key, scope" });
+    this.version(3).stores({ personalItems: "id, scope, dueAt" });
   }
 }
 

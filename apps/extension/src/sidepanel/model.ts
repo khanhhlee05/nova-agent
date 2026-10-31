@@ -21,7 +21,11 @@ export type NextMove = { item: AcademicItem; ranked: RankedItem; reasons: Priori
 
 export type WeekEntry = { item: AcademicItem; bucket: DeadlineBucket };
 
-export type WeekDay = { date: Date; isToday: boolean; entries: WeekEntry[] };
+/** A deadline the student added by hand. Only the Week tab shows these. */
+export type PersonalDeadline = { id: string; title: string; dueAt: string; courseId: string | null; completedAt: string | null; createdAt: string; updatedAt: string };
+
+/** `entries` come from Brightspace; `custom` are the student's own, kept apart so no view can confuse the two. */
+export type WeekDay = { date: Date; isToday: boolean; entries: WeekEntry[]; custom: PersonalDeadline[] };
 
 /** Seven days starting `offset` weeks after today. Offset 0 is the panel's "next 7 days". */
 export type WeekPage = { offset: number; days: WeekDay[]; from: Date; to: Date };
@@ -69,6 +73,8 @@ export type Dashboard = {
   localDone: ReadonlyMap<string, string>;
   /** When each item last appeared in the current change feed. Drives the "Changed" mark and the recently-updated sort. */
   changedAt: ReadonlyMap<string, string>;
+  /** The student's own deadlines, course-filtered. Not in any bucket, count, or ranking. */
+  personal: PersonalDeadline[];
 };
 
 export type BuildDashboardInput = {
@@ -80,6 +86,8 @@ export type BuildDashboardInput = {
   dismissedItemKeys?: ReadonlySet<string>;
   /** Persisted local done marks, item key to markedAt. Marked items count as completed until Brightspace says so itself. */
   localMarks?: ReadonlyMap<string, string>;
+  /** Deadlines the student added by hand. Week tab only. */
+  personal?: readonly PersonalDeadline[];
 };
 
 /** Still to do and not yet late. The Week tab counts only these, so its numbers match the counts strip. */
@@ -94,7 +102,7 @@ export const isReadBefore = (event: Pick<ChangeEvent, "readAt">, capturedAt: str
   event.readAt !== null && new Date(event.readAt).getTime() < new Date(capturedAt).getTime();
 
 /** Pure derivation of everything the three tabs render. Counts, buckets, and ranking share one filtered set. */
-export const buildDashboard = ({ snapshot, events, now, courseFilter, dismissedItemKeys, localMarks }: BuildDashboardInput): Dashboard => {
+export const buildDashboard = ({ snapshot, events, now, courseFilter, dismissedItemKeys, localMarks, personal: personalInput = [] }: BuildDashboardInput): Dashboard => {
   const courses = [...snapshot.courses].sort((a, b) => a.name.localeCompare(b.name));
   const courseById = new Map(courses.map((course) => [course.id, course]));
   const itemByKey = new Map(snapshot.items.map((item) => [item.key, item]));
@@ -123,7 +131,9 @@ export const buildDashboard = ({ snapshot, events, now, courseFilter, dismissedI
   const nextMove = top ? { item: top.item, ranked: top, reasons: explainPriority(top.item, top.priority) } : null;
 
   const start = startOfDay(now);
-  const week = buildWeekDays(items, localDone, now, 0);
+  // A deadline with no course only shows under "All courses"; one with a course follows that course's filter.
+  const personal = personalInput.filter((deadline) => courseFilter === null || deadline.courseId === courseFilter).sort(byPersonalDue);
+  const week = buildWeekDays(items, localDone, now, 0, personal);
 
   const filteredEvents = events.filter((event) => !isReadBefore(event, snapshot.capturedAt) && (courseFilter === null || event.courseId === courseFilter));
   const yesterdayStart = subDays(start, 1);
@@ -159,11 +169,14 @@ export const buildDashboard = ({ snapshot, events, now, courseFilter, dismissedI
     hidden: { items: dismissedItemKeys ? snapshot.items.filter((item) => dismissedItemKeys.has(item.key)).length : 0 },
     localDone,
     changedAt,
+    personal,
   };
 };
 
+const byPersonalDue = (a: PersonalDeadline, b: PersonalDeadline): number => a.dueAt.localeCompare(b.dueAt) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id);
+
 /** The seven days starting `offset` weeks after today, each with its due items. Pure, so any page can be built on demand. */
-export const buildWeekDays = (items: readonly AcademicItem[], localDone: ReadonlyMap<string, string>, now: Date, offset: number): WeekDay[] => {
+export const buildWeekDays = (items: readonly AcademicItem[], localDone: ReadonlyMap<string, string>, now: Date, offset: number, personal: readonly PersonalDeadline[] = []): WeekDay[] => {
   const window = deadlineWindow(now);
   const start = addDays(startOfDay(now), offset * 7);
   return Array.from({ length: 7 }, (_, index) => {
@@ -172,23 +185,24 @@ export const buildWeekDays = (items: readonly AcademicItem[], localDone: Readonl
       .filter((item) => item.dueAt && isSameDay(new Date(item.dueAt), date))
       .map((item) => ({ item, bucket: localDone.has(item.key) ? ("completed" as const) : classifyDeadline(item, window) }))
       .sort((a, b) => new Date(a.item.dueAt as string).getTime() - new Date(b.item.dueAt as string).getTime() || a.item.title.localeCompare(b.item.title));
-    return { date, isToday: isSameDay(date, now), entries };
+    const custom = personal.filter((deadline) => isSameDay(new Date(deadline.dueAt), date)).sort(byPersonalDue);
+    return { date, isToday: isSameDay(date, now), entries, custom };
   });
 };
 
 /** One page of the Week tab. Offset 0 is `dashboard.week`; later pages are built from the same filtered items. */
-export const weekPage = (dashboard: Pick<Dashboard, "items" | "localDone" | "week">, now: Date, offset: number): WeekPage => {
-  const days = offset === 0 ? dashboard.week : buildWeekDays(dashboard.items, dashboard.localDone, now, offset);
+export const weekPage = (dashboard: Pick<Dashboard, "items" | "localDone" | "week" | "personal">, now: Date, offset: number): WeekPage => {
+  const days = offset === 0 ? dashboard.week : buildWeekDays(dashboard.items, dashboard.localDone, now, offset, dashboard.personal);
   return { offset, days, from: days[0]?.date ?? startOfDay(now), to: days[days.length - 1]?.date ?? startOfDay(now) };
 };
 
-/** The last page with a deadline on it, so the Week tab never pages into empty weeks. Never below 0. */
-export const lastWeekOffset = (dashboard: Pick<Dashboard, "items">, now: Date): number => {
+/** The last page with a deadline on it, Brightspace's or the student's own, so the Week tab never pages into empty weeks. Never below 0. */
+export const lastWeekOffset = (dashboard: Pick<Dashboard, "items" | "personal">, now: Date): number => {
   const start = startOfDay(now).getTime();
   let latest = 0;
-  for (const item of dashboard.items) {
-    if (!item.dueAt) continue;
-    const due = startOfDay(new Date(item.dueAt)).getTime();
+  for (const dueAt of [...dashboard.items.map((item) => item.dueAt), ...dashboard.personal.map((deadline) => deadline.dueAt)]) {
+    if (!dueAt) continue;
+    const due = startOfDay(new Date(dueAt)).getTime();
     if (due > latest) latest = due;
   }
   if (latest <= start) return 0;

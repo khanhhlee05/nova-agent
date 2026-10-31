@@ -5,7 +5,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import { EMPTY_DISMISSALS } from "../../apps/extension/src/sidepanel/dismissals";
 import { weekHero } from "../../apps/extension/src/sidepanel/heroes";
-import { STATUS_LABELS, buildDashboard, isUpcoming, lastWeekOffset, weekPage } from "../../apps/extension/src/sidepanel/model";
+import { STATUS_LABELS, buildDashboard, isUpcoming, lastWeekOffset, weekPage, type PersonalDeadline } from "../../apps/extension/src/sidepanel/model";
+import { validateDeadline } from "../../apps/extension/src/sidepanel/components/DeadlineDialog";
+import { compactSnapshot } from "@nova-agent/agent";
 import { DEFAULT_PREFERENCES, MissionControl, type MissionControlActions, type MissionControlProps } from "../../apps/extension/src/sidepanel/MissionControl";
 import { INITIAL_SYNC_STATUS } from "../../apps/extension/src/storage/repositories";
 import { IDLE_STATE } from "../../apps/extension/src/sync/syncState";
@@ -33,6 +35,10 @@ const actions = (): MissionControlActions & { calls: Record<string, unknown[][]>
     clearData: track("clearData"),
     dismissItem: track("dismissItem"),
     setLocalDone: track("setLocalDone"),
+    addPersonal: track("addPersonal"),
+    updatePersonal: track("updatePersonal"),
+    deletePersonal: track("deletePersonal"),
+    setPersonalDone: track("setPersonalDone"),
     deleteEvent: track("deleteEvent"),
     dismissBanner: track("dismissBanner"),
     restoreDismissed: track("restoreDismissed"),
@@ -542,6 +548,121 @@ describe("week paging", () => {
     const empty = weekHero(dashboard, null, weekPage(dashboard, NOW, lastWeekOffset(dashboard, NOW) + 1));
     expect(empty.title).toMatch(/^Nothing due /);
     expect(weekHero(dashboard, null, weekPage(dashboard, NOW, 0))).toEqual(weekHero(dashboard));
+  });
+});
+
+describe("your own deadlines (Week tab only)", () => {
+  const at = (days: number, hour = 23, minute = 59) => {
+    const date = new Date(NOW);
+    date.setDate(date.getDate() + days);
+    date.setHours(hour, minute, 0, 0);
+    return date.toISOString();
+  };
+  const own = (id: string, extra: Partial<PersonalDeadline> = {}): PersonalDeadline => ({ id, title: `Own ${id}`, dueAt: at(2), courseId: null, completedAt: null, createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), ...extra });
+
+  it("lands on the right day and page, stays out of every Focus number, and never reaches the Ask snapshot", async () => {
+    const { snapshot, events } = await demoDashboard();
+    const plain = buildDashboard({ snapshot, events, now: NOW, courseFilter: null });
+    const personal = [own("exam", { title: "Study for the midterm", dueAt: at(2, 18, 0) }), own("far", { title: "Scholarship essay", dueAt: at(40) }), own("micro", { title: "Office hours", dueAt: at(1), courseId: "31001" })];
+    const dashboard = buildDashboard({ snapshot, events, now: NOW, courseFilter: null, personal });
+    expect(dashboard.week[2]?.custom.map((deadline) => deadline.title)).toEqual(["Study for the midterm"]);
+    expect(dashboard.week[1]?.custom.map((deadline) => deadline.title)).toEqual(["Office hours"]);
+    expect(dashboard.counts).toEqual(plain.counts);
+    expect(dashboard.buckets).toEqual(plain.buckets);
+    expect(dashboard.nextMove?.item.key).toBe(plain.nextMove?.item.key);
+    expect(dashboard.items).toEqual(plain.items);
+    expect(lastWeekOffset(dashboard, NOW)).toBeGreaterThan(lastWeekOffset(plain, NOW));
+    const farPage = weekPage(dashboard, NOW, Math.floor(40 / 7));
+    expect(farPage.days.flatMap((day) => day.custom.map((deadline) => deadline.title))).toEqual(["Scholarship essay"]);
+    // Course filter: a deadline without a course shows only under All courses.
+    const filtered = buildDashboard({ snapshot, events, now: NOW, courseFilter: "31001", personal });
+    expect(filtered.personal.map((deadline) => deadline.id)).toEqual(["micro"]);
+    const compact = compactSnapshot(snapshot, events, NOW, { mode: "live" });
+    expect(compact.items.some((item) => item.title.includes("midterm") || item.title.includes("Scholarship"))).toBe(false);
+  });
+
+  it("validates the form: a name is required, the time must parse, and the course must be the student's", () => {
+    const courses = [makeCourse("c1")];
+    const date = new Date("2026-09-10T12:00:00-04:00");
+    expect(validateDeadline({ title: "   ", date, time: "23:59", courseId: null }, courses)).toEqual({ error: "Give the deadline a name." });
+    expect(validateDeadline({ title: "x".repeat(121), date, time: "23:59", courseId: null }, courses)).toHaveProperty("error");
+    expect(validateDeadline({ title: "Exam", date, time: "", courseId: null }, courses)).toEqual({ error: "Pick a time." });
+    expect(validateDeadline({ title: "Exam", date, time: "09:30", courseId: "nope" }, courses)).toHaveProperty("error");
+    const ok = validateDeadline({ title: "  Study\tfor  the\u0000midterm ", date, time: "18:30", courseId: "c1" }, courses);
+    expect(ok).toEqual({ draft: { title: "Study for the midterm", dueAt: new Date("2026-09-10T18:30:00-04:00").toISOString(), courseId: "c1" } });
+  });
+
+  it("shows them only on the Week tab, marked as the student's own, with the add button on a picked day", async () => {
+    const { snapshot, events } = await demoDashboard();
+    const personal = [own("exam", { title: "Study for the midterm", dueAt: at(2, 18, 0) }), own("done", { title: "Buy a calculator", dueAt: at(2, 9, 0), completedAt: NOW.toISOString(), courseId: "31001" })];
+    const dashboard = buildDashboard({ snapshot, events, now: NOW, courseFilter: null, personal });
+    const p = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "upcoming" } });
+    const { unmount } = render(<MissionControl {...p} />);
+    expect(screen.queryByText("Study for the midterm")).toBeNull();
+    expect(screen.queryByText("Added by you")).toBeNull();
+    unmount();
+
+    render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, activeTab: "week" } })} />);
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toMatch(/plus one of your own$/);
+    const row = screen.getByRole("button", { name: /^Study for the midterm, added by you, no course, 6:00 PM$/ });
+    expect(within(row).getByText("Added by you")).toBeTruthy();
+    expect(within(row).getByText("No course")).toBeTruthy();
+    const doneRow = screen.getByRole("button", { name: /^Buy a calculator, added by you, Microcontrollers, 9:00 AM, done$/ });
+    expect(doneRow.getAttribute("data-done")).toBe("true");
+    const dayButton = screen.getByRole("button", { name: /^Thursday, September 10: .*1 of your own/ });
+    expect(dayButton.querySelectorAll(".dots i[data-hollow='true']")).toHaveLength(1);
+
+    // No add button until a day is picked; then one in the hero and one at the top of that day.
+    expect(screen.queryByRole("button", { name: /add your own deadline/i })).toBeNull();
+    fireEvent.click(dayButton);
+    expect(screen.getAllByRole("button", { name: /add your own deadline/i })).toHaveLength(2);
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toMatch(/plus one of your own$/);
+    fireEvent.click(screen.getAllByRole("button", { name: /add your own deadline/i })[0] as HTMLButtonElement);
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/Thursday, September 10\. Kept on this device only, never in Brightspace\./)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: /^add deadline$/i }));
+    expect(within(dialog).getByRole("alert").textContent).toBe("Give the deadline a name.");
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Review lecture notes" } });
+    fireEvent.change(within(dialog).getByLabelText("Time"), { target: { value: "20:00" } });
+    fireEvent.change(within(dialog).getByLabelText("Course"), { target: { value: "31002" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^add deadline$/i }));
+    const calls = (p.actions as ReturnType<typeof actions>).calls;
+    expect(screen.queryByRole("dialog")).toBeNull();
+    void calls;
+  });
+
+  it("calls add, done, edit, and delete with the deadline, and nothing else", async () => {
+    const { snapshot, events } = await demoDashboard();
+    const exam = own("exam", { title: "Study for the midterm", dueAt: at(2, 18, 0) });
+    const dashboard = buildDashboard({ snapshot, events, now: NOW, courseFilter: null, personal: [exam] });
+    const p = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, activeTab: "week" } });
+    render(<MissionControl {...p} />);
+    const calls = (p.actions as ReturnType<typeof actions>).calls;
+
+    fireEvent.click(screen.getByRole("button", { name: /^Thursday, September 10/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: /add your own deadline/i })[0] as HTMLButtonElement);
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Review lecture notes" } });
+    fireEvent.click(screen.getByRole("button", { name: /^add deadline$/i }));
+    expect(calls.addPersonal?.[0]?.[0]).toEqual({ title: "Review lecture notes", dueAt: at(2), courseId: null });
+
+    fireEvent.click(screen.getByRole("button", { name: /^Study for the midterm, added by you/ }));
+    const popover = screen.getByRole("dialog");
+    expect(within(popover).getByText(/Added by you on .*\. Not in Brightspace\./)).toBeTruthy();
+    fireEvent.click(within(popover).getByRole("button", { name: /^mark done$/i }));
+    expect(calls.setPersonalDone?.[0]).toEqual([exam.id, exam.title, true]);
+    fireEvent.click(within(popover).getByRole("button", { name: /^edit$/i }));
+    const dialog = screen.getAllByRole("dialog").at(-1) as HTMLElement;
+    expect((within(dialog).getByLabelText("Name") as HTMLInputElement).value).toBe("Study for the midterm");
+    expect((within(dialog).getByLabelText("Time") as HTMLInputElement).value).toBe("18:00");
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Study for the final" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^save$/i }));
+    expect(calls.updatePersonal?.[0]).toEqual([exam.id, { title: "Study for the final", dueAt: at(2, 18, 0), courseId: null }]);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Study for the midterm, added by you/ }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^delete$/i }));
+    expect(calls.deletePersonal?.[0]).toEqual([exam.id, exam.title]);
+    expect(calls.dismissItem).toBeUndefined();
+    expect(calls.setLocalDone).toBeUndefined();
   });
 });
 

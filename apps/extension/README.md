@@ -38,6 +38,10 @@ Overdue shows the last two weeks. Anything overdue for longer is **long overdue*
 
 Every open row has a checkbox. Checking it records a mark in local storage only: Brightspace is never written to. A marked item leaves Overdue and Upcoming, the counts, the next move, and the Week agenda's active entries, and appears under Completed labeled **Marked done by you**, with its real Brightspace status still shown. Unchecking removes the mark. The mark is deleted automatically as soon as a refresh reports the item as submitted or completed, or no longer lists it. Items Brightspace already reports as done show a checked, disabled box. Marks are not part of what Ask Nova sends, so Ask answers from Brightspace data only.
 
+## Your own deadlines (Week tab only)
+
+Tap a day in the strip, then **Add your own deadline** (in the field, or at the top of that day's agenda). The dialog asks for a name, a time (11:59 PM by default), and an optional course; the day is the one you tapped. Your deadlines show only on the Week tab: in the agenda with a pen icon and an **Added by you** tag, and in the strip as a hollow dot. They are never on the Focus tab, never counted, never the next move, and never sent to Ask Nova. Tapping one opens its details with **Mark done**, **Edit**, and **Delete** (with Undo). They live in their own table on this device, are never part of a snapshot, produce no change events, and Refresh cannot touch them. **Clear local data** removes them, and says so.
+
 ## Hiding things for a session
 
 Every task row, week entry, Next move card, and notice banner has a **Hide until next refresh** control. Hidden things leave every view at once, including the summary counts, the Next move card, and the week agenda. A bar under the tabs shows how many things are hidden and offers **Show all**.
