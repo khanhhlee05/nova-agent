@@ -4,11 +4,12 @@ import {
   MAX_CHANGE_EVENT_AGE_DAYS,
   MAX_SNAPSHOTS_PER_USER,
   dedupeEvents,
+  isDone,
   sortSnapshotsNewestFirst,
   type AcademicSnapshot,
   type ChangeEvent,
 } from "@nova-agent/core";
-import type { NovaDb, StoredChangeEvent, StoredSnapshot, SyncStatusRecord } from "./novaDb";
+import type { LocalMarkRecord, NovaDb, StoredChangeEvent, StoredSnapshot, SyncStatusRecord } from "./novaDb";
 
 export const INITIAL_SYNC_STATUS: SyncStatusRecord = {
   key: "current",
@@ -80,7 +81,7 @@ export type SaveSyncOutcomeResult = { savedEvents: ChangeEvent[]; prunedSnapshot
  */
 export const saveSyncOutcome = async (db: NovaDb, input: SaveSyncOutcomeInput): Promise<SaveSyncOutcomeResult> => {
   const scope = `${input.snapshot.tenantOrigin}|${input.snapshot.userId}`;
-  return db.transaction("rw", db.snapshots, db.changeEvents, db.syncStatus, async () => {
+  return db.transaction("rw", db.snapshots, db.changeEvents, db.syncStatus, db.localMarks, async () => {
     const known = new Set((await db.changeEvents.where("scope").equals(scope).toArray()).map((event) => event.fingerprint));
     const fresh = dedupeEvents(input.events, known);
 
@@ -89,6 +90,15 @@ export const saveSyncOutcome = async (db: NovaDb, input: SaveSyncOutcomeInput): 
 
     const status = { ...(await getSyncStatus(db)), ...input.status, key: "current" as const, scope };
     await db.syncStatus.put(status);
+
+    // Brightspace truth wins: a local done mark goes once the LMS reports the item done or stops listing it.
+    const itemByKey = new Map(input.snapshot.items.map((item) => [item.key, item]));
+    const marks = await db.localMarks.where("scope").equals(scope).toArray();
+    const settled = marks.filter((mark) => {
+      const item = itemByKey.get(mark.key);
+      return !item || isDone(item);
+    });
+    if (settled.length > 0) await db.localMarks.bulkDelete(settled.map((mark) => mark.key));
 
     // Retention: newest MAX_SNAPSHOTS_PER_USER snapshots per scope.
     const snapshots = await db.snapshots.where("scope").equals(scope).toArray();
@@ -104,6 +114,15 @@ export const saveSyncOutcome = async (db: NovaDb, input: SaveSyncOutcomeInput): 
 
     return { savedEvents: fresh, prunedSnapshots: stale.length, prunedEvents: expired.length };
   });
+};
+
+/** Every "done" mark the student set on this device for one account, keyed by item key. */
+export const listLocalMarks = async (db: NovaDb, scope: string): Promise<LocalMarkRecord[]> => db.localMarks.where("scope").equals(scope).toArray();
+
+/** Sets or clears the local done mark on one item. */
+export const setLocalMark = async (db: NovaDb, scope: string, key: string, markedAt: string | null): Promise<void> => {
+  if (markedAt) await db.localMarks.put({ key, scope, markedAt });
+  else await db.localMarks.delete(key);
 };
 
 export const getPreference = async <T>(db: NovaDb, key: string, fallback: T): Promise<T> => {

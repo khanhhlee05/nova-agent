@@ -3,6 +3,7 @@ import {
   deadlineWindow,
   isActive,
   isDone,
+  isLongOverdue,
   normalizeText,
   parseStableKey,
   sortEventsNewestFirst,
@@ -13,7 +14,7 @@ import {
 } from "@nova-agent/core";
 import { explainPriority, rankItems } from "@nova-agent/planner";
 import { COMPACT_LIMITS, type CompactChange, type CompactItem, type CompactSnapshot } from "@nova-agent/protocol";
-import { differenceInCalendarDays, format } from "date-fns";
+import { addDays, addWeeks, differenceInCalendarDays, endOfWeek, format, startOfDay, startOfWeek } from "date-fns";
 
 export type CompactOptions = {
   mode: "live" | "demo";
@@ -31,6 +32,26 @@ const localOf = (iso: string | null): string | null => {
   if (!iso) return null;
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? null : format(date, LOCAL_FORMAT);
+};
+
+const DATE_FORMAT = "yyyy-MM-dd";
+
+const dateOf = (iso: string | null): string | null => {
+  if (!iso) return null;
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? null : format(date, DATE_FORMAT);
+};
+
+/** Calendar strings in the student's zone. `thisWeek` matches `deadlineWindow`; weeks start on Monday. */
+export const calendarOf = (now: Date): CompactSnapshot["calendar"] => {
+  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+  const nextStart = addWeeks(weekStart, 1);
+  return {
+    today: format(now, DATE_FORMAT),
+    weekStart: format(weekStart, DATE_FORMAT),
+    thisWeek: { from: format(now, DATE_FORMAT), to: format(addDays(startOfDay(now), 6), DATE_FORMAT) },
+    nextWeek: { from: format(nextStart, DATE_FORMAT), to: format(endOfWeek(nextStart, { weekStartsOn: 1 }), DATE_FORMAT) },
+  };
 };
 
 /** Strips control characters (newlines included) and collapses whitespace, so LMS text can never add a line to a prompt. */
@@ -102,7 +123,8 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
   const window = deadlineWindow(now);
   const visible = snapshot.items.filter((item) => courseIds.has(item.courseId) && item.visibility !== "hidden" && item.visibility !== "expired");
   const eligible = visible.filter((item) => isActive(item) || (isDone(item) && withinDays(item.dueAt, now, completedWithinDays)));
-  const ranked = new Map(rankItems(visible.filter(isActive), { now }).map((entry) => [entry.item.key, entry]));
+  // Long overdue items are not ranked, the same as on the Focus tab: the planner would put any of them first.
+  const ranked = new Map(rankItems(visible.filter((item) => isActive(item) && !isLongOverdue(item, now)), { now }).map((entry) => [entry.item.key, entry]));
 
   const dueTime = (item: AcademicItem): number => (item.dueAt ? new Date(item.dueAt).getTime() : Number.POSITIVE_INFINITY);
   const items: CompactItem[] = [...eligible]
@@ -117,7 +139,9 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
         title: clip(item.title),
         dueAt: item.dueAt,
         dueLocal: localOf(item.dueAt),
+        dueDate: dateOf(item.dueAt),
         bucket: classifyDeadline(item, window),
+        longOverdue: isLongOverdue(item, now),
         status: item.status,
         visibility: compactVisibility(item),
         pointsPossible: item.pointsPossible,
@@ -165,10 +189,10 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
     });
 
   const activeItems = items.filter((item) => item.bucket !== "completed");
-  const count = (bucket: CompactItem["bucket"]) => activeItems.filter((item) => item.bucket === bucket).length;
+  const count = (bucket: CompactItem["bucket"]) => activeItems.filter((item) => item.bucket === bucket && !item.longOverdue).length;
   const today = count("today");
   return {
-    version: 1,
+    version: 2,
     mode: options.mode,
     now: now.toISOString(),
     timezone: options.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC",
@@ -181,11 +205,13 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
     changes,
     counts: {
       overdue: count("overdue"),
+      longOverdue: activeItems.filter((item) => item.longOverdue).length,
       today,
       thisWeek: today + count("tomorrow") + count("this-week"),
       unread: changes.filter((change) => !change.read).length,
       activeItems: activeItems.length,
     },
+    calendar: calendarOf(now),
   };
 };
 

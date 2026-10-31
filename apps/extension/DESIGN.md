@@ -238,7 +238,7 @@ Villanova blue as a solid field over a white or near-black ground, with three st
 
 ### Hierarchy
 - **Display** (800, 26 px, 1.15, -0.02 em, balanced wrap): the field headline, one per tab; the item title on Focus, a computed sentence on Week and Changes.
-- **Headline** (700, 15 px, 1.3): section triggers (Overdue, Today, Tomorrow, This week), feed-group labels, detail headings. Section headlines take the state hue.
+- **Headline** (700, 15 px, 1.3): detail headings and feed-group labels. The Focus category control and the day-group labels inside Upcoming use the 13 px label weight, and take the state hue (Overdue, Today).
 - **Title** (600, 15 px; 14.5 px in agenda rows): task and event titles, single line with ellipsis.
 - **Body** (400, 14 px, 1.45): the field sentence (max 60 ch), signal bodies, banner copy, first-run steps.
 - **Label** (600, 13 px): hero meta line, tab labels (700 when active), select trigger, time column, disclosure links; counts strip numbers are 800 at 15 px.

@@ -38,6 +38,8 @@ export const Banner = ({ tone, icon, title, children, actions, role = "status", 
 
 export type StateBannersProps = {
   mode: "live" | "fixture";
+  /** False where the view carries its own demo label (the Ask tab). */
+  showDemo?: boolean;
   phase: SyncPhase;
   error: BrightspaceError | null;
   warnings: SyncWarning[];
@@ -57,9 +59,14 @@ export type StateBannersProps = {
   onDismiss: (id: string) => void;
 };
 
-/** Every non-happy state is rendered here so it is never an afterthought. */
+/**
+ * Every non-happy state is rendered here so it is never an afterthought.
+ * Rendered above every tab. A broken connection (session expired, permission
+ * required, offline, failed) cannot be hidden: while it lasts, every number
+ * on screen is older than it looks. Informational notices stay dismissible.
+ */
 export const StateBanners = (props: StateBannersProps) => {
-  const { mode, phase, error, warnings, failedCourseIds, courses, lastSuccessfulSyncAt, stale, hasData, now, onRefresh, onConnectLive, onOpenBrightspace, onUseDemo, dismissed, onDismiss } = props;
+  const { mode, showDemo = true, phase, error, warnings, failedCourseIds, courses, lastSuccessfulSyncAt, stale, hasData, now, onRefresh, onConnectLive, onOpenBrightspace, onUseDemo, dismissed, onDismiss } = props;
   const banners: ReactNode[] = [];
   const retry = (
     <button type="button" className="button button-sm" onClick={onRefresh} disabled={isRunningPhase(phase)}>
@@ -68,7 +75,7 @@ export const StateBanners = (props: StateBannersProps) => {
     </button>
   );
 
-  if (mode === "fixture") {
+  if (mode === "fixture" && showDemo) {
     if (!dismissed.has("fixture")) banners.push(<Banner key="fixture" onDismiss={() => onDismiss("fixture")}
         tone="warn"
         icon={<FlaskConical size={16} aria-hidden="true" />}
@@ -86,7 +93,7 @@ export const StateBanners = (props: StateBannersProps) => {
   }
 
   if (phase === "session-expired") {
-    if (!dismissed.has("expired")) banners.push(<Banner key="expired" onDismiss={() => onDismiss("expired")}
+    banners.push(<Banner key="expired"
         tone="critical"
         role="alert"
         icon={<LockKeyhole size={16} aria-hidden="true" />}
@@ -104,7 +111,7 @@ export const StateBanners = (props: StateBannersProps) => {
       </Banner>,
     );
   } else if (phase === "permission-required") {
-    if (!dismissed.has("permission")) banners.push(<Banner key="permission" onDismiss={() => onDismiss("permission")}
+    banners.push(<Banner key="permission"
         tone="critical"
         role="alert"
         icon={<KeyRound size={16} aria-hidden="true" />}
@@ -125,12 +132,12 @@ export const StateBanners = (props: StateBannersProps) => {
       </Banner>,
     );
   } else if (phase === "offline") {
-    if (!dismissed.has("offline")) banners.push(<Banner key="offline" onDismiss={() => onDismiss("offline")} tone="warn" role="alert" icon={<CloudOff size={16} aria-hidden="true" />} title="Brightspace is unreachable" actions={<>{retry}<button type="button" className="button button-ghost button-sm" onClick={onOpenBrightspace}>Open Brightspace</button></>}>
+    banners.push(<Banner key="offline" tone="warn" role="alert" icon={<CloudOff size={16} aria-hidden="true" />} title="Brightspace is unreachable" actions={<>{retry}<button type="button" className="button button-ghost button-sm" onClick={onOpenBrightspace}>Open Brightspace</button></>}>
         <p>{error?.kind === "network" && error.operation === "no-brightspace-tab" ? "Open brightspace.villanova.edu in a tab so Nova can read through your session." : hasData ? `Showing what Nova last saw ${formatAge(lastSuccessfulSyncAt, now)}.` : "Check your connection and try again."}</p>
       </Banner>,
     );
   } else if (phase === "failed") {
-    if (!dismissed.has("failed")) banners.push(<Banner key="failed" onDismiss={() => onDismiss("failed")} tone="critical" role="alert" icon={<AlertTriangle size={16} aria-hidden="true" />} title="Refresh failed" actions={retry}>
+    banners.push(<Banner key="failed" tone="critical" role="alert" icon={<AlertTriangle size={16} aria-hidden="true" />} title="Refresh failed" actions={retry}>
         <p>{error ? describeError(error) : "Something went wrong."}{hasData ? ` Showing what Nova last saw ${formatAge(lastSuccessfulSyncAt, now)}.` : ""}</p>
       </Banner>,
     );

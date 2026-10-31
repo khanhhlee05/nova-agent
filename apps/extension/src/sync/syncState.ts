@@ -25,10 +25,10 @@ export const isRunningPhase = (phase: SyncPhase): boolean => RUNNING_PHASES.incl
 export const PHASE_LABELS: Record<SyncPhase, string> = {
   idle: "Idle",
   "checking-session": "Checking your Brightspace session",
-  "discovering-versions": "Discovering API versions",
+  "discovering-versions": "Connecting to Brightspace",
   "loading-courses": "Loading courses",
   "loading-course-data": "Loading assignments, quizzes, and news",
-  normalizing: "Organizing",
+  normalizing: "Sorting your deadlines",
   comparing: "Comparing with your last visit",
   saving: "Saving locally",
   ready: "Up to date",

@@ -7,13 +7,13 @@ import {
   CircleHelp,
   EyeOff,
   Eye,
+  FileMinus,
   FileText,
   ListChecks,
   LoaderCircle,
   Megaphone,
   PencilLine,
   Plus,
-  Trash2,
 } from "lucide-react";
 
 export const KindIcon = ({ kind, size = 16 }: { kind: AcademicItem["kind"]; size?: number }) =>
@@ -49,8 +49,9 @@ export const changeIcon = (event: ChangeEvent): { icon: React.ReactNode; tone: T
       return event.after?.visibility === "hidden"
         ? { icon: <EyeOff size={15} aria-hidden="true" />, tone: "blue" }
         : { icon: <Eye size={15} aria-hidden="true" />, tone: "blue" };
+    // Not Trash2: that glyph is the delete control on the same row, and Brightspace removing an item is not the student deleting it.
     case "item-removed":
-      return { icon: <Trash2 size={15} aria-hidden="true" />, tone: "blue" };
+      return { icon: <FileMinus size={15} aria-hidden="true" />, tone: "blue" };
     case "announcement-added":
       return { icon: <Megaphone size={15} aria-hidden="true" />, tone: "blue" };
     case "announcement-updated":

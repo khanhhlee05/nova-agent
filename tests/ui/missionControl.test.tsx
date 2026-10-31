@@ -4,10 +4,13 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import { EMPTY_DISMISSALS } from "../../apps/extension/src/sidepanel/dismissals";
+import { weekHero } from "../../apps/extension/src/sidepanel/heroes";
+import { STATUS_LABELS, buildDashboard, isUpcoming } from "../../apps/extension/src/sidepanel/model";
 import { DEFAULT_PREFERENCES, MissionControl, type MissionControlActions, type MissionControlProps } from "../../apps/extension/src/sidepanel/MissionControl";
 import { INITIAL_SYNC_STATUS } from "../../apps/extension/src/storage/repositories";
 import { IDLE_STATE } from "../../apps/extension/src/sync/syncState";
 import { NOW, TENANT, demoDashboard } from "../helpers/demoDashboard";
+import { makeCourse, makeItem, makeSnapshot } from "../helpers/factories";
 
 afterEach(cleanup);
 
@@ -29,6 +32,7 @@ const actions = (): MissionControlActions & { calls: Record<string, unknown[][]>
     useDemoData: track("useDemoData"),
     clearData: track("clearData"),
     dismissItem: track("dismissItem"),
+    setLocalDone: track("setLocalDone"),
     deleteEvent: track("deleteEvent"),
     dismissBanner: track("dismissBanner"),
     restoreDismissed: track("restoreDismissed"),
@@ -40,7 +44,7 @@ const baseProps = (overrides: Partial<MissionControlProps> = {}): MissionControl
   status: { ...INITIAL_SYNC_STATUS, mode: "live", phase: "ready", scope: `${TENANT}|2001`, lastSuccessfulSyncAt: new Date(NOW.getTime() - 4 * 60_000).toISOString(), lastAttemptedSyncAt: NOW.toISOString(), lastOutcome: "ready" },
   runtime: IDLE_STATE,
   feasibility: null,
-  preferences: { ...DEFAULT_PREFERENCES, collapsedSections: [] },
+  preferences: { ...DEFAULT_PREFERENCES },
   hasEverSynced: true,
   announcement: null,
   now: NOW,
@@ -62,30 +66,33 @@ describe("Mission Control states", () => {
     render(<MissionControl {...baseProps({ status: { ...INITIAL_SYNC_STATUS, mode: "live", lastAttemptedSyncAt: NOW.toISOString() }, runtime: { ...IDLE_STATE, phase: "loading-course-data", progress: { completed: 1, total: 4 } }, hasEverSynced: false })} />);
     expect(screen.getByTestId("skeleton")).toBeTruthy();
     expect(screen.getByText("Refreshing…")).toBeTruthy();
-    expect(screen.getByRole("status", { name: /connection: refreshing/i })).toBeTruthy();
+    expect(screen.getByRole("status", { name: /^refreshing\. no successful refresh yet/i })).toBeTruthy();
     expect((screen.getByRole("button", { name: /refresh now/i }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("labels demo data clearly and never as live", async () => {
     const { dashboard } = await demoDashboard();
     render(<MissionControl {...baseProps({ dashboard, status: { ...baseProps().status, mode: "fixture" } })} />);
-    expect(screen.getByRole("status", { name: /connection: demo data/i })).toBeTruthy();
+    expect(screen.getByRole("status", { name: /^demo data, not your brightspace/i })).toBeTruthy();
     expect(screen.getByText(/these courses are fictional/i)).toBeTruthy();
     expect(screen.queryByText(/^Live$/)).toBeNull();
   });
 
-  it("renders the ready state with counts, next move, and sections", async () => {
+  it("renders the ready state with counts, next move, and categories", async () => {
     const { dashboard } = await demoDashboard();
     render(<MissionControl {...baseProps({ dashboard })} />);
-    expect(screen.getByRole("status", { name: /connection: live/i })).toBeTruthy();
+    expect(screen.getByRole("status", { name: /^live brightspace data\. last successful refresh/i })).toBeTruthy();
     expect(screen.getByText(/live · 4m ago/i)).toBeTruthy();
     const summary = screen.getByRole("group", { name: /workload summary/i });
     expect(within(summary).getByText("Overdue").previousSibling?.textContent).toBe(String(dashboard.counts.overdue));
-    expect(within(summary).getByText("Today").previousSibling?.textContent).toBe(String(dashboard.counts.today));
+    expect(within(summary).getByText("This week").previousSibling?.textContent).toBe(String(dashboard.counts.thisWeek));
+    expect(within(summary).getByText("New changes").previousSibling?.textContent).toBe(String(dashboard.counts.unread));
     expect(screen.getByRole("heading", { level: 2, name: dashboard.nextMove?.item.title as string })).toBeTruthy();
-    expect(screen.getAllByText(/suggested priority/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/why this first\?/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/AI priority/i)).toBeNull();
-    expect(screen.getByRole("button", { name: /^Overdue/ })).toBeTruthy();
+    const categories = screen.getByRole("radiogroup", { name: /^category$/i });
+    expect(within(categories).getByRole("radio", { name: new RegExp(`^Overdue, ${dashboard.buckets.overdue.length} items?`) })).toBeTruthy();
+    expect(within(categories).getByRole("radio", { name: new RegExp(`^Completed, ${dashboard.buckets.completed.length} items?`) })).toBeTruthy();
   });
 
   it("shows stale, partial, session-expired, permission-required, and offline states with retry", async () => {
@@ -123,7 +130,50 @@ describe("Mission Control states", () => {
     const { dashboard } = await demoDashboard({ courseFilter: "does-not-exist" });
     render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, courseFilter: "does-not-exist" } })} />);
     expect(screen.getByText(/no assignments or quizzes yet/i)).toBeTruthy();
-    expect(screen.getByText(/nothing active right now/i)).toBeTruthy();
+    expect(screen.getByText(/you're all caught up/i)).toBeTruthy();
+  });
+});
+
+describe("trustworthy state and focus", () => {
+  it("shows a broken connection on every tab and never offers to hide it", async () => {
+    const { dashboard } = await demoDashboard();
+    const status = { ...baseProps().status, phase: "session-expired" as const, error: { kind: "session-expired" as const } };
+    for (const activeTab of ["focus", "week", "changes"] as const) {
+      render(<MissionControl {...baseProps({ dashboard, status, preferences: { ...DEFAULT_PREFERENCES, activeTab } })} />);
+      const alert = screen.getByRole("alert");
+      expect(alert.textContent).toContain("Brightspace session expired");
+      expect(within(alert).queryByRole("button", { name: /hide/i })).toBeNull();
+      cleanup();
+    }
+    render(<MissionControl {...baseProps({ dashboard, status: { ...baseProps().status, phase: "offline", error: { kind: "network", retryable: true, operation: "fetch" } } })} />);
+    expect(within(screen.getByRole("alert")).queryByRole("button", { name: /hide/i })).toBeNull();
+  });
+
+  it("never shows demo data as freshly refreshed when the last refresh failed", async () => {
+    const { dashboard } = await demoDashboard();
+    render(<MissionControl {...baseProps({ dashboard, status: { ...baseProps().status, mode: "fixture", phase: "failed", lastSuccessfulSyncAt: NOW.toISOString() } })} />);
+    const fresh = screen.getByRole("status", { name: /^demo data\. the last refresh failed/i });
+    expect(fresh.textContent).toBe("Demo · Refresh failed");
+  });
+
+  it("offers a skip link and keeps the kind icon out of the tab order", async () => {
+    const { dashboard } = await demoDashboard();
+    render(<MissionControl {...baseProps({ dashboard })} />);
+    const skip = screen.getByRole("link", { name: /skip to content/i });
+    fireEvent.click(skip);
+    expect(document.activeElement?.id).toBe("panel-main");
+    expect(document.querySelectorAll(".kind-chip[tabindex]")).toHaveLength(0);
+  });
+});
+
+describe("one definition of this week", () => {
+  it("gives the counts strip, the sections, and the Week headline the same seven-day number", async () => {
+    const { dashboard } = await demoDashboard({ withChanges: true });
+    const { buckets, counts } = dashboard;
+    const upcomingOnWeekTab = dashboard.week.flatMap((day) => day.entries).filter((entry) => isUpcoming(entry.bucket)).length;
+    expect(counts.thisWeek).toBe(buckets.today.length + buckets.tomorrow.length + buckets["this-week"].length);
+    expect(upcomingOnWeekTab).toBe(counts.thisWeek);
+    expect(weekHero(dashboard).title).toMatch(new RegExp(`^${["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"][counts.thisWeek] ?? counts.thisWeek} deadlines?`, "i"));
   });
 });
 
@@ -143,14 +193,14 @@ describe("course filtering", () => {
     const total = Object.values(one.dashboard.buckets).reduce((sum, list) => sum + list.length, 0);
     expect(total).toBe(one.dashboard.items.length);
 
-    render(<MissionControl {...baseProps({ dashboard: one.dashboard, preferences: { ...DEFAULT_PREFERENCES, courseFilter: "31001", collapsedSections: [] } })} />);
+    render(<MissionControl {...baseProps({ dashboard: one.dashboard, preferences: { ...DEFAULT_PREFERENCES, courseFilter: "31001" } })} />);
     expect(screen.getByRole("combobox", { name: /filter by course/i }).textContent).toContain("Microcontrollers");
     expect(screen.queryByText("Homework 4: Pipelining Hazards")).toBeNull();
   });
 });
 
 describe("keyboard navigation", () => {
-  it("moves between tabs with arrow keys and toggles sections and rows from the keyboard", async () => {
+  it("moves between tabs with arrow keys and switches categories and rows from the keyboard", async () => {
     const user = userEvent.setup();
     const { dashboard } = await demoDashboard();
     const props = baseProps({ dashboard });
@@ -160,10 +210,10 @@ describe("keyboard navigation", () => {
     await user.keyboard("{ArrowRight}");
     expect((props.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0]).toEqual({ activeTab: "week" });
 
-    const overdue = screen.getByRole("button", { name: /^Overdue/ });
-    overdue.focus();
+    const completed = screen.getByRole("radio", { name: /^Completed,/ });
+    completed.focus();
     await user.keyboard("{Enter}");
-    expect((props.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0]).toEqual({ collapsedSections: ["overdue"] });
+    expect((props.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0]).toEqual({ focusCategory: "completed" });
 
     const expand = screen.getAllByRole("button", { name: /show details for/i })[0] as HTMLButtonElement;
     expand.focus();
@@ -181,7 +231,7 @@ describe("keyboard navigation", () => {
     expect(screen.getByRole("list", { name: /next seven days/i }).children).toHaveLength(7);
     const chip = screen.getAllByRole("button", { name: /Lab 3: Timer Interrupts/ })[0] as HTMLButtonElement;
     await user.click(chip);
-    expect(screen.getByRole("dialog")).toHaveProperty("textContent", expect.stringContaining("Suggested priority"));
+    expect(screen.getByRole("dialog")).toHaveProperty("textContent", expect.stringContaining("Priority, out of 100"));
   });
 });
 
@@ -267,22 +317,166 @@ describe("theme", () => {
   });
 });
 
-describe("collapse all", () => {
-  it("collapses every section at once, then offers to expand them all", async () => {
+describe("focus categories", () => {
+  it("opens on Overdue when anything is overdue, shows one category at a time, and remembers the pick", async () => {
     const { dashboard } = await demoDashboard();
+    expect(dashboard.buckets.overdue.length).toBeGreaterThan(0);
+    const overdueTitle = dashboard.buckets.overdue[0]?.title as string;
+    const doneTitle = dashboard.buckets.completed[0]?.title as string;
     const p = baseProps({ dashboard });
     const { unmount } = render(<MissionControl {...p} />);
-    fireEvent.click(screen.getByRole("button", { name: /collapse all sections/i }));
-    expect((p.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0]).toEqual({
-      collapsedSections: ["overdue", "today", "tomorrow", "this-week", "later", "completed"],
-    });
+    expect(screen.getByRole("radio", { name: /^Overdue,/ }).getAttribute("aria-checked")).toBe("true");
+    expect(within(screen.getByRole("list", { name: "Overdue" })).getByText(overdueTitle)).toBeTruthy();
+    expect(screen.queryByText(doneTitle)).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: /^Upcoming,/ }));
+    expect((p.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0]).toEqual({ focusCategory: "upcoming" });
     unmount();
 
-    const all = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, collapsedSections: ["overdue", "today", "tomorrow", "this-week", "later", "completed"] } });
-    render(<MissionControl {...all} />);
-    expect(screen.queryByRole("button", { name: /show details for Lab 2/i })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /expand all sections/i }));
-    expect((all.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0]).toEqual({ collapsedSections: [] });
+    render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "upcoming" } })} />);
+    expect(screen.getByRole("radio", { name: /^Upcoming,/ }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("heading", { level: 3, name: /^Today/ })).toBeTruthy();
+    expect(screen.queryAllByText(overdueTitle).filter((node) => node.closest(".task")).length).toBe(0);
+    expect(screen.queryByRole("heading", { level: 3, name: /^Overdue/ })).toBeNull();
+    cleanup();
+
+    render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "completed" } })} />);
+    expect(screen.getByRole("list", { name: "Completed" })).toBeTruthy();
+    expect(screen.getByText(doneTitle)).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: new RegExp(`^${doneTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}: (submitted|completed) in Brightspace`) })).toHaveProperty("disabled", true);
+  });
+
+  it("drops the day groups when sorting by course and keeps the order inside one list", async () => {
+    const { dashboard } = await demoDashboard();
+    const p = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "upcoming", sort: "course" } });
+    render(<MissionControl {...p} />);
+    expect(screen.queryByRole("heading", { level: 3, name: /^Today/ })).toBeNull();
+    const list = screen.getByRole("list", { name: "Upcoming" });
+    const courses = within(list)
+      .getAllByRole("listitem")
+      .map((row) => row.querySelector(".task-course")?.textContent ?? "");
+    expect(courses).toEqual([...courses].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })));
+    fireEvent.click(screen.getByRole("combobox", { name: /sort by/i }));
+    fireEvent.click(screen.getByRole("option", { name: /recently updated/i }));
+    expect((p.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0]).toEqual({ sort: "updated" });
+  });
+
+  it("jumps from the count strip to the Overdue category, the Week tab, and the Changes tab", async () => {
+    const { dashboard } = await demoDashboard({ withChanges: true });
+    const p = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "upcoming" } });
+    render(<MissionControl {...p} />);
+    const summary = screen.getByRole("group", { name: /workload summary/i });
+    fireEvent.click(within(summary).getByRole("button", { name: /overdue/i }));
+    fireEvent.click(within(summary).getByRole("button", { name: /this week/i }));
+    fireEvent.click(within(summary).getByRole("button", { name: /new changes/i }));
+    const calls = (p.actions as ReturnType<typeof actions>).calls.setPreferences ?? [];
+    expect(calls.slice(-3).map((call) => call[0])).toEqual([{ activeTab: "focus", focusCategory: "overdue" }, { activeTab: "week" }, { activeTab: "changes" }]);
+  });
+
+  it("flags rows that appear in the change feed", async () => {
+    const { dashboard } = await demoDashboard({ withChanges: true });
+    const changedKey = [...dashboard.changedAt.keys()].find((key) => dashboard.buckets.overdue.some((item) => item.key === key) || dashboard.buckets.today.some((item) => item.key === key) || dashboard.buckets["this-week"].some((item) => item.key === key)) as string;
+    const item = dashboard.itemByKey.get(changedKey) as NonNullable<ReturnType<typeof dashboard.itemByKey.get>>;
+    const category = dashboard.buckets.overdue.some((entry) => entry.key === changedKey) ? "overdue" : "upcoming";
+    render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: category } })} />);
+    const row = screen.getByText(item.title).closest(".task") as HTMLElement;
+    expect(within(row).getByText("Changed")).toBeTruthy();
+  });
+});
+
+describe("local done marks", () => {
+  it("offers a checkbox on open rows that asks for an on-device mark, never a Brightspace write", async () => {
+    const { dashboard } = await demoDashboard();
+    const p = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "upcoming" } });
+    render(<MissionControl {...p} />);
+    const open = dashboard.buckets.today[0] ?? dashboard.buckets["this-week"][0];
+    const box = screen.getByRole("checkbox", { name: `Mark "${open?.title}" done on this device` }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    fireEvent.click(box);
+    expect((p.actions as ReturnType<typeof actions>).calls.setLocalDone?.[0]).toEqual([open?.key, open?.title, true]);
+  });
+
+  it("moves a marked item to Completed, labels it as the student's own mark, and keeps it out of the counts and the hero", async () => {
+    const { snapshot, events } = await demoDashboard();
+    const base = buildDashboard({ snapshot, events, now: NOW, courseFilter: null });
+    const top = base.nextMove?.item as NonNullable<typeof base.nextMove>["item"];
+    const markedAt = new Date(NOW.getTime() - 5 * 60_000).toISOString();
+    const dashboard = buildDashboard({ snapshot, events, now: NOW, courseFilter: null, localMarks: new Map([[top.key, markedAt]]) });
+    expect(dashboard.nextMove?.item.key).not.toBe(top.key);
+    expect(dashboard.buckets.completed.some((item) => item.key === top.key)).toBe(true);
+    expect(dashboard.buckets.overdue.concat(dashboard.buckets.today, dashboard.buckets.tomorrow, dashboard.buckets["this-week"], dashboard.buckets.later).some((item) => item.key === top.key)).toBe(false);
+    expect(dashboard.counts.overdue + dashboard.counts.thisWeek).toBeLessThanOrEqual(base.counts.overdue + base.counts.thisWeek);
+    expect(dashboard.week.flatMap((day) => day.entries).find((entry) => entry.item.key === top.key)?.bucket ?? "completed").toBe("completed");
+
+    const p = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "completed" } });
+    render(<MissionControl {...p} />);
+    const row = screen.getByText(top.title).closest(".task") as HTMLElement;
+    expect(within(row).getByText("Marked done by you")).toBeTruthy();
+    const box = within(row).getByRole("checkbox") as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    expect(box.disabled).toBe(false);
+    fireEvent.click(box);
+    expect((p.actions as ReturnType<typeof actions>).calls.setLocalDone?.[0]).toEqual([top.key, top.title, false]);
+    fireEvent.click(within(row).getByRole("button", { name: /show details for/i }));
+    expect(within(row).getByText(/Brightspace still lists it as open/)).toBeTruthy();
+    expect(within(row).getByText(STATUS_LABELS[top.status])).toBeTruthy();
+  });
+});
+
+describe("long overdue", () => {
+  const daysAgo = (days: number) => new Date(NOW.getTime() - days * 86_400_000).toISOString();
+  const course = makeCourse("c1", { name: "Ethics" });
+  const recent = makeItem({ sourceId: "recent", courseId: "c1", title: "Recent lab", dueAt: daysAgo(3), pointsPossible: 10 });
+  const edge = makeItem({ sourceId: "edge", courseId: "c1", title: "Edge case", dueAt: daysAgo(13.9), pointsPossible: 10 });
+  const stale = makeItem({ sourceId: "stale", courseId: "c1", title: "Forgotten reading response", dueAt: daysAgo(40), pointsPossible: 100 });
+  const older = makeItem({ sourceId: "older", courseId: "c1", title: "Ancient quiz", kind: "quiz", dueAt: daysAgo(70), status: "unknown" });
+  const soon = makeItem({ sourceId: "soon", courseId: "c1", title: "Due tonight", dueAt: new Date(NOW.getTime() + 3 * 3_600_000).toISOString(), pointsPossible: 10 });
+  const build = (items: ReturnType<typeof makeItem>[]) => buildDashboard({ snapshot: makeSnapshot(NOW.toISOString(), items, { courses: [course] }), events: [], now: NOW, courseFilter: null });
+
+  it("splits the overdue bucket at two weeks, counts only the recent ones, and never ranks an old item first", () => {
+    const dashboard = build([recent, edge, stale, older, soon]);
+    expect(dashboard.buckets.overdue.map((item) => item.title)).toEqual(["Edge case", "Recent lab"]);
+    expect(dashboard.longOverdue.map((item) => item.title)).toEqual(["Ancient quiz", "Forgotten reading response"]);
+    expect(dashboard.counts.overdue).toBe(2);
+    expect(dashboard.nextMove?.item.title).not.toBe("Forgotten reading response");
+    expect(dashboard.ranked.has(stale.key)).toBe(false);
+    expect(dashboard.ranked.has(recent.key)).toBe(true);
+  });
+
+  it("folds old items away under Overdue until asked for, then lists them with their own heading", async () => {
+    const dashboard = build([recent, stale, older, soon]);
+    render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "overdue" } })} />);
+    expect(screen.getByRole("radio", { name: /^Overdue, 1 item$/ })).toBeTruthy();
+    expect(within(screen.getByRole("group", { name: /workload summary/i })).getByText("Overdue").previousSibling?.textContent).toBe("1");
+    expect(within(screen.getByRole("list", { name: "Overdue" })).getByText("Recent lab")).toBeTruthy();
+    expect(screen.queryByText("Forgotten reading response")).toBeNull();
+
+    const fold = screen.getByRole("button", { name: /show 2 long overdue items/i });
+    expect(fold.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(fold);
+    expect(screen.getByRole("heading", { level: 3, name: /^Long overdue/ })).toBeTruthy();
+    expect(screen.getByText(/often closed or no longer tracked by the instructor/i)).toBeTruthy();
+    const group = screen.getByRole("heading", { level: 3, name: /^Long overdue/ }).closest(".group") as HTMLElement;
+    expect(within(group).getAllByRole("listitem").map((row) => row.querySelector(".task-title")?.textContent)).toEqual(["Ancient quiz", "Forgotten reading response"]);
+    expect(within(group).getByText(/Overdue · 1 month ago/)).toBeTruthy();
+    expect(within(group).getByRole("checkbox", { name: `Mark "Forgotten reading response" done on this device` })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /hide long overdue/i }));
+    expect(screen.queryByText("Forgotten reading response")).toBeNull();
+  });
+
+  it("says so when the only overdue items are old ones", async () => {
+    const dashboard = build([stale, soon]);
+    render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "overdue" } })} />);
+    expect(screen.getByText(/nothing overdue in the last two weeks/i)).toBeTruthy();
+    expect(screen.getByText(/1 older item is hidden/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /show 1 long overdue item/i }));
+    expect(screen.getByText("Forgotten reading response")).toBeTruthy();
+  });
+
+  it("opens on Upcoming when the only overdue items are old ones", () => {
+    const dashboard = build([stale, soon]);
+    render(<MissionControl {...baseProps({ dashboard })} />);
+    expect(screen.getByRole("radio", { name: /^Upcoming,/ }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("heading", { level: 2, name: "Due tonight" })).toBeTruthy();
   });
 });
 

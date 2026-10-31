@@ -3,13 +3,13 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExtensionHost } from "../platform/host";
 import type { NovaDb } from "../storage/novaDb";
-import { clearAllData, deleteChangeEvent, getPreference, getSyncStatus, listChangeEvents, latestSnapshot, markAllRead, setEventRead, setPreference, unreadCount } from "../storage/repositories";
+import { clearAllData, deleteChangeEvent, getPreference, getSyncStatus, listChangeEvents, listLocalMarks, latestSnapshot, markAllRead, setEventRead, setLocalMark, setPreference, unreadCount } from "../storage/repositories";
 import { DATA_MODE_PREFERENCE, DEMO_SCENARIO_PREFERENCE, SyncCoordinator, type TransportFactory } from "../sync/syncCoordinator";
 import { IDLE_STATE, isRunningPhase, type SyncRuntimeState } from "../sync/syncState";
 import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, defaultAskClientFactory, effectiveAskSettings, type AskClientFactory, type AskSettings } from "./ask";
 import { connectLive as runConnectLive } from "./connect";
 import { useSessionDismissals } from "./dismissals";
-import { DEFAULT_PREFERENCES, MissionControl, type UiPreferences } from "./MissionControl";
+import { DEFAULT_PREFERENCES, MissionControl, withPreferenceDefaults, type UiPreferences } from "./MissionControl";
 import { buildDashboard } from "./model";
 import { useNow } from "./useNow";
 
@@ -22,11 +22,15 @@ export type AppDeps = {
   autoSync?: boolean;
   /** Builds the Ask Nova client from settings. The preview harness and tests inject an in-process one. */
   askClientFactory?: AskClientFactory;
+  /** How long a deleted change can be restored before it is removed for good. */
+  undoMs?: number;
 };
+
+type PendingDelete = { id: string; title: string };
 
 const PREFERENCES_KEY = "ui.preferences";
 
-export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, askClientFactory = defaultAskClientFactory }: AppDeps) => {
+export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, askClientFactory = defaultAskClientFactory, undoMs = 5000 }: AppDeps) => {
   const now = useNow(60_000, nowFn);
   // Every timestamp the panel writes comes from the same injected clock as the one it reads with.
   const clock = useCallback(() => (nowFn ? nowFn() : new Date()), [nowFn]);
@@ -39,11 +43,12 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
   useEffect(() => coordinator.subscribe(setRuntime), [coordinator]);
 
   const status = useLiveQuery(() => getSyncStatus(db), [db]);
-  const preferences = useLiveQuery(() => getPreference<UiPreferences>(db, PREFERENCES_KEY, DEFAULT_PREFERENCES), [db]);
+  const preferences = useLiveQuery(async () => withPreferenceDefaults(await getPreference<Partial<UiPreferences>>(db, PREFERENCES_KEY, DEFAULT_PREFERENCES)), [db]);
   const feasibility = useLiveQuery(async () => (await db.feasibility.get(host.tenantOrigin))?.report ?? null, [db, host.tenantOrigin]) as FeasibilityReport | null | undefined;
   const scope = status?.scope ?? null;
   const snapshot = useLiveQuery(() => (scope ? latestSnapshot(db, scope) : Promise.resolve(null)), [db, scope]);
   const events = useLiveQuery(() => (scope ? listChangeEvents(db, scope) : Promise.resolve([])), [db, scope]);
+  const localMarks = useLiveQuery(async () => (scope ? new Map((await listLocalMarks(db, scope)).map((mark) => [mark.key, mark.markedAt])) : new Map<string, string>()), [db, scope]);
   // A saved address that no longer passes the https rule turns Ask off rather than producing a client.
   const askSettings = useLiveQuery(async () => effectiveAskSettings(await getPreference<AskSettings>(db, ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS)), [db]);
   const askClient = useMemo(() => (askSettings?.enabled ? askClientFactory(askSettings) : null), [askClientFactory, askSettings]);
@@ -80,12 +85,50 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
     if (scope) await host.publishBadge(await unreadCount(db, scope));
   }, [db, host, scope]);
 
+  // A deleted change leaves the feed at once but stays in the database until its Undo window closes.
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const pending = useRef<{ entry: PendingDelete; timer: ReturnType<typeof setTimeout> } | null>(null);
+  // Ids whose delete has been sent to the database. The live query trails a write by a tick, so a
+  // committed row stays hidden until it has actually left the query instead of flashing back first.
+  const [deleting, setDeleting] = useState<ReadonlySet<string>>(() => new Set());
+  const commitDelete = useCallback(() => {
+    const current = pending.current;
+    if (!current) return;
+    clearTimeout(current.timer);
+    pending.current = null;
+    setPendingDelete(null);
+    const { id } = current.entry;
+    setDeleting((prev) => new Set(prev).add(id));
+    void deleteChangeEvent(db, id).then(publishBadge);
+  }, [db, publishBadge]);
+  // Closing the panel inside the window still deletes: the student asked for it and never pressed Undo.
+  const commitLatest = useRef(commitDelete);
+  commitLatest.current = commitDelete;
+  useEffect(() => {
+    const flush = () => commitLatest.current();
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, []);
+
+  const visibleEvents = useMemo(() => {
+    if (!events || (!pendingDelete && deleting.size === 0)) return events;
+    return events.filter((event) => event.id !== pendingDelete?.id && !deleting.has(event.id));
+  }, [deleting, events, pendingDelete]);
+  useEffect(() => {
+    if (!events || deleting.size === 0) return;
+    const gone = [...deleting].filter((id) => !events.some((event) => event.id === id));
+    if (gone.length > 0) setDeleting((prev) => new Set([...prev].filter((id) => !gone.includes(id))));
+  }, [deleting, events]);
+
   const dashboard = useMemo(
     () =>
-      snapshot && events && preferences
-        ? buildDashboard({ snapshot, events, now, courseFilter: preferences.courseFilter, dismissedItemKeys: dismissals.items })
+      snapshot && visibleEvents && preferences
+        ? buildDashboard({ snapshot, events: visibleEvents, now, courseFilter: preferences.courseFilter, dismissedItemKeys: dismissals.items, localMarks })
         : null,
-    [snapshot, events, now, preferences, dismissals],
+    [snapshot, visibleEvents, now, preferences, dismissals, localMarks],
   );
 
   const setPreferences = useCallback(
@@ -107,10 +150,26 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
         dismissItem(key);
         setAnnouncement(`Hid "${title}" until the next refresh.`);
       },
+      setLocalDone: (key: string, title: string, done: boolean) => {
+        if (!scope) return;
+        void setLocalMark(db, scope, key, done ? clock().toISOString() : null);
+        setAnnouncement(done ? `Marked "${title}" done on this device. Brightspace still lists it as open.` : `"${title}" is back in your list.`);
+      },
       deleteEvent: (id: string, title: string) => {
-        void deleteChangeEvent(db, id)
-          .then(publishBadge)
-          .then(() => setAnnouncement(`Deleted the change for "${title}".`));
+        // One Undo at a time: a second delete makes the first one final.
+        commitDelete();
+        const entry = { id, title };
+        pending.current = { entry, timer: setTimeout(commitDelete, undoMs) };
+        setPendingDelete(entry);
+        setAnnouncement(`Deleted the change for "${title}". Undo to restore it.`);
+      },
+      undoDelete: () => {
+        const current = pending.current;
+        if (!current) return;
+        clearTimeout(current.timer);
+        pending.current = null;
+        setPendingDelete(null);
+        setAnnouncement(`Restored the change for "${current.entry.title}".`);
       },
       dismissBanner: (id: string) => {
         dismissBanner(id);
@@ -163,7 +222,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
         setAnnouncement("Local Nova data cleared.");
       },
     }),
-    [clock, coordinator, db, dismissBanner, dismissItem, host, nowFn, publishBadge, restoreAll, scope, setPreferences],
+    [clock, commitDelete, coordinator, db, dismissBanner, dismissItem, host, nowFn, publishBadge, restoreAll, scope, setPreferences, undoMs],
   );
 
   if (!status || !preferences || feasibility === undefined || !askSettings) return null;
@@ -181,7 +240,8 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
       tenantOrigin={host.tenantOrigin}
       dismissals={dismissals}
       actions={actions}
-      ask={{ client: askClient, settings: askSettings, setSettings: setAskSettings, clientFactory: askClientFactory, events: events ?? [] }}
+      pendingDelete={pendingDelete}
+      ask={{ client: askClient, settings: askSettings, setSettings: setAskSettings, clientFactory: askClientFactory, events: visibleEvents ?? [] }}
     />
   );
 };

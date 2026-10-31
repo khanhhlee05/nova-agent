@@ -14,6 +14,26 @@ const demo = async () => {
   return { snapshot, events };
 };
 
+describe("compactSnapshot calendar", () => {
+  it("sends local calendar dates so the server never does date math", async () => {
+    const { snapshot, events } = await demo();
+    const compact = compactSnapshot(snapshot, events, NOW, { mode: "demo" });
+    expect(compact.version).toBe(2);
+    expect(compact.calendar).toEqual({ today: "2026-09-08", weekStart: "2026-09-07", thisWeek: { from: "2026-09-08", to: "2026-09-14" }, nextWeek: { from: "2026-09-14", to: "2026-09-20" } });
+    for (const item of compact.items) {
+      if (item.dueAt) expect(item.dueDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      else expect(item.dueDate).toBeNull();
+    }
+  });
+
+  it("crosses the year boundary", () => {
+    const now = new Date("2026-12-30T10:00:00-05:00");
+    const compact = compactSnapshot(makeSnapshot(now.toISOString(), [makeItem({ sourceId: "x", courseId: "1" })], { courses: [makeCourse("1")] }), [], now, { mode: "demo" });
+    expect(compact.calendar).toEqual({ today: "2026-12-30", weekStart: "2026-12-28", thisWeek: { from: "2026-12-30", to: "2027-01-05" }, nextWeek: { from: "2027-01-04", to: "2027-01-10" } });
+    expect(compact.items[0]?.dueDate).toBeNull();
+  });
+});
+
 describe("compactSnapshot", () => {
   it("keeps only titles, dates, statuses, and links, and validates against the protocol schema", async () => {
     const { snapshot, events } = await demo();

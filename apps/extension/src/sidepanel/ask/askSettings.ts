@@ -40,8 +40,17 @@ export const checkApiBaseUrl = (value: string): ApiBaseUrlCheck => {
 export const normalizeApiBaseUrl = (value: string): string | null => checkApiBaseUrl(value).url;
 
 export const API_URL_MESSAGES: Record<ApiBaseUrlReason, string> = {
-  invalid: "Enter an http or https address.",
-  insecure: "Remote addresses must use https. Plain http works only for localhost.",
+  invalid: "Enter the full address, starting with http:// or https://.",
+  insecure: "This address must start with https://. Only a server on this computer (localhost) can use http://.",
+};
+
+/** "localhost:8787" from "http://localhost:8787", for showing an address in a sentence. */
+export const hostOf = (url: string): string => {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
 };
 
 /** Settings saved before the https rule existed: a failing address turns Ask off so the setup card explains why. */

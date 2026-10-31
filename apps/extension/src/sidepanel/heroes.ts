@@ -1,7 +1,7 @@
 import type { ChangeEvent } from "@nova-agent/core";
 import { format } from "date-fns";
 import { formatAge, formatDeadline, formatRelative } from "./format";
-import type { Dashboard, NextMove } from "./model";
+import { isUpcoming, type Dashboard, type NextMove } from "./model";
 
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
 const words = (n: number): string => WORDS[n] ?? String(n);
@@ -13,7 +13,7 @@ export type Hero = { title: string; meta: string; text: string };
 /** The Focus headline is the item; the sentence explains due date and the non-urgency reasons in words. */
 export const focusHero = (nextMove: NextMove | null, courseName: string | undefined, now: Date): Hero => {
   if (!nextMove) {
-    return { title: "Nothing active right now", meta: "Do this first", text: "Every visible item is submitted, hidden, or not yet rankable. Refresh to check for new work." };
+    return { title: "You're all caught up", meta: "Nothing left to start", text: "Nothing is waiting on you in the courses Nova can see. Refresh to check for new work." };
   }
   const { item, ranked, reasons } = nextMove;
   const due = item.dueAt
@@ -31,35 +31,38 @@ export const focusHero = (nextMove: NextMove | null, courseName: string | undefi
 
 export const weekHero = (dashboard: Dashboard, selectedDay: string | null = null): Hero => {
   const days = dashboard.week;
+  const upcoming = (day: (typeof days)[number]) => day.entries.filter((entry) => isUpcoming(entry.bucket));
   if (selectedDay) {
     const day = days.find((candidate) => format(candidate.date, "yyyy-MM-dd") === selectedDay);
     if (day) {
-      const active = day.entries.filter((entry) => entry.bucket !== "completed");
-      const done = day.entries.length - active.length;
+      const active = upcoming(day);
+      const late = day.entries.filter((entry) => entry.bucket === "overdue").length;
+      const done = day.entries.filter((entry) => entry.bucket === "completed").length;
       const name = day.isToday ? "Today" : format(day.date, "EEEE");
       const quizzes = active.filter((entry) => entry.item.kind === "quiz").length;
+      const also = [late > 0 ? `${plural(late, "item")} already overdue` : null, done > 0 ? `${plural(done, "item")} already submitted` : null].filter((part): part is string => part !== null);
       return {
         title: active.length === 0 ? `Nothing due ${day.isToday ? "today" : format(day.date, "EEEE")}` : `${name}: ${plural(active.length, "deadline")}`,
-        meta: `${format(day.date, "EEEE, MMM d")} · tap the day again for the whole week`,
+        meta: `${format(day.date, "EEEE, MMM d")} · Click ${day.isToday ? "Today" : format(day.date, "EEE")} again to see all 7 days`,
         text:
           active.length === 0
-            ? done > 0
-              ? `${cap(plural(done, "item"))} already submitted. A clear day.`
+            ? also.length > 0
+              ? `${cap(also.join(" and "))}.`
               : "A clear day. Use it to get ahead on the next one."
-            : `${quizzes > 0 ? `${cap(plural(quizzes, "quiz", "quizzes"))} and ` : ""}${quizzes > 0 ? plural(active.length - quizzes, "assignment") : cap(plural(active.length, "assignment"))}${done > 0 ? `, plus ${plural(done, "item")} already submitted` : ""}.`,
+            : `${quizzes > 0 ? `${cap(plural(quizzes, "quiz", "quizzes"))} and ` : ""}${quizzes > 0 ? plural(active.length - quizzes, "assignment") : cap(plural(active.length, "assignment"))}${also.length > 0 ? `, plus ${also.join(" and ")}` : ""}.`,
       };
     }
   }
-  const total = days.reduce((sum, day) => sum + day.entries.filter((entry) => entry.bucket !== "completed").length, 0);
+  // The same number as "Next 7 days" in the Focus counts strip: today, tomorrow, and later this week.
+  const total = dashboard.counts.thisWeek;
   const first = days[0]?.date;
   const last = days[days.length - 1]?.date;
-  const meta = first && last ? `This week · ${format(first, "MMM d")} to ${format(last, "MMM d")}` : "This week";
-  if (total === 0) return { title: "Nothing due in the next seven days", meta, text: "Deadlines further out are listed under Later on the Focus tab." };
-  const activeCount = (day: (typeof days)[number]) => day.entries.filter((entry) => entry.bucket !== "completed").length;
-  const busiest = [...days].sort((a, b) => activeCount(b) - activeCount(a))[0];
-  const busiestActive = busiest ? busiest.entries.filter((entry) => entry.bucket !== "completed") : [];
+  const meta = first && last ? `Next 7 days · ${format(first, "MMM d")} to ${format(last, "MMM d")}` : "Next 7 days";
+  if (total === 0) return { title: "Nothing due in the next 7 days", meta, text: "Deadlines further out are listed under Later on the Focus tab." };
+  const busiest = [...days].sort((a, b) => upcoming(b).length - upcoming(a).length)[0];
+  const busiestActive = busiest ? upcoming(busiest) : [];
   const dayName = busiest ? (busiest.isToday ? "today" : format(busiest.date, "EEEE")) : "";
-  const title = busiestActive.length >= 2 ? `${cap(plural(total, "deadline"))}, ${cap(dayName)} is the crunch` : `${cap(plural(total, "deadline"))} this week`;
+  const title = busiestActive.length >= 2 ? `${cap(plural(total, "deadline"))}, ${cap(dayName)} is the crunch` : `${cap(plural(total, "deadline"))} in the next 7 days`;
   const quizzes = busiestActive.filter((entry) => entry.item.kind === "quiz").length;
   const text =
     busiestActive.length >= 2
@@ -95,7 +98,7 @@ export const changesHero = (dashboard: Dashboard, lastVisitAt: string | null, no
 /** The Ask headline states scope and freshness, computed like every other tab's. */
 export const askHero = (dashboard: Dashboard, enabled: boolean, lastSuccessfulSyncAt: string | null, now: Date): Hero => {
   if (!enabled) {
-    return { title: "Ask Nova is off", meta: "Turn it on below after reading what is sent", text: "Questions in plain words over the same data as the other tabs, answered through a Nova API you run." };
+    return { title: "Ask Nova is off", meta: "Read what gets sent, then turn it on below", text: "Ask about your deadlines and changes in plain words. Answers come from a Nova server, so your question and a summary of your courses leave this device." };
   }
   const courses = dashboard.courses.length;
   return {

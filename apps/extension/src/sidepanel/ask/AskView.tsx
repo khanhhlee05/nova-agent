@@ -1,11 +1,11 @@
 import { FlaskConical, Settings2, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Banner } from "../components/Banners";
 import { Tip } from "../components/Tip";
 import type { Dashboard } from "../model";
 import type { AskClientFactory } from "./askClient";
 import { AskComposer } from "./AskComposer";
-import type { AskSettings } from "./askSettings";
+import { hostOf, type AskSettings } from "./askSettings";
 import { AskSetup } from "./AskSetup";
 import { AskThread } from "./AskThread";
 import type { AskThread as AskThreadState } from "./useAskThread";
@@ -20,18 +20,12 @@ export type AskViewProps = {
   now: Date;
   canOpen: (url: string | null) => boolean;
   onOpen: (url: string) => void;
-};
-
-const hostOf = (url: string): string => {
-  try {
-    return new URL(url).host;
-  } catch {
-    return url;
-  }
+  /** Connection and data notices shared with the other tabs, shown above everything else. */
+  notices?: ReactNode;
 };
 
 /** The Ask tab body: setup card until enabled, then the thread and the composer. */
-export const AskView = ({ thread, settings, onSettingsChange, clientFactory, dashboard, mode, now, canOpen, onOpen }: AskViewProps) => {
+export const AskView = ({ notices, thread, settings, onSettingsChange, clientFactory, dashboard, mode, now, canOpen, onOpen }: AskViewProps) => {
   const [editing, setEditing] = useState(false);
   const showSetup = !settings.enabled || editing;
   const streaming = thread.status === "streaming";
@@ -39,6 +33,7 @@ export const AskView = ({ thread, settings, onSettingsChange, clientFactory, das
   return (
     <div className="ask">
       <div className="ask-thread">
+        {notices}
         {mode === "fixture" ? (
           <Banner tone="info" icon={<FlaskConical size={16} aria-hidden="true" />} title="Demo data">
             <p>Answers describe fictional demo courses, not your Brightspace.</p>
@@ -49,7 +44,7 @@ export const AskView = ({ thread, settings, onSettingsChange, clientFactory, das
         ) : (
           <div className="ask-status">
             <span>
-              Nova API · <span className="mono">{hostOf(settings.apiBaseUrl)}</span> · Session only
+              Nova server · <span className="mono">{hostOf(settings.apiBaseUrl)}</span> · Cleared when you close the panel
             </span>
             <span className="spacer" />
             {thread.messages.length > 0 ? (

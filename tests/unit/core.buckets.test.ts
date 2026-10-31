@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bucketItems, classifyDeadline, deadlineWindow, workloadCounts } from "@nova-agent/core";
+import { LONG_OVERDUE_AFTER_DAYS, bucketItems, classifyDeadline, deadlineWindow, isLongOverdue, workloadCounts } from "@nova-agent/core";
 import { makeItem } from "../helpers/factories";
 
 // TZ is pinned to America/New_York in vitest.config.ts.
@@ -17,18 +17,20 @@ describe("deadline buckets (local timezone)", () => {
     expect(classifyDeadline(at("2026-09-09T00:00:00-04:00"), { now })).toBe("tomorrow");
     expect(classifyDeadline(at("2026-09-09T23:59:59-04:00"), { now })).toBe("tomorrow");
     expect(classifyDeadline(at("2026-09-10T00:00:00-04:00"), { now })).toBe("this-week");
-    expect(classifyDeadline(at("2026-09-13T23:59:59-04:00"), { now })).toBe("this-week");
-    expect(classifyDeadline(at("2026-09-14T00:00:00-04:00"), { now })).toBe("later");
+    expect(classifyDeadline(at("2026-09-14T23:59:59-04:00"), { now })).toBe("this-week");
+    expect(classifyDeadline(at("2026-09-15T00:00:00-04:00"), { now })).toBe("later");
   });
 
-  it("uses a Monday-start week that ends Sunday 23:59:59 local", () => {
+  it("uses a rolling seven-day week: today plus six days, ending 23:59:59 local", () => {
     const window = deadlineWindow(now);
-    expect(window.endOfWeekSunday.toISOString()).toBe(new Date("2026-09-13T23:59:59.999-04:00").toISOString());
-    // On a Sunday, this-week is empty beyond today.
+    expect(window.endOfWeek.toISOString()).toBe(new Date("2026-09-14T23:59:59.999-04:00").toISOString());
+    // A Sunday still sees six days ahead, not an empty week.
     const sunday = local("2026-09-13T10:00:00-04:00");
     expect(classifyDeadline(at("2026-09-13T22:00:00-04:00"), { now: sunday })).toBe("today");
     expect(classifyDeadline(at("2026-09-14T09:00:00-04:00"), { now: sunday })).toBe("tomorrow");
-    expect(classifyDeadline(at("2026-09-15T09:00:00-04:00"), { now: sunday })).toBe("later");
+    expect(classifyDeadline(at("2026-09-15T09:00:00-04:00"), { now: sunday })).toBe("this-week");
+    expect(classifyDeadline(at("2026-09-19T23:59:59-04:00"), { now: sunday })).toBe("this-week");
+    expect(classifyDeadline(at("2026-09-20T00:00:00-04:00"), { now: sunday })).toBe("later");
   });
 
   it("puts no-date items in their own bucket and done items in completed", () => {
@@ -41,7 +43,9 @@ describe("deadline buckets (local timezone)", () => {
     // 2026-03-08 02:00 EST -> 03:00 EDT. Saturday evening before.
     const saturday = local("2026-03-07T22:00:00-05:00");
     expect(classifyDeadline(at("2026-03-08T23:30:00-04:00"), { now: saturday })).toBe("tomorrow");
-    expect(classifyDeadline(at("2026-03-09T00:30:00-04:00"), { now: saturday })).toBe("later"); // Monday of next week
+    expect(classifyDeadline(at("2026-03-09T00:30:00-04:00"), { now: saturday })).toBe("this-week");
+    expect(deadlineWindow(saturday).endOfWeek.toISOString()).toBe(new Date("2026-03-13T23:59:59.999-04:00").toISOString());
+    expect(classifyDeadline(at("2026-03-14T00:30:00-04:00"), { now: saturday })).toBe("later");
     expect(classifyDeadline(at("2026-03-08T00:30:00-05:00"), { now: saturday })).toBe("tomorrow");
     expect(classifyDeadline(at("2026-03-07T23:59:00-05:00"), { now: saturday })).toBe("today");
   });
@@ -52,7 +56,8 @@ describe("deadline buckets (local timezone)", () => {
     expect(deadlineWindow(sunday).endOfToday.toISOString()).toBe(new Date("2026-11-01T23:59:59.999-05:00").toISOString());
     expect(classifyDeadline(at("2026-11-01T23:00:00-05:00"), { now: sunday })).toBe("today");
     expect(classifyDeadline(at("2026-11-02T00:10:00-05:00"), { now: sunday })).toBe("tomorrow");
-    expect(classifyDeadline(at("2026-11-03T12:00:00-05:00"), { now: sunday })).toBe("later");
+    expect(classifyDeadline(at("2026-11-03T12:00:00-05:00"), { now: sunday })).toBe("this-week");
+    expect(classifyDeadline(at("2026-11-08T00:00:00-05:00"), { now: sunday })).toBe("later");
   });
 
   it("groups and counts consistently", () => {
@@ -76,5 +81,24 @@ describe("deadline buckets (local timezone)", () => {
       completed: 1,
     });
     expect(workloadCounts(items, { now })).toEqual({ overdue: 1, today: 1, thisWeek: 3 });
+  });
+});
+
+describe("long overdue", () => {
+  const now = local("2026-09-08T14:00:00-04:00");
+  const daysAgo = (days: number) => new Date(now.getTime() - days * 86_400_000).toISOString();
+
+  it("starts strictly after fourteen days and ignores done items and items without a date", () => {
+    expect(isLongOverdue(makeItem({ sourceId: "a", courseId: "1", dueAt: daysAgo(13) }), now)).toBe(false);
+    expect(isLongOverdue(makeItem({ sourceId: "b", courseId: "1", dueAt: daysAgo(14) }), now)).toBe(false);
+    expect(isLongOverdue(makeItem({ sourceId: "c", courseId: "1", dueAt: daysAgo(14.01) }), now)).toBe(true);
+    expect(isLongOverdue(makeItem({ sourceId: "d", courseId: "1", dueAt: daysAgo(60) }), now)).toBe(true);
+    expect(isLongOverdue(makeItem({ sourceId: "e", courseId: "1", dueAt: daysAgo(60), status: "submitted" }), now)).toBe(false);
+    expect(isLongOverdue(makeItem({ sourceId: "f", courseId: "1", dueAt: null }), now)).toBe(false);
+    expect(LONG_OVERDUE_AFTER_DAYS).toBe(14);
+  });
+
+  it("keeps the shared bucket contract: a long overdue item is still in the overdue bucket", () => {
+    expect(classifyDeadline(makeItem({ sourceId: "g", courseId: "1", dueAt: daysAgo(40) }), { now })).toBe("overdue");
   });
 });

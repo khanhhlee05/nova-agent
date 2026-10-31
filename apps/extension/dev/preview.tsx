@@ -123,7 +123,7 @@ const main = async () => {
     await setPreference(db, DATA_MODE_PREFERENCE, "fixture");
     await putSyncStatus(db, { mode: "fixture" });
   }
-  await setPreference(db, "ui.preferences", { activeTab, courseFilter: null, collapsedSections: ["completed", "later"], theme } satisfies UiPreferences);
+  await setPreference(db, "ui.preferences", { activeTab, courseFilter: null, focusCategory: null, sort: "due", theme } satisfies UiPreferences);
 
   createRoot(document.getElementById("root") as HTMLElement).render(
     <StrictMode>

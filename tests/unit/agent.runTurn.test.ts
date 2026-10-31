@@ -191,8 +191,17 @@ describe("demoRouter", () => {
     expect(events[0]).toMatchObject({ type: "tool_call", name: "list_deadlines" });
     const toolResult = events[1];
     expect(toolResult?.type === "tool_result" && toolResult.ok).toBe(true);
-    expect(result.text).toContain("due this week");
+    expect(result.text).toContain("due in the next 7 days");
     expect(result.grounded).toBe(true);
+  });
+
+  it("routes next week to the next-week range, and the rows are exactly next week's items", async () => {
+    const { events, result } = await drive(demoRouter, { message: "What is due next week?" });
+    expect(events[0]).toMatchObject({ type: "tool_call", name: "list_deadlines", input: { range: "next-week" } });
+    const toolResult = events[1];
+    if (toolResult?.type !== "tool_result") throw new Error("expected a tool result");
+    expect(toolResult.rows.every((row) => row.kind === "item" && row.dueAt !== null && row.dueAt >= "2026-09-14" && row.dueAt < "2026-09-21T04:00")).toBe(true);
+    expect(result.text).toContain("due next week");
   });
 
   it("routes change and announcement questions and falls back to the brief", async () => {

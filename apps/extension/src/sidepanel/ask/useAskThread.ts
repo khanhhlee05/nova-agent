@@ -78,10 +78,12 @@ export const useAskThread = (client: AskClient | null, buildRequest: (message: s
       void (async () => {
         let outcome: "answered" | "stopped" | "failed" = "answered";
         let failure: string | null = null;
+        let answer = "";
         try {
           for await (const event of client.ask(request, abort.signal)) {
             switch (event.type) {
               case "text":
+                answer += event.delta;
                 patch(answerId, (message) => ({ ...message, text: message.text + event.delta }));
                 break;
               case "tool_call":
@@ -118,7 +120,8 @@ export const useAskThread = (client: AskClient | null, buildRequest: (message: s
         } finally {
           controller.current = null;
           setStatus("idle");
-          setAnnouncement(outcome === "answered" ? "Nova answered." : outcome === "stopped" ? "Stopped." : `Nova could not answer. ${failure ?? ""}`.trim());
+          // The answer itself is announced, not just that one arrived: the thread is not a live region.
+          setAnnouncement(outcome === "answered" ? (answer.trim() ? `Nova answered: ${answer.trim()}` : "Nova answered.") : outcome === "stopped" ? "Stopped." : `Nova could not answer. ${failure ?? ""}`.trim());
         }
       })();
     },

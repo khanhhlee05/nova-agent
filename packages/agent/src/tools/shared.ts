@@ -131,6 +131,7 @@ export const itemData = (snapshot: CompactSnapshot, item: CompactItem) => ({
   course: courseName(snapshot, item.courseId),
   kind: item.kind,
   due: item.dueLocal ?? "no due date",
+  dueDate: item.dueDate,
   bucket: item.bucket,
   status: item.status,
   points: item.pointsPossible,

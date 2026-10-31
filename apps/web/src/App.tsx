@@ -18,7 +18,7 @@ export function App() {
         <header><div><p className="eyebrow">MISSION CONTROL</p><h2>Good afternoon, Wildcat.</h2></div><span className="status">Demo data</span></header>
         <div className="stats">
           <article><strong>2</strong><span>Due today</span></article>
-          <article><strong>4</strong><span>This week</span></article>
+          <article><strong>4</strong><span>Next 7 days</span></article>
           <article><strong>1</strong><span>Overdue</span></article>
         </div>
         <article className="changes"><h3>Since your last visit</h3>{changes.map((change) => <p key={change}>→ {change}</p>)}</article>

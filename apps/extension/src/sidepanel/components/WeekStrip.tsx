@@ -1,6 +1,6 @@
 import type { Course } from "@nova-agent/core";
 import { format } from "date-fns";
-import type { WeekDay } from "../model";
+import { isUpcoming, type WeekDay } from "../model";
 import { courseSwatch } from "../theme";
 
 export const dayKey = (date: Date): string => format(date, "yyyy-MM-dd");
@@ -14,8 +14,8 @@ export type WeekStripProps = {
 };
 
 /**
- * Seven days on the field. Tap a day to show only that day; tap it again for
- * the whole week. Only an explicitly selected day takes the white pill, so the
+ * Seven days on the field. Click a day to show only that day; click it again
+ * for all seven. Only an explicitly selected day takes the white pill, so the
  * whole-week view and the "today" view never look the same; today keeps its
  * underline and marker in both.
  */
@@ -23,7 +23,7 @@ export const WeekStrip = ({ week, courseById, selected, onSelect }: WeekStripPro
   <div className="week-strip" role="list" aria-label="Next seven days">
     {week.map((day) => {
       const key = dayKey(day.date);
-      const active = day.entries.filter((entry) => entry.bucket !== "completed");
+      const active = day.entries.filter((entry) => isUpcoming(entry.bucket));
       const isSelected = selected === key;
       return (
         <div key={key} role="listitem">

@@ -39,8 +39,8 @@ export const FocusHero = ({ nextMove, course, now, canOpen, onOpen, onInspect, o
               {canOpen && item.url ? "Open in Brightspace" : "Open course"}
             </button>
           ) : null}
-          <button type="button" className="hero-score" onClick={() => onInspect(item.key)} aria-label={`Suggested priority ${ranked.priority.score} of 100. Why this score?`}>
-            Suggested priority <strong className="mono">{ranked.priority.score}</strong> · why?
+          <button type="button" className="hero-score" onClick={() => onInspect(item.key)} aria-label={`Why this first? Priority ${ranked.priority.score} out of 100.`}>
+            Why this first?
           </button>
         </>
       }

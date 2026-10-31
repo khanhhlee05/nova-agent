@@ -1,6 +1,7 @@
 import type { ChangeEvent } from "@nova-agent/core";
 import type { ToolRow } from "@nova-agent/protocol";
-import { ExternalLink, Megaphone, Pin } from "lucide-react";
+import { ChevronDown, ExternalLink, Megaphone, Pin } from "lucide-react";
+import { useId, useState } from "react";
 import { KindIcon, StatusIcon, changeIcon } from "../components/icons";
 import { Tip } from "../components/Tip";
 import { formatDeadline, formatRelative } from "../format";
@@ -26,6 +27,29 @@ const asEvent = (row: Extract<ToolRow, { kind: "change" }>): ChangeEvent => ({
   after: row.after,
   readAt: null,
 });
+
+/**
+ * The rows behind a toggle, collapsed for every message, so a long lookup
+ * never pushes the answer and the composer out of view. The open state is
+ * local to the message and lasts for the session, like the thread.
+ */
+export const AskRowsDisclosure = (props: AskRowsProps) => {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  if (props.rows.length === 0) return null;
+  const count = props.rows.length;
+  return (
+    <div className="ask-rows-disclosure">
+      <button type="button" className="ask-rows-toggle" aria-expanded={open} aria-controls={id} onClick={() => setOpen((value) => !value)}>
+        <ChevronDown size={14} aria-hidden="true" className="chevron" data-open={open} />
+        {open ? "Hide matching items" : `Show ${count} matching ${count === 1 ? "item" : "items"}`}
+      </button>
+      <div id={id} hidden={!open}>
+        {open ? <AskRows {...props} /> : null}
+      </div>
+    </div>
+  );
+};
 
 /**
  * Rows under an answer. They carry ISO dates, so the UI formats them in the
