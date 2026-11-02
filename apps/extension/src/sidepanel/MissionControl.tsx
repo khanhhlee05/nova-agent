@@ -3,9 +3,9 @@ import { isSafeTenantLink } from "@nova-agent/brightspace";
 import { compactSnapshot } from "@nova-agent/agent";
 import type { ChangeEvent } from "@nova-agent/core";
 import type { ChatMessage, ChatRequest } from "@nova-agent/protocol";
-import { CheckCheck, EyeOff } from "lucide-react";
+import { CheckCheck, EyeOff, Plus } from "lucide-react";
 import { Tabs, Tooltip } from "radix-ui";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AskChips, AskView, useAskThread, type AskClient, type AskClientFactory, type AskSettings } from "./ask";
 import type { SyncStatusRecord } from "../storage/novaDb";
 import { PHASE_LABELS, isRunningPhase, isStale, type SyncRuntimeState } from "../sync/syncState";
@@ -14,6 +14,7 @@ import { UndoToast } from "./components/UndoToast";
 import { ChangesFeed } from "./components/ChangesFeed";
 import { CountsStrip } from "./components/CountsStrip";
 import { CourseFilter } from "./components/CourseFilter";
+import { DeadlineDialog, type DeadlineDraft } from "./components/DeadlineDialog";
 import { FieldHeader, Hero, freshness } from "./components/FieldHeader";
 import { FirstRun } from "./components/FirstRun";
 import { FocusCategories } from "./components/FocusCategories";
@@ -22,12 +23,14 @@ import { FocusList } from "./components/FocusList";
 import { Menu } from "./components/Menu";
 import { FocusSkeleton } from "./components/Skeleton";
 import { SortSelect } from "./components/SortSelect";
+import { WeekNav } from "./components/WeekNav";
 import { WeekStrip } from "./components/WeekStrip";
 import { WeekView } from "./components/WeekView";
 import { countDismissed, type SessionDismissals } from "./dismissals";
+import { format } from "date-fns";
 import { pluralize } from "./format";
 import { askHero, changesHero, weekHero } from "./heroes";
-import { focusCategoryOf, type CourseFilter as CourseFilterValue, type Dashboard, type FocusCategory, type SortKey } from "./model";
+import { focusCategoryOf, lastWeekOffset, weekPage, type CourseFilter as CourseFilterValue, type Dashboard, type FocusCategory, type PersonalDeadline, type SortKey } from "./model";
 import { applyTheme, type Theme } from "./theme";
 
 export type TabId = "focus" | "week" | "changes" | "ask";
@@ -63,6 +66,12 @@ export type MissionControlActions = {
   dismissItem: (key: string, title: string) => void;
   /** Sets or clears the on-device done mark. Brightspace is never written to. */
   setLocalDone: (key: string, title: string, done: boolean) => void;
+  /** The student's own deadlines, Week tab only. Optional so callers without them still work. */
+  addPersonal?: (draft: DeadlineDraft) => void;
+  updatePersonal?: (id: string, draft: DeadlineDraft) => void;
+  /** Permanent after the Undo window, like deleting a change. */
+  deletePersonal?: (id: string, title: string) => void;
+  setPersonalDone?: (id: string, title: string, done: boolean) => void;
   /** Permanently deletes a change event; it will not return on the next refresh. */
   deleteEvent: (id: string, title: string) => void;
   dismissBanner: (id: string) => void;
@@ -104,6 +113,26 @@ const CLIENT_VERSION = "0.1.0";
 export const MissionControl = ({ dashboard, status, runtime, feasibility, preferences, hasEverSynced, announcement, now, tenantOrigin, dismissals, actions, ask, pendingDelete = null }: MissionControlProps) => {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  // Session-only: which seven days the Week tab shows. Paging drops any selected day, since it belongs to the page it was picked on.
+  const [weekOffset, setWeekOffset] = useState(0);
+  const page = useMemo(() => (dashboard ? weekPage(dashboard, now, weekOffset) : null), [dashboard, now, weekOffset]);
+  const lastOffset = useMemo(() => (dashboard ? lastWeekOffset(dashboard, now) : 0), [dashboard, now]);
+  const goToWeek = (offset: number) => {
+    setWeekOffset(Math.max(0, Math.min(offset, lastOffset)));
+    setSelectedDay(null);
+  };
+  // The add/edit dialog for the student's own deadlines. Adding needs a tapped day; editing carries its own.
+  const [deadlineDialog, setDeadlineDialog] = useState<{ date: Date; existing: PersonalDeadline | null } | null>(null);
+  const selectedDate = page && selectedDay ? (page.days.find((day) => format(day.date, "yyyy-MM-dd") === selectedDay)?.date ?? null) : null;
+  const personalActions =
+    actions.addPersonal && actions.updatePersonal && actions.deletePersonal && actions.setPersonalDone
+      ? {
+          onAdd: (date: Date) => setDeadlineDialog({ date, existing: null }),
+          onEdit: (deadline: PersonalDeadline) => setDeadlineDialog({ date: new Date(deadline.dueAt), existing: deadline }),
+          onDelete: (deadline: PersonalDeadline) => actions.deletePersonal?.(deadline.id, deadline.title),
+          onSetDone: (deadline: PersonalDeadline, done: boolean) => actions.setPersonalDone?.(deadline.id, deadline.title, done),
+        }
+      : undefined;
   // Session-only: items overdue for more than two weeks stay folded away until asked for, every time the panel opens.
   const [showLongOverdue, setShowLongOverdue] = useState(false);
   const phase = runtime.phase === "idle" ? status.phase : runtime.phase;
@@ -153,6 +182,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
       actions.setPreferences({ activeTab: "focus", focusCategory: "overdue" });
       return;
     }
+    if (target === "this-week") goToWeek(0);
     actions.setPreferences({ activeTab: target === "changes" ? "changes" : "week" });
   };
 
@@ -197,8 +227,24 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
     )
   ) : tab === "ask" && ask ? (
     <Hero {...askHero(dashboard, ask.settings.enabled, status.lastSuccessfulSyncAt, now)} extra={ask.settings.enabled ? <AskChips dashboard={dashboard} disabled={thread.status === "streaming" || !ask.client} onPick={thread.send} /> : undefined} />
-  ) : tab === "week" ? (
-    <Hero {...weekHero(dashboard, selectedDay)} extra={<WeekStrip week={dashboard.week} courseById={dashboard.courseById} selected={selectedDay} onSelect={setSelectedDay} />} />
+  ) : tab === "week" && page ? (
+    <Hero
+      {...weekHero(dashboard, selectedDay, page)}
+      actions={
+        personalActions && selectedDate ? (
+          <button type="button" className="button button-on-field" onClick={() => personalActions.onAdd(selectedDate)}>
+            <Plus size={14} aria-hidden="true" />
+            Add your own deadline
+          </button>
+        ) : undefined
+      }
+      extra={
+        <>
+          <WeekNav page={page} lastOffset={lastOffset} onChange={goToWeek} />
+          <WeekStrip week={page.days} offset={page.offset} courseById={dashboard.courseById} selected={selectedDay} onSelect={setSelectedDay} />
+        </>
+      }
+    />
   ) : tab === "changes" ? (
     <Hero
       {...changesHero(dashboard, null, now)}
@@ -341,7 +387,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
               </Tabs.Content>
               <Tabs.Content className="tab-content" value="week">
                 {stateBanners}
-                {dashboard ? <WeekView dashboard={dashboard} now={now} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} selectedDay={selectedDay} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
+                {dashboard && page ? <WeekView dashboard={dashboard} days={page.days} now={now} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} selectedDay={selectedDay} personal={personalActions} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
               </Tabs.Content>
               <Tabs.Content className="tab-content" value="changes">
                 {stateBanners}
@@ -370,6 +416,19 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
           </main>
         </Tabs.Root>
         {pendingDelete && actions.undoDelete ? <UndoToast key={pendingDelete.id} message={`Deleted "${pendingDelete.title}"`} onUndo={actions.undoDelete} /> : null}
+        {deadlineDialog && dashboard ? (
+          <DeadlineDialog
+            date={deadlineDialog.date}
+            courses={dashboard.courses}
+            existing={deadlineDialog.existing}
+            onClose={() => setDeadlineDialog(null)}
+            onSave={(draft) => {
+              if (deadlineDialog.existing) actions.updatePersonal?.(deadlineDialog.existing.id, draft);
+              else actions.addPersonal?.(draft);
+              setDeadlineDialog(null);
+            }}
+          />
+        ) : null}
       </div>
     </Tooltip.Provider>
   );

@@ -3,7 +3,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExtensionHost } from "../platform/host";
 import type { NovaDb } from "../storage/novaDb";
-import { clearAllData, deleteChangeEvent, getPreference, getSyncStatus, listChangeEvents, listLocalMarks, latestSnapshot, markAllRead, setEventRead, setLocalMark, setPreference, unreadCount } from "../storage/repositories";
+import { clearAllData, deleteChangeEvent, deletePersonalItem, getPreference, getSyncStatus, listChangeEvents, listLocalMarks, listPersonalItems, latestSnapshot, markAllRead, putPersonalItem, setEventRead, setLocalMark, setPreference, unreadCount } from "../storage/repositories";
 import { DATA_MODE_PREFERENCE, DEMO_SCENARIO_PREFERENCE, SyncCoordinator, type TransportFactory } from "../sync/syncCoordinator";
 import { IDLE_STATE, isRunningPhase, type SyncRuntimeState } from "../sync/syncState";
 import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, defaultAskClientFactory, effectiveAskSettings, type AskClientFactory, type AskSettings } from "./ask";
@@ -26,7 +26,7 @@ export type AppDeps = {
   undoMs?: number;
 };
 
-type PendingDelete = { id: string; title: string };
+type PendingDelete = { id: string; title: string; kind: "event" | "personal" };
 
 const PREFERENCES_KEY = "ui.preferences";
 
@@ -49,6 +49,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
   const snapshot = useLiveQuery(() => (scope ? latestSnapshot(db, scope) : Promise.resolve(null)), [db, scope]);
   const events = useLiveQuery(() => (scope ? listChangeEvents(db, scope) : Promise.resolve([])), [db, scope]);
   const localMarks = useLiveQuery(async () => (scope ? new Map((await listLocalMarks(db, scope)).map((mark) => [mark.key, mark.markedAt])) : new Map<string, string>()), [db, scope]);
+  const personalItems = useLiveQuery(async () => (scope ? listPersonalItems(db, scope) : []), [db, scope]);
   // A saved address that no longer passes the https rule turns Ask off rather than producing a client.
   const askSettings = useLiveQuery(async () => effectiveAskSettings(await getPreference<AskSettings>(db, ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS)), [db]);
   const askClient = useMemo(() => (askSettings?.enabled ? askClientFactory(askSettings) : null), [askClientFactory, askSettings]);
@@ -97,9 +98,10 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
     clearTimeout(current.timer);
     pending.current = null;
     setPendingDelete(null);
-    const { id } = current.entry;
+    const { id, kind } = current.entry;
     setDeleting((prev) => new Set(prev).add(id));
-    void deleteChangeEvent(db, id).then(publishBadge);
+    if (kind === "personal") void deletePersonalItem(db, id);
+    else void deleteChangeEvent(db, id).then(publishBadge);
   }, [db, publishBadge]);
   // Closing the panel inside the window still deletes: the student asked for it and never pressed Undo.
   const commitLatest = useRef(commitDelete);
@@ -117,18 +119,22 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
     if (!events || (!pendingDelete && deleting.size === 0)) return events;
     return events.filter((event) => event.id !== pendingDelete?.id && !deleting.has(event.id));
   }, [deleting, events, pendingDelete]);
+  const visiblePersonal = useMemo(() => {
+    if (!personalItems || (!pendingDelete && deleting.size === 0)) return personalItems;
+    return personalItems.filter((item) => item.id !== pendingDelete?.id && !deleting.has(item.id));
+  }, [deleting, personalItems, pendingDelete]);
   useEffect(() => {
-    if (!events || deleting.size === 0) return;
-    const gone = [...deleting].filter((id) => !events.some((event) => event.id === id));
+    if (!events || !personalItems || deleting.size === 0) return;
+    const gone = [...deleting].filter((id) => !events.some((event) => event.id === id) && !personalItems.some((item) => item.id === id));
     if (gone.length > 0) setDeleting((prev) => new Set([...prev].filter((id) => !gone.includes(id))));
-  }, [deleting, events]);
+  }, [deleting, events, personalItems]);
 
   const dashboard = useMemo(
     () =>
       snapshot && visibleEvents && preferences
-        ? buildDashboard({ snapshot, events: visibleEvents, now, courseFilter: preferences.courseFilter, dismissedItemKeys: dismissals.items, localMarks })
+        ? buildDashboard({ snapshot, events: visibleEvents, now, courseFilter: preferences.courseFilter, dismissedItemKeys: dismissals.items, localMarks, personal: visiblePersonal ?? [] })
         : null,
-    [snapshot, visibleEvents, now, preferences, dismissals, localMarks],
+    [snapshot, visibleEvents, now, preferences, dismissals, localMarks, visiblePersonal],
   );
 
   const setPreferences = useCallback(
@@ -158,10 +164,35 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
       deleteEvent: (id: string, title: string) => {
         // One Undo at a time: a second delete makes the first one final.
         commitDelete();
-        const entry = { id, title };
+        const entry: PendingDelete = { id, title, kind: "event" };
         pending.current = { entry, timer: setTimeout(commitDelete, undoMs) };
         setPendingDelete(entry);
         setAnnouncement(`Deleted the change for "${title}". Undo to restore it.`);
+      },
+      addPersonal: (draft: { title: string; dueAt: string; courseId: string | null }) => {
+        if (!scope) return;
+        const at = clock().toISOString();
+        void putPersonalItem(db, { id: `personal-${crypto.randomUUID()}`, scope, ...draft, completedAt: null, createdAt: at, updatedAt: at })
+          .then(() => setAnnouncement(`Added "${draft.title}" to your Week tab. It stays on this device.`))
+          .catch((error: unknown) => setAnnouncement(error instanceof Error ? error.message : "Nova could not save that deadline."));
+      },
+      updatePersonal: (id: string, draft: { title: string; dueAt: string; courseId: string | null }) => {
+        const current = personalItems?.find((item) => item.id === id);
+        if (!current) return;
+        void putPersonalItem(db, { ...current, ...draft, updatedAt: clock().toISOString() }).then(() => setAnnouncement(`Saved "${draft.title}".`));
+      },
+      deletePersonal: (id: string, title: string) => {
+        commitDelete();
+        const entry: PendingDelete = { id, title, kind: "personal" };
+        pending.current = { entry, timer: setTimeout(commitDelete, undoMs) };
+        setPendingDelete(entry);
+        setAnnouncement(`Deleted your deadline "${title}". Undo to restore it.`);
+      },
+      setPersonalDone: (id: string, title: string, done: boolean) => {
+        const current = personalItems?.find((item) => item.id === id);
+        if (!current) return;
+        const at = clock().toISOString();
+        void putPersonalItem(db, { ...current, completedAt: done ? at : null, updatedAt: at }).then(() => setAnnouncement(done ? `Marked "${title}" done.` : `"${title}" is back on your list.`));
       },
       undoDelete: () => {
         const current = pending.current;
@@ -169,7 +200,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
         clearTimeout(current.timer);
         pending.current = null;
         setPendingDelete(null);
-        setAnnouncement(`Restored the change for "${current.entry.title}".`);
+        setAnnouncement(current.entry.kind === "personal" ? `Restored your deadline "${current.entry.title}".` : `Restored the change for "${current.entry.title}".`);
       },
       dismissBanner: (id: string) => {
         dismissBanner(id);
@@ -222,10 +253,10 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
         setAnnouncement("Local Nova data cleared.");
       },
     }),
-    [clock, commitDelete, coordinator, db, dismissBanner, dismissItem, host, nowFn, publishBadge, restoreAll, scope, setPreferences, undoMs],
+    [clock, commitDelete, coordinator, db, dismissBanner, dismissItem, host, nowFn, personalItems, publishBadge, restoreAll, scope, setPreferences, undoMs],
   );
 
-  if (!status || !preferences || feasibility === undefined || !askSettings) return null;
+  if (!status || !preferences || feasibility === undefined || !askSettings || !personalItems) return null;
 
   return (
     <MissionControl

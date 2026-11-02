@@ -74,7 +74,7 @@ export const Menu = ({ mode, feasibility, busy, onConnectLive, onUseDemo, onClea
               <h2>Clear local Nova data?</h2>
             </AlertDialog.Title>
             <AlertDialog.Description asChild>
-              <p>This deletes every snapshot, change event, and preference stored on this device. Nothing changes in Brightspace.</p>
+              <p>This deletes every snapshot, change event, preference, done mark, and deadline you added yourself, all stored on this device. Nothing changes in Brightspace.</p>
             </AlertDialog.Description>
             <div className="card-actions">
               <AlertDialog.Cancel asChild>
