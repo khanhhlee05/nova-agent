@@ -1,9 +1,15 @@
-import type { ChangeEvent } from "@nova-agent/core";
+import type { ChangeEvent, DeadlineBucket } from "@nova-agent/core";
 import { format } from "date-fns";
 import { formatAge, formatDeadline, formatRelative } from "./format";
-import { isUpcoming, type Dashboard, type NextMove } from "./model";
+import { isUpcoming, type Dashboard, type NextMove, type WeekPage } from "./model";
 
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+
+/** ", plus two of yours" when the student added deadlines to the days in view; the Brightspace count stays as it is. */
+const ownSuffix = (days: readonly { custom: readonly { completedAt: string | null }[] }[]): string => {
+  const own = days.reduce((sum, day) => sum + day.custom.filter((deadline) => deadline.completedAt === null).length, 0);
+  return own > 0 ? `, plus ${own === 1 ? "one of your own" : `${WORDS[own] ?? own} of your own`}` : "";
+};
 const words = (n: number): string => WORDS[n] ?? String(n);
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 const plural = (n: number, one: string, many = `${one}s`): string => `${words(n)} ${n === 1 ? one : many}`;
@@ -29,9 +35,21 @@ export const focusHero = (nextMove: NextMove | null, courseName: string | undefi
   };
 };
 
-export const weekHero = (dashboard: Dashboard, selectedDay: string | null = null): Hero => {
-  const days = dashboard.week;
-  const upcoming = (day: (typeof days)[number]) => day.entries.filter((entry) => isUpcoming(entry.bucket));
+const weeksAhead = (offset: number): string => (offset === 1 ? "1 week ahead" : `${offset} weeks ahead`);
+
+/**
+ * The Week headline. Page 0 counts the same items as the Focus count strip. Later
+ * pages count every open item on them, since everything there sits in the "later"
+ * bucket by definition.
+ */
+export const weekHero = (dashboard: Dashboard, selectedDay: string | null = null, page: WeekPage | null = null): Hero => {
+  const offset = page?.offset ?? 0;
+  const days = page?.days ?? dashboard.week;
+  const isActive = offset === 0 ? isUpcoming : (bucket: DeadlineBucket) => bucket !== "completed" && bucket !== "overdue";
+  const upcoming = (day: (typeof days)[number]) => day.entries.filter((entry) => isActive(entry.bucket));
+  const first = days[0]?.date;
+  const last = days[days.length - 1]?.date;
+  const range = first && last ? `${format(first, "MMM d")} to ${format(last, "MMM d")}` : "";
   if (selectedDay) {
     const day = days.find((candidate) => format(candidate.date, "yyyy-MM-dd") === selectedDay);
     if (day) {
@@ -41,8 +59,9 @@ export const weekHero = (dashboard: Dashboard, selectedDay: string | null = null
       const name = day.isToday ? "Today" : format(day.date, "EEEE");
       const quizzes = active.filter((entry) => entry.item.kind === "quiz").length;
       const also = [late > 0 ? `${plural(late, "item")} already overdue` : null, done > 0 ? `${plural(done, "item")} already submitted` : null].filter((part): part is string => part !== null);
+      const own = ownSuffix([day]);
       return {
-        title: active.length === 0 ? `Nothing due ${day.isToday ? "today" : format(day.date, "EEEE")}` : `${name}: ${plural(active.length, "deadline")}`,
+        title: active.length === 0 ? `Nothing due ${day.isToday ? "today" : format(day.date, "EEEE")}${own ? ` from Brightspace${own}` : ""}` : `${name}: ${plural(active.length, "deadline")}${own}`,
         meta: `${format(day.date, "EEEE, MMM d")} · Click ${day.isToday ? "Today" : format(day.date, "EEE")} again to see all 7 days`,
         text:
           active.length === 0
@@ -53,16 +72,19 @@ export const weekHero = (dashboard: Dashboard, selectedDay: string | null = null
       };
     }
   }
-  // The same number as "Next 7 days" in the Focus counts strip: today, tomorrow, and later this week.
-  const total = dashboard.counts.thisWeek;
-  const first = days[0]?.date;
-  const last = days[days.length - 1]?.date;
-  const meta = first && last ? `Next 7 days · ${format(first, "MMM d")} to ${format(last, "MMM d")}` : "Next 7 days";
-  if (total === 0) return { title: "Nothing due in the next 7 days", meta, text: "Deadlines further out are listed under Later on the Focus tab." };
+  // On page 0 this is the same number as "This week" in the Focus counts strip: today, tomorrow, and later this week.
+  const total = offset === 0 ? dashboard.counts.thisWeek : days.reduce((sum, day) => sum + upcoming(day).length, 0);
+  const meta = `${offset === 0 ? "Next 7 days" : weeksAhead(offset)}${range ? ` · ${range}` : ""}`;
+  const own = ownSuffix(days);
+  if (total === 0) {
+    return offset === 0
+      ? { title: `Nothing due in the next 7 days${own ? ` from Brightspace${own}` : ""}`, meta, text: "Deadlines further out are listed under Later on the Focus tab, or use the arrow to look ahead." }
+      : { title: `Nothing due ${range}${own ? ` from Brightspace${own}` : ""}`, meta, text: "A clear week, as far as Brightspace knows. Use the arrows to look further ahead or come back to today." };
+  }
   const busiest = [...days].sort((a, b) => upcoming(b).length - upcoming(a).length)[0];
   const busiestActive = busiest ? upcoming(busiest) : [];
   const dayName = busiest ? (busiest.isToday ? "today" : format(busiest.date, "EEEE")) : "";
-  const title = busiestActive.length >= 2 ? `${cap(plural(total, "deadline"))}, ${cap(dayName)} is the crunch` : `${cap(plural(total, "deadline"))} in the next 7 days`;
+  const title = `${busiestActive.length >= 2 ? `${cap(plural(total, "deadline"))}, ${cap(dayName)} is the crunch` : `${cap(plural(total, "deadline"))} ${offset === 0 ? "in the next 7 days" : range}`}${own}`;
   const quizzes = busiestActive.filter((entry) => entry.item.kind === "quiz").length;
   const text =
     busiestActive.length >= 2
