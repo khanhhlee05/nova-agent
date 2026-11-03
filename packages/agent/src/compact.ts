@@ -91,6 +91,8 @@ const changeFields = (record: Record<string, unknown> | null): CompactChange["be
   }
   if (typeof record.status === "string") out.status = record.status as NonNullable<CompactChange["before"]>["status"];
   if (typeof record.visibility === "string") out.visibility = record.visibility.slice(0, 16);
+  if ("score" in record) out.score = typeof record.score === "number" ? record.score : null;
+  if ("pointsPossible" in record) out.pointsPossible = typeof record.pointsPossible === "number" ? record.pointsPossible : null;
   return out;
 };
 
@@ -145,6 +147,7 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
         status: item.status,
         visibility: compactVisibility(item),
         pointsPossible: item.pointsPossible,
+        earnedScore: item.score?.graded ? item.score.earned : null,
         url: httpOnly(item.url),
         priority: entry ? Math.round(entry.priority.score) : null,
         reasons: entry ? explainPriority(item, entry.priority, COMPACT_LIMITS.reasons).map((reason) => reason.text) : [],

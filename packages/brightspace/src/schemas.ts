@@ -63,9 +63,11 @@ export const dropboxFolderSchema = z.object({
   DueDate: isoDate,
   IsHidden: z.boolean().optional(),
   Availability: z.object({ StartDate: isoDate, EndDate: isoDate }).nullable().optional(),
-  Assessment: z.object({ ScoreDenominator: z.number().nullable().optional() }).nullable().optional(),
+  Assessment: z.object({ ScoreDenominator: z.number().nullable().optional(), Rubrics: z.array(z.unknown()).nullable().optional() }).nullable().optional(),
   DropboxType: z.number().optional(),
   GroupTypeId: z.number().nullable().optional(),
+  /** D2L SUBMISSIONTYPE_T: 0 file, 1 text, 2 on paper, 3 observed in person. */
+  SubmissionType: z.number().nullable().optional(),
   CustomInstructions: richText,
 });
 export type DropboxFolder = z.infer<typeof dropboxFolderSchema>;
@@ -76,6 +78,8 @@ export const entityDropboxSchema = z.object({
   Entity: z.object({ EntityId: id.optional(), EntityType: z.string().optional() }).optional(),
   Status: z.number().optional(),
   CompletionDate: isoDate,
+  /** Instructor feedback; `Score` is the earned score when the item has been graded. */
+  Feedback: z.object({ Score: z.number().nullable().optional(), IsGraded: z.boolean().nullable().optional() }).nullable().optional(),
   Submissions: z.array(z.object({ Id: id.optional(), SubmissionDate: isoDate })).optional().default([]),
 });
 export type EntityDropbox = z.infer<typeof entityDropboxSchema>;
@@ -89,6 +93,12 @@ export const quizReadDataSchema = z.object({
   EndDate: isoDate,
   DueDate: isoDate,
   GradeItemId: z.number().nullable().optional(),
+  AttemptsAllowed: z.object({ IsUnlimited: z.boolean().nullable().optional(), NumberOfAttemptsAllowed: z.number().nullable().optional() }).nullable().optional(),
+  SubmissionTimeLimit: z.object({ IsEnforced: z.boolean().nullable().optional(), TimeLimitValue: z.number().nullable().optional() }).nullable().optional(),
+  /** D2L LATESUBMISSIONOPTION_T: 0 allow and flag, 1 allow within a limit, 2 auto-submit (no late work). */
+  LateSubmissionInfo: z.object({ LateSubmissionOption: z.number().nullable().optional(), LateLimitMinutes: z.number().nullable().optional() }).nullable().optional(),
+  Password: z.string().nullable().optional(),
+  RestrictIPAddressRange: z.array(z.unknown()).nullable().optional(),
 });
 export type QuizReadData = z.infer<typeof quizReadDataSchema>;
 export const quizzesPageSchema = z.object({ Objects: z.array(quizReadDataSchema), Next: z.string().nullable().optional() });

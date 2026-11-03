@@ -5,7 +5,9 @@ import {
   type AcademicItem,
   type Announcement,
   type Course,
+  type ItemScore,
   type ItemStatus,
+  type SubmissionType,
   type Visibility,
 } from "@nova-agent/core";
 import { pageLinks } from "./routes";
@@ -81,6 +83,29 @@ export const statusFromSubmission = (source: StatusSource): ItemStatus => {
   }
 };
 
+/** The earned score, when the submission carries graded feedback. Never invents a number from feedback text alone. */
+export const scoreFromSubmission = (source: StatusSource): ItemScore | null => {
+  if (source.kind === "unavailable" || !source.submission?.Feedback) return null;
+  const feedback = source.submission.Feedback;
+  const earned = typeof feedback.Score === "number" ? feedback.Score : null;
+  const graded = feedback.IsGraded === true || earned !== null;
+  return graded ? { earned, graded } : null;
+};
+
+const submissionTypeOf = (code: number | null | undefined): SubmissionType => {
+  switch (code) {
+    case 0:
+    case 1:
+      return "online";
+    case 2:
+      return "on-paper";
+    case 3:
+      return "observed";
+    default:
+      return "unknown";
+  }
+};
+
 export type NormalizeContext = { tenantOrigin: string; userId: string; observedAt: string; now: Date };
 
 export const toAssignment = (folder: DropboxFolder, courseId: string, status: StatusSource, ctx: NormalizeContext): AcademicItem => {
@@ -104,6 +129,11 @@ export const toAssignment = (folder: DropboxFolder, courseId: string, status: St
     url: pageLinks.assignment(origin, courseId, folder.Id),
     sourceUpdatedAt: null,
     observedAt: ctx.observedAt,
+    // D2L DROPBOXTYPE_T: 1 individual, 2 group.
+    group: folder.DropboxType === 2,
+    hasRubric: (folder.Assessment?.Rubrics?.length ?? 0) > 0,
+    submissionType: submissionTypeOf(folder.SubmissionType),
+    score: scoreFromSubmission(status),
   };
 };
 
@@ -111,6 +141,9 @@ export const toQuiz = (quiz: QuizReadData, courseId: string, ctx: NormalizeConte
   const origin = normalizeOrigin(ctx.tenantOrigin);
   const startAt = normalizeIso(quiz.StartDate);
   const endAt = normalizeIso(quiz.EndDate);
+  const timeLimit = quiz.SubmissionTimeLimit?.IsEnforced && typeof quiz.SubmissionTimeLimit.TimeLimitValue === "number" && quiz.SubmissionTimeLimit.TimeLimitValue > 0 ? quiz.SubmissionTimeLimit.TimeLimitValue : null;
+  const attempts = quiz.AttemptsAllowed ? (quiz.AttemptsAllowed.IsUnlimited ? null : (quiz.AttemptsAllowed.NumberOfAttemptsAllowed ?? undefined)) : undefined;
+  const late = quiz.LateSubmissionInfo ? (typeof quiz.LateSubmissionInfo.LateSubmissionOption === "number" ? quiz.LateSubmissionInfo.LateSubmissionOption !== 2 : null) : null;
   return {
     key: buildStableKey({ tenantOrigin: origin, userId: ctx.userId, kind: "quiz", courseId, sourceId: quiz.QuizId }),
     sourceId: quiz.QuizId,
@@ -124,11 +157,16 @@ export const toQuiz = (quiz: QuizReadData, courseId: string, ctx: NormalizeConte
     // Learner quiz-attempt routes are not reliably available; never guess.
     status: "unknown",
     pointsPossible: null,
-    estimatedMinutes: null,
+    // A timed quiz is the one case where Brightspace states how long the work takes.
+    estimatedMinutes: timeLimit,
     importance: "normal",
     url: pageLinks.quiz(origin, courseId, quiz.QuizId),
     sourceUpdatedAt: null,
     observedAt: ctx.observedAt,
+    ...(attempts !== undefined ? { attemptsAllowed: attempts } : {}),
+    timeLimitMinutes: timeLimit,
+    proctored: Boolean(quiz.Password) || (quiz.RestrictIPAddressRange?.length ?? 0) > 0,
+    lateAllowed: late,
   };
 };
 

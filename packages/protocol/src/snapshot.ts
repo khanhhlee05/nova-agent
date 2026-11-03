@@ -50,6 +50,8 @@ export const compactItemSchema = z.object({
   status: compactItemStatusSchema,
   visibility: z.enum(["visible", "scheduled", "unknown"]),
   pointsPossible: z.number().nullable(),
+  /** Earned score Brightspace reported, when graded. Optional for older clients. */
+  earnedScore: z.number().nullable().optional(),
   url: safeUrl.nullable(),
   /** Priority score 0..100 from the planner, null when the item is not rankable. */
   priority: z.number().int().min(0).max(100).nullable(),
@@ -77,6 +79,7 @@ export const compactChangeKindSchema = z.enum([
   "became-overdue",
   "announcement-added",
   "announcement-updated",
+  "graded",
 ]);
 export type CompactChangeKind = z.infer<typeof compactChangeKindSchema>;
 
@@ -85,6 +88,9 @@ export const compactChangeFieldsSchema = z.object({
   dueLocal: localDate.nullable().optional(),
   status: compactItemStatusSchema.optional(),
   visibility: z.string().max(16).optional(),
+  /** Earned score, for "graded" changes. */
+  score: z.number().nullable().optional(),
+  pointsPossible: z.number().nullable().optional(),
 });
 
 export const compactChangeSchema = z.object({

@@ -53,6 +53,18 @@ describe("compactSnapshot", () => {
     expect(compact.timezone).toBe("America/New_York");
   });
 
+  it("carries earned scores and graded changes, and nothing else about feedback", async () => {
+    const { snapshot, events } = await demo();
+    const compact = compactSnapshot(snapshot, events, NOW, { mode: "live" });
+    expect(compactSnapshotSchema.safeParse(compact).success).toBe(true);
+    const lab1 = compact.items.find((item) => item.title.startsWith("Lab 1"));
+    expect(lab1?.earnedScore).toBe(18);
+    expect(compact.items.find((item) => item.title.startsWith("Lab 3"))?.earnedScore).toBeNull();
+    const graded = compact.changes.find((change) => change.kind === "graded");
+    expect(graded).toMatchObject({ title: "Lab 1: Toolchain Setup", before: { score: null }, after: { score: 18, pointsPossible: 20 } });
+    expect(JSON.stringify(compact)).not.toContain("Nice work");
+  });
+
   it("agrees with the dashboard on counts and with core on buckets", async () => {
     const { snapshot, events } = await demo();
     const compact = compactSnapshot(snapshot, events, NOW, { mode: "live" });

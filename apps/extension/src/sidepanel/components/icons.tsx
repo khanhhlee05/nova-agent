@@ -2,6 +2,7 @@ import type { AcademicItem, ChangeEvent } from "@nova-agent/core";
 import {
   AlarmClock,
   ArrowRightLeft,
+  Award,
   CheckCircle2,
   Circle,
   CircleHelp,
@@ -56,5 +57,7 @@ export const changeIcon = (event: ChangeEvent): { icon: React.ReactNode; tone: T
       return { icon: <Megaphone size={15} aria-hidden="true" />, tone: "blue" };
     case "announcement-updated":
       return { icon: <PencilLine size={15} aria-hidden="true" />, tone: "blue" };
+    case "graded":
+      return { icon: <Award size={15} aria-hidden="true" />, tone: "mint" };
   }
 };

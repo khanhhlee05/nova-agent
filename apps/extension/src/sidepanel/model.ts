@@ -238,7 +238,7 @@ export const sortItems = (items: readonly AcademicItem[], sort: SortKey, dashboa
   });
 };
 
-export type ChangeVerb = "Added" | "Moved" | "Became overdue" | "Submitted" | "Hidden" | "Updated" | "Removed" | "Visible" | "Posted";
+export type ChangeVerb = "Added" | "Moved" | "Became overdue" | "Submitted" | "Hidden" | "Updated" | "Removed" | "Visible" | "Posted" | "Graded";
 
 export const changeVerb = (event: ChangeEvent): ChangeVerb => {
   switch (event.kind) {
@@ -258,6 +258,8 @@ export const changeVerb = (event: ChangeEvent): ChangeVerb => {
       return "Posted";
     case "announcement-updated":
       return "Updated";
+    case "graded":
+      return "Graded";
   }
 };
 

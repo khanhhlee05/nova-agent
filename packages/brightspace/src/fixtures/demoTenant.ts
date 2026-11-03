@@ -34,7 +34,7 @@ const folder = (
   id: number,
   name: string,
   dueDate: string | null,
-  extra: Partial<{ IsHidden: boolean; ScoreDenominator: number | null; StartDate: string | null; EndDate: string | null }> = {},
+  extra: Partial<{ IsHidden: boolean; ScoreDenominator: number | null; StartDate: string | null; EndDate: string | null; Group: boolean; Rubric: boolean; SubmissionType: number }> = {},
 ) => ({
   Id: id,
   CategoryId: null,
@@ -51,14 +51,14 @@ const folder = (
   GroupTypeId: null,
   DueDate: dueDate,
   DisplayInCalendar: true,
-  Assessment: { ScoreDenominator: extra.ScoreDenominator === undefined ? 100 : extra.ScoreDenominator, Rubrics: [] },
+  Assessment: { ScoreDenominator: extra.ScoreDenominator === undefined ? 100 : extra.ScoreDenominator, Rubrics: extra.Rubric ? [{ RubricId: 7, Name: "Lab report rubric" }] : [] },
   NotificationEmail: null,
   IsHidden: extra.IsHidden ?? false,
   LinkAttachments: [],
   ActivityId: `https://demo.invalid/activities/${id}`,
   IsAnonymous: false,
-  DropboxType: 0,
-  SubmissionType: 0,
+  DropboxType: extra.Group ? 2 : 1,
+  SubmissionType: extra.SubmissionType ?? 0,
   CompletionType: 0,
   GradeItemId: null,
   AllowOnlyUsersWithSpecialAccess: false,
@@ -66,7 +66,12 @@ const folder = (
   LearnerIsSubmitted: false,
 });
 
-const quiz = (id: number, name: string, dueDate: string | null, extra: Partial<{ IsActive: boolean; StartDate: string | null; EndDate: string | null }> = {}) => ({
+const quiz = (
+  id: number,
+  name: string,
+  dueDate: string | null,
+  extra: Partial<{ IsActive: boolean; StartDate: string | null; EndDate: string | null; TimeLimit: number; Attempts: number | null; Password: string }> = {},
+) => ({
   QuizId: id,
   Name: name,
   IsActive: extra.IsActive ?? true,
@@ -82,7 +87,12 @@ const quiz = (id: number, name: string, dueDate: string | null, extra: Partial<{
   EndDate: extra.EndDate ?? null,
   DueDate: dueDate,
   DisplayInCalendar: true,
-  AttemptsAllowed: { IsUnlimited: false, NumberOfAttemptsAllowed: 1 },
+  AttemptsAllowed: extra.Attempts === null ? { IsUnlimited: true, NumberOfAttemptsAllowed: null } : { IsUnlimited: false, NumberOfAttemptsAllowed: extra.Attempts ?? 1 },
+  SubmissionTimeLimit: extra.TimeLimit ? { IsEnforced: true, ShowClock: true, TimeLimitValue: extra.TimeLimit } : { IsEnforced: false, ShowClock: false, TimeLimitValue: 120 },
+  SubmissionGracePeriod: 5,
+  LateSubmissionInfo: { LateSubmissionOption: 0, LateLimitMinutes: null },
+  Password: extra.Password ?? null,
+  RestrictIPAddressRange: null,
   ActivityId: `https://demo.invalid/activities/quiz-${id}`,
   IsRetakeIncorrectOnly: false,
 });
@@ -106,10 +116,10 @@ const news = (id: number, title: string, text: string, createdDate: string, extr
   IsPinned: extra.IsPinned ?? false,
 });
 
-const submission = (status: number, submitted: boolean, completedAt: string | null = null) => ({
+const submission = (status: number, submitted: boolean, completedAt: string | null = null, score: number | null = null) => ({
   Entity: { DisplayName: "Demo Student", EntityId: Number(DEMO_USER_ID), EntityType: "User", Active: true },
   Status: status,
-  Feedback: null,
+  Feedback: score === null ? null : { Feedback: { Text: "Nice work.", Html: "<p>Nice work.</p>" }, Files: [], Score: score, IsGraded: true, RubricAssessments: [] },
   Submissions: submitted ? [{ Id: 1, Comment: { Text: "", Html: "" }, Files: [], SubmissionDate: completedAt }] : [],
   CompletionDate: completedAt,
 });
@@ -142,11 +152,12 @@ export const buildDemoTenant = (now: Date, scenario: DemoScenario = "baseline"):
     "31001": {
       folders: [
         folder(4101, "Lab 3: Timer Interrupts", changed ? days(2, now) : days(1, now), { ScoreDenominator: 50 }),
-        folder(4102, "Lab 2: GPIO and Debouncing", days(-1, now, 17, 0), { ScoreDenominator: 50 }),
-        folder(4103, "Project Proposal", days(9, now), { ScoreDenominator: 25 }),
+        // Due yesterday, but late submissions stay open for two more days: the "still open" case.
+        folder(4102, "Lab 2: GPIO and Debouncing", days(-1, now, 17, 0), { ScoreDenominator: 50, EndDate: days(2, now, 17, 0) }),
+        folder(4103, "Project Proposal", days(9, now), { ScoreDenominator: 25, Group: true }),
         folder(4104, "Lab 1: Toolchain Setup", days(-12, now), { ScoreDenominator: 20 }),
       ],
-      quizzes: [quiz(5101, "Quiz 2: Interrupt Latency", days(3, now, 23, 30)), ...(changed ? [quiz(5102, "Quiz 3: Serial Protocols", days(6, now, 23, 30))] : [])],
+      quizzes: [quiz(5101, "Quiz 2: Interrupt Latency", days(3, now, 23, 30), { TimeLimit: 30, Attempts: 1 }), ...(changed ? [quiz(5102, "Quiz 3: Serial Protocols", days(6, now, 23, 30), { TimeLimit: 30, Attempts: 1 })] : [])],
       news: [
         news(6101, "Lab 3 kit pickup", "Lab 3 kits are available at the CEER stockroom from Monday.", hours(-30, now)),
         ...(changed ? [news(6102, "Lab 3 deadline extended", "Lab 3 now closes one day later. Use the extra time to document timing diagrams.", hours(-1, now))] : []),
@@ -155,24 +166,26 @@ export const buildDemoTenant = (now: Date, scenario: DemoScenario = "baseline"):
         "4101": [submission(0, false)],
         "4102": [submission(0, false)],
         "4103": [submission(0, false)],
-        "4104": [submission(1, true, days(-13, now, 21, 4))],
+        // Lab 1 comes back graded on the second demo refresh.
+        "4104": [submission(1, true, days(-13, now, 21, 4), changed ? 18 : null)],
       },
     },
     "31002": {
       folders: [
         // Due dates use fixed clock times so repeated demo refreshes never look like moved deadlines.
         folder(4201, "Homework 4: Pipelining Hazards", days(0, now, 20, 0), { ScoreDenominator: 40 }),
-        folder(4202, "Homework 5: Cache Simulation", days(5, now), { ScoreDenominator: 40 }),
+        folder(4202, "Homework 5: Cache Simulation", days(5, now), { ScoreDenominator: 40, Rubric: true }),
         folder(4203, "Reading Response: Hennessy Ch. 3", null, { ScoreDenominator: 10 }),
         folder(4204, "Homework 3: ISA Design", days(-7, now), { ScoreDenominator: 40 }),
       ],
-      quizzes: [quiz(5201, "Midterm Practice Quiz", days(4, now, 12, 0)), quiz(5202, "Quiz 1: Number Systems", days(-20, now), { EndDate: days(-19, now) })],
+      quizzes: [quiz(5201, "Midterm Practice Quiz", days(4, now, 12, 0), { Attempts: null }), quiz(5202, "Quiz 1: Number Systems", days(-20, now), { EndDate: days(-19, now) })],
       news: [news(6201, "Midterm logistics", "The midterm is in Tolentine 215. Bring one page of notes.", days(-2, now, 9, 0), { IsPinned: true })],
       submissions: {
         "4201": [submission(changed ? 1 : 2, changed, changed ? hours(-0.5, now) : null)],
         "4202": [submission(0, false)],
-        "4203": [submission(0, false)],
-        "4204": [submission(1, true, days(-7, now, 20, 0))],
+        // A draft saved in Brightspace but never submitted.
+        "4203": [submission(2, false)],
+        "4204": [submission(1, true, days(-7, now, 20, 0), 36)],
       },
     },
     "31003": {
