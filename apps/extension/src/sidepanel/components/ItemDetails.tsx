@@ -1,5 +1,5 @@
 import type { AcademicItem, Course } from "@nova-agent/core";
-import { COMPONENT_LABELS, explainPriority, type RankedItem } from "@nova-agent/planner";
+import { BAND_LABELS, COMPONENT_LABELS, COMPONENT_MAX, describePriority, explainPriority, priorityBand, type RankedItem } from "@nova-agent/planner";
 import { ChevronDown, ExternalLink, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { formatExact, formatRelative } from "../format";
@@ -22,7 +22,9 @@ export type ItemDetailsProps = {
 /** Shared detail body used by the Focus row expansion and the Week popover. */
 export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headingLevel = "h4", onDismiss, markedAt = null }: ItemDetailsProps) => {
   const [showBreakdown, setShowBreakdown] = useState(false);
-  const reasons = ranked ? explainPriority(item, ranked.priority) : [];
+  // Up to three reasons here; the hero shows two. Every non-zero part is in the breakdown below.
+  const reasons = ranked ? explainPriority(item, ranked.priority, 3) : [];
+  const inPerson = item.submissionType === "on-paper" || item.submissionType === "observed";
   const Heading = headingLevel;
   const link = canOpen ? item.url : course?.homeUrl ?? null;
   return (
@@ -39,7 +41,17 @@ export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headin
           {item.dueAt ? <span className="muted"> ({formatRelative(item.dueAt, now)})</span> : null}
         </dd>
         <dt>Status</dt>
-        <dd>{STATUS_LABELS[item.status]}{item.status === "unknown" ? <span className="muted"> · Brightspace did not share submission state</span> : null}</dd>
+        <dd>
+          {STATUS_LABELS[item.status]}
+          {item.status === "unknown" ? <span className="muted"> · Brightspace did not share submission state</span> : null}
+          {inPerson && item.status === "not-started" ? <span className="muted"> · Handed in {item.submissionType === "on-paper" ? "on paper" : "in person"}, so Brightspace may never mark it submitted</span> : null}
+        </dd>
+        {item.score?.graded ? (
+          <>
+            <dt>Score</dt>
+            <dd>{item.score.earned !== null ? `${item.score.earned}${item.pointsPossible !== null ? ` of ${item.pointsPossible}` : ""}` : "Graded, no number shared"}</dd>
+          </>
+        ) : null}
         {markedAt ? (
           <>
             <dt>On this device</dt>
@@ -62,9 +74,10 @@ export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headin
       {ranked ? (
         <section className="priority-box" aria-label="Priority">
           <header>
-            <span>Priority, out of 100</span>
+            <span>{BAND_LABELS[priorityBand(ranked.priority.score)]} · priority out of 100</span>
             <strong className="mono">{ranked.priority.score}</strong>
           </header>
+          <p className="priority-summary">{describePriority(item, ranked.priority)}</p>
           <ul className="reasons">
             {reasons.map((reason) => (
               <li key={reason.component}>{reason.text}</li>
@@ -79,7 +92,9 @@ export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headin
               {(Object.keys(ranked.priority.components) as (keyof typeof ranked.priority.components)[]).map((component) => (
                 <div key={component} style={{ display: "contents" }}>
                   <dt>{COMPONENT_LABELS[component]}</dt>
-                  <dd className="mono">{ranked.priority.components[component].toFixed(1)}</dd>
+                  <dd className="mono">
+                    {ranked.priority.components[component].toFixed(1)} <span className="muted">of {COMPONENT_MAX[component]}</span>
+                  </dd>
                 </div>
               ))}
               <div className="total" style={{ display: "contents" }}>

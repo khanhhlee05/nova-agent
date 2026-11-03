@@ -135,6 +135,7 @@ export const itemData = (snapshot: CompactSnapshot, item: CompactItem) => ({
   bucket: item.bucket,
   status: item.status,
   points: item.pointsPossible,
+  earnedScore: item.earnedScore ?? null,
   priority: item.priority,
 });
 
@@ -145,8 +146,8 @@ export const changeData = (snapshot: CompactSnapshot, change: CompactChange) => 
   course: courseName(snapshot, change.courseId),
   detected: change.detectedLocal,
   daysAgo: change.daysAgo,
-  before: change.before ? { due: change.before.dueLocal ?? change.before.dueAt, status: change.before.status, visibility: change.before.visibility } : null,
-  after: change.after ? { due: change.after.dueLocal ?? change.after.dueAt, status: change.after.status, visibility: change.after.visibility } : null,
+  before: change.before ? { due: change.before.dueLocal ?? change.before.dueAt, status: change.before.status, visibility: change.before.visibility, score: change.before.score } : null,
+  after: change.after ? { due: change.after.dueLocal ?? change.after.dueAt, status: change.after.status, visibility: change.after.visibility, score: change.after.score, pointsPossible: change.after.pointsPossible } : null,
   read: change.read,
 });
 

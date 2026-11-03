@@ -67,6 +67,24 @@ describe("semantic diff", () => {
     expect(kinds(events)).toEqual(["announcement-added", "announcement-updated", "status-changed", "visibility-changed"]);
   });
 
+  it("reports a score arriving or changing as graded, never a score disappearing", () => {
+    const item = makeItem({ sourceId: "1", courseId: "c1", status: "submitted", pointsPossible: 20 });
+    const first = makeSnapshot(T0, [item]);
+    const graded = makeSnapshot(T1, [{ ...item, score: { earned: 18, graded: true } }]);
+    const events = diffSnapshots({ current: graded, history: [first] });
+    expect(kinds(events)).toEqual(["graded"]);
+    expect(events[0]?.before).toEqual({ score: null, pointsPossible: 20, title: item.title });
+    expect(events[0]?.after).toEqual({ score: 18, pointsPossible: 20, title: item.title });
+
+    const regraded = makeSnapshot(T2, [{ ...item, score: { earned: 19, graded: true } }]);
+    expect(kinds(diffSnapshots({ current: regraded, history: [graded, first] }))).toEqual(["graded"]);
+    const withdrawn = makeSnapshot(T2, [{ ...item, score: null }]);
+    expect(diffSnapshots({ current: withdrawn, history: [graded, first] })).toEqual([]);
+    // Graded feedback without a number is not news the panel can show.
+    const textOnly = makeSnapshot(T1, [{ ...item, score: { earned: null, graded: true } }]);
+    expect(diffSnapshots({ current: textOnly, history: [first] })).toEqual([]);
+  });
+
   it("ignores whitespace-only announcement edits", () => {
     const ann = makeAnnouncement({ sourceId: "a1", courseId: "c1", bodyText: "Bring   notes" });
     const events = diffSnapshots({

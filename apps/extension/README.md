@@ -28,6 +28,10 @@ The seven-day strip in the field is tappable. Selecting a day shows only what is
 
 Arrows above the strip page the Week tab seven days at a time, forward only, in rolling pages from today (the first page is the same "next 7 days" the Focus count strip uses). The forward arrow stops at the page holding the latest due date Nova knows about, so there are no empty weeks to scroll through; **Today** returns to the first page. Paging clears a picked day. The headline is rewritten for the page it shows ("Two deadlines Nov 7 to Nov 13 · 1 week ahead"). The position is not persisted: the tab always opens on the current week.
 
+## How "Do this first" is chosen
+
+A deterministic score from six parts (urgency, stakes, weight, momentum, crunch, effort), each read from fields Brightspace already returns. The details panel explains it in words and shows every part against its maximum. The formula is in `docs/PRIORITY.md`.
+
 ## Focus: one category at a time
 
 Under the field, a category control shows **Overdue**, **Upcoming**, or **Completed**, one at a time, each with its count. The panel opens on Overdue when anything is overdue and on Upcoming otherwise, then remembers whatever the student last picked. Upcoming groups rows under Today (always shown, even when empty), Tomorrow, Later this week, Later, and No due date. A toolbar above the list holds the course filter and a sort control (**Due date**, **Course**, **Recently updated**); sorting by anything other than due date flattens the groups into one list. Only the list scrolls; the field, the category control, and the toolbar stay put. Rows that appear in the current change feed carry a **Changed** mark. The category and sort are remembered between opens.

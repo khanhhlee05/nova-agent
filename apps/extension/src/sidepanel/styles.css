@@ -272,6 +272,7 @@ h1, h2, h3, h4, p { margin: 0; }
 .priority-box { padding: 10px 0 0; border-top: 1px solid var(--nova-rule); }
 .priority-box header { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; color: var(--nova-muted); }
 .priority-box header strong { font-size: 15px; color: var(--nova-ink); }
+.priority-summary { margin-top: 6px; font-size: 13.5px; line-height: 1.45; color: var(--nova-ink); }
 .reasons { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
 .reasons li { font-size: 13.5px; }
 .breakdown { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; margin: 8px 0 0; font-size: 13px; }

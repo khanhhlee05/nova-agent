@@ -114,6 +114,19 @@ describe("loadAcademicState", () => {
     expect(state.announcements.some((a) => a.title === "Midterm logistics" && a.pinned)).toBe(true);
   });
 
+  it("reads the stakes signals and scores from the same responses", async () => {
+    const { client } = demoClient();
+    const state = await client.loadAcademicState();
+    const byTitle = (prefix: string) => state.items.find((item) => item.title.startsWith(prefix));
+    expect(byTitle("Project Proposal")).toMatchObject({ group: true, hasRubric: false, submissionType: "online", score: null });
+    expect(byTitle("Homework 5")).toMatchObject({ group: false, hasRubric: true });
+    expect(byTitle("Reading Response: Hennessy")).toMatchObject({ status: "in-progress" });
+    expect(byTitle("Homework 3")).toMatchObject({ status: "completed", score: { earned: 36, graded: true }, pointsPossible: 40 });
+    expect(byTitle("Lab 1")?.score).toBeNull();
+    expect(byTitle("Quiz 2")).toMatchObject({ timeLimitMinutes: 30, attemptsAllowed: 1, proctored: false, lateAllowed: true, estimatedMinutes: 30 });
+    expect(byTitle("Midterm Practice")).toMatchObject({ timeLimitMinutes: null, attemptsAllowed: null, estimatedMinutes: null });
+  });
+
   it("tolerates unknown extra response fields", async () => {
     const { client } = demoClient({
       [routes.whoami(DEMO_LP_VERSION)]: { Identifier: 77, FirstName: "A", LastName: "B", UniqueName: "ab", Pronouns: "they/them", FutureField: { nested: true } },

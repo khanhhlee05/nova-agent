@@ -123,6 +123,24 @@ const EventBody = ({ event, title, now }: { event: ChangeEvent; title: string; n
       </>
     );
   }
+  if (event.kind === "graded") {
+    const score = event.after?.score;
+    const possible = event.after?.pointsPossible;
+    const previous = event.before?.score;
+    const text = typeof score === "number" ? `${score}${typeof possible === "number" ? ` of ${possible}` : ""}` : "graded";
+    return (
+      <>
+        {title}: {typeof previous === "number" ? (
+          <>
+            <span className="old">{previous}</span>
+            <span className="arrow" aria-hidden="true">→</span>
+            <span className="sr-only">changed to</span>{" "}
+          </>
+        ) : null}
+        <span className="new">{text}</span>
+      </>
+    );
+  }
   if (event.kind === "item-added" && event.after?.dueAt) {
     return (
       <>
