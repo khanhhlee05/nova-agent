@@ -111,4 +111,4 @@ Run on a developer machine with Chrome and network access:
 
 ## Not in slice 1
 
-Sign-in, a database, saved conversations, per-user quotas, Google Calendar, the no-model intent matcher as an offline fallback, hosting, and the on-device model adapter. See `BACKEND_PLAN.md`.
+Sign-in, a database, saved conversations, per-user quotas, Google Calendar, the no-model intent matcher as an offline fallback, hosting, and the on-device model adapter. See `ASK_NOVA_PLAN.md` for the next slices and `BACKEND_PLAN.md` for the hosted backend.

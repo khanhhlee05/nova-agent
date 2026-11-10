@@ -18,7 +18,7 @@ Implemented in the first vertical slice (features A–D):
 - **Priority engine**: deterministic, explainable scoring in `packages/planner`.
 - **Ask Nova**: a chat tab over the same data, answered by a small Node API that calls an OpenRouter model with read-only tools. Off until the student turns it on. See [docs/ASK_NOVA.md](docs/ASK_NOVA.md).
 
-Planned next: sign-in and saved conversations, Google Calendar sync, ICS export, study planning.
+Planned next for Ask Nova: answers that honor done marks and personal deadlines, saved conversations, study plans, confirmed local actions, an offline fallback. See [docs/ASK_NOVA_PLAN.md](docs/ASK_NOVA_PLAN.md). Later: sign-in and Google Calendar sync.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/BRIGHTSPACE_ACCESS.md](docs/BRIGHTSPACE_ACCESS.md) for the data flow and the authentication outcome.
 
