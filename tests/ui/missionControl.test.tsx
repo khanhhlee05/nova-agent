@@ -420,6 +420,56 @@ describe("focus categories", () => {
   });
 });
 
+describe("upcoming groups fold", () => {
+  it("folds a group from its heading, folds and unfolds them all, and remembers the set", async () => {
+    const { dashboard } = await demoDashboard();
+    const p = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "upcoming" } });
+    const { unmount } = render(<MissionControl {...p} />);
+    const calls = (p.actions as ReturnType<typeof actions>).calls;
+    const later = screen.getByRole("button", { name: /^Later this week, \d+ items?, expanded$/ });
+    expect(later.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(later);
+    expect(calls.setPreferences?.at(-1)?.[0]).toEqual({ collapsedGroups: ["this-week"] });
+    fireEvent.click(screen.getByRole("button", { name: /collapse all groups/i }));
+    const all = calls.setPreferences?.at(-1)?.[0] as { collapsedGroups: string[] };
+    expect(all.collapsedGroups).toEqual(expect.arrayContaining(["today", "this-week", "later"]));
+    expect(all.collapsedGroups).not.toContain("overdue");
+    unmount();
+
+    const folded = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "upcoming", collapsedGroups: ["this-week", "later"] } });
+    render(<MissionControl {...folded} />);
+    const title = dashboard.buckets["this-week"][0]?.title as string;
+    expect(screen.queryByRole("button", { name: new RegExp(`show details for ${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i") })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Later this week, \d+ items?, collapsed$/ }).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByRole("button", { name: /^Today, \d+ items?, expanded$/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Later this week, \d+ items?, collapsed$/ }));
+    expect((folded.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0]).toEqual({ collapsedGroups: ["later"] });
+    cleanup();
+
+    const allFolded = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "upcoming", collapsedGroups: ["today", "tomorrow", "this-week", "later", "no-date"] } });
+    render(<MissionControl {...allFolded} />);
+    fireEvent.click(screen.getByRole("button", { name: /expand all groups/i }));
+    expect((allFolded.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0]).toEqual({ collapsedGroups: [] });
+  });
+
+  it("does not fold when sorted by course, and 'Why this first?' unfolds the group holding the item", async () => {
+    const { dashboard } = await demoDashboard();
+    render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "upcoming", sort: "course", collapsedGroups: ["today"] } })} />);
+    expect(screen.queryByRole("button", { name: /collapse all groups/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /, (expanded|collapsed)$/ })).toBeNull();
+    cleanup();
+
+    const top = dashboard.nextMove?.item as NonNullable<typeof dashboard.nextMove>["item"];
+    const bucket = (Object.keys(dashboard.buckets) as (keyof typeof dashboard.buckets)[]).find((candidate) => dashboard.buckets[candidate].some((entry) => entry.key === top.key)) as string;
+    const p = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "completed", collapsedGroups: [bucket as "today"] } });
+    render(<MissionControl {...p} />);
+    fireEvent.click(screen.getAllByText(/why this first\?/i)[0] as HTMLElement);
+    const patch = (p.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0] as Record<string, unknown>;
+    expect(patch.focusCategory).toBe(bucket === "overdue" ? "overdue" : "upcoming");
+    if (bucket !== "overdue") expect(patch.collapsedGroups).toEqual([]);
+  });
+});
+
 describe("local done marks", () => {
   it("offers a checkbox on open rows that asks for an on-device mark, never a Brightspace write", async () => {
     const { dashboard } = await demoDashboard();

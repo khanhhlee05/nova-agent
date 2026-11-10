@@ -1,6 +1,7 @@
 import { LONG_OVERDUE_AFTER_DAYS, isDone, type AcademicItem, type Course, type DeadlineBucket } from "@nova-agent/core";
 import type { RankedItem } from "@nova-agent/planner";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { Collapsible } from "radix-ui";
 import { formatDeadline, formatRelative, pluralize } from "../format";
 import { SECTION_LABELS, STATUS_LABELS, UPCOMING_BUCKETS, sortItems, type Dashboard, type FocusCategory, type SortKey } from "../model";
 import { courseSwatch } from "../theme";
@@ -24,6 +25,11 @@ export type FocusListProps = {
   /** Session-only: whether items overdue for more than two weeks are listed under Overdue. */
   showLongOverdue: boolean;
   onToggleLongOverdue: () => void;
+  /** Day groups inside Upcoming the student folded. Persisted. */
+  collapsedGroups?: ReadonlySet<DeadlineBucket>;
+  onToggleGroup?: (bucket: DeadlineBucket) => void;
+  /** Folds or unfolds every group shown. */
+  onToggleAllGroups?: (buckets: readonly DeadlineBucket[], collapse: boolean) => void;
 };
 
 const GROUP_LABELS: Partial<Record<DeadlineBucket, string>> = { ...SECTION_LABELS, "no-date": "No due date" };
@@ -35,7 +41,7 @@ const EMPTY_COPY: Record<FocusCategory, { title: string; text: (courseFiltered: 
 };
 
 /** The one list under the category control. Only the Upcoming view groups by day, and only when sorted by due date. */
-export const FocusList = ({ dashboard, category, sort, now, courseFiltered, expandedKey, onExpand, canOpen, onOpen, onDismiss, onSetDone, showLongOverdue, onToggleLongOverdue }: FocusListProps) => {
+export const FocusList = ({ dashboard, category, sort, now, courseFiltered, expandedKey, onExpand, canOpen, onOpen, onDismiss, onSetDone, showLongOverdue, onToggleLongOverdue, collapsedGroups, onToggleGroup, onToggleAllGroups }: FocusListProps) => {
   const rowProps = { dashboard, now, expandedKey, onExpand, canOpen, onOpen, onDismiss, onSetDone };
   const items = category === "overdue" ? dashboard.buckets.overdue : category === "completed" ? dashboard.buckets.completed : UPCOMING_BUCKETS.flatMap((bucket) => dashboard.buckets[bucket]);
   const older = category === "overdue" ? dashboard.longOverdue : [];
@@ -78,30 +84,62 @@ export const FocusList = ({ dashboard, category, sort, now, courseFiltered, expa
     );
   }
   if (category === "upcoming" && sort === "due") {
+    // Today is the one day the student always wants an answer for, even when the answer is "nothing".
+    const shown = UPCOMING_BUCKETS.filter((bucket) => dashboard.buckets[bucket].length > 0 || bucket === "today");
+    const collapsible = !!onToggleGroup;
+    const allCollapsed = collapsible && shown.every((bucket) => collapsedGroups?.has(bucket));
     return (
       <div className="groups" aria-label="Upcoming">
-        {UPCOMING_BUCKETS.map((bucket) => {
+        {collapsible && onToggleAllGroups && shown.length > 1 ? (
+          <div className="groups-toolbar">
+            <button type="button" className="button button-ghost button-sm" onClick={() => onToggleAllGroups(shown, !allCollapsed)} aria-label={allCollapsed ? "Expand all groups" : "Collapse all groups"}>
+              {allCollapsed ? <ChevronsUpDown size={14} aria-hidden="true" /> : <ChevronsDownUp size={14} aria-hidden="true" />}
+              {allCollapsed ? "Expand all" : "Collapse all"}
+            </button>
+          </div>
+        ) : null}
+        {shown.map((bucket) => {
           const rows = dashboard.buckets[bucket];
-          // Today is the one day the student always wants an answer for, even when the answer is "nothing".
-          if (rows.length === 0 && bucket !== "today") return null;
+          const body =
+            rows.length === 0 ? (
+              <p className="group-empty">Nothing due today.</p>
+            ) : (
+              <ul className="tasks">
+                {rows.map((item) => (
+                  <TaskRow key={item.key} item={item} bucket={bucket} {...rowProps} />
+                ))}
+              </ul>
+            );
+          const count = (
+            <span className="count mono" aria-label={pluralize(rows.length, "item")}>
+              {rows.length}
+            </span>
+          );
+          if (!collapsible) {
+            return (
+              <section key={bucket} className="group" aria-labelledby={`group-${bucket}`}>
+                <h3 className="group-label" id={`group-${bucket}`} data-tone={bucket === "today" ? "today" : undefined}>
+                  {GROUP_LABELS[bucket]}
+                  {count}
+                </h3>
+                {body}
+              </section>
+            );
+          }
+          const open = !collapsedGroups?.has(bucket);
           return (
-            <section key={bucket} className="group" aria-labelledby={`group-${bucket}`}>
-              <h3 className="group-label" id={`group-${bucket}`} data-tone={bucket === "today" ? "today" : undefined}>
-                {GROUP_LABELS[bucket]}
-                <span className="count mono" aria-label={pluralize(rows.length, "item")}>
-                  {rows.length}
-                </span>
-              </h3>
-              {rows.length === 0 ? (
-                <p className="group-empty">Nothing due today.</p>
-              ) : (
-                <ul className="tasks">
-                  {rows.map((item) => (
-                    <TaskRow key={item.key} item={item} bucket={bucket} {...rowProps} />
-                  ))}
-                </ul>
-              )}
-            </section>
+            <Collapsible.Root key={bucket} className="group" open={open} onOpenChange={() => onToggleGroup(bucket)} asChild>
+              <section aria-labelledby={`group-${bucket}`}>
+                <h3 className="group-label" id={`group-${bucket}`} data-tone={bucket === "today" ? "today" : undefined}>
+                  <Collapsible.Trigger className="group-trigger" aria-label={`${GROUP_LABELS[bucket]}, ${pluralize(rows.length, "item")}, ${open ? "expanded" : "collapsed"}`}>
+                    {GROUP_LABELS[bucket]}
+                    {count}
+                    <ChevronDown size={15} className="chevron" aria-hidden="true" />
+                  </Collapsible.Trigger>
+                </h3>
+                <Collapsible.Content className="group-content">{body}</Collapsible.Content>
+              </section>
+            </Collapsible.Root>
           );
         })}
       </div>
