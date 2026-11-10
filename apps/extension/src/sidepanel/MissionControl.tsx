@@ -1,7 +1,7 @@
 import type { FeasibilityReport } from "@nova-agent/brightspace";
 import { isSafeTenantLink } from "@nova-agent/brightspace";
 import { compactSnapshot } from "@nova-agent/agent";
-import type { ChangeEvent } from "@nova-agent/core";
+import type { ChangeEvent, DeadlineBucket } from "@nova-agent/core";
 import type { ChatMessage, ChatRequest } from "@nova-agent/protocol";
 import { CheckCheck, EyeOff, Plus } from "lucide-react";
 import { Tabs, Tooltip } from "radix-ui";
@@ -41,10 +41,12 @@ export type UiPreferences = {
   /** The Focus category the student picked. `null` until they pick one: Overdue when anything is overdue, Upcoming otherwise. */
   focusCategory: FocusCategory | null;
   sort: SortKey;
+  /** Day groups inside Upcoming the student folded (Today, Tomorrow, Later this week, Later, No due date). */
+  collapsedGroups: DeadlineBucket[];
   theme: Theme;
 };
 
-export const DEFAULT_PREFERENCES: UiPreferences = { activeTab: "focus", courseFilter: null, focusCategory: null, sort: "due", theme: "light" };
+export const DEFAULT_PREFERENCES: UiPreferences = { activeTab: "focus", courseFilter: null, focusCategory: null, sort: "due", collapsedGroups: [], theme: "light" };
 
 /** Older stored preferences lack the newer keys; every reader fills them from the defaults. */
 export const withPreferenceDefaults = (stored: Partial<UiPreferences> | null | undefined): UiPreferences => ({ ...DEFAULT_PREFERENCES, ...stored });
@@ -141,6 +143,11 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
   const canOpen = useCallback((url: string | null) => isSafeTenantLink(url, tenantOrigin), [tenantOrigin]);
   const tab: TabId = preferences.activeTab;
   const category = effectiveFocusCategory(preferences, dashboard);
+  const collapsedGroups = new Set<DeadlineBucket>(preferences.collapsedGroups ?? []);
+  const toggleGroup = (bucket: DeadlineBucket) =>
+    actions.setPreferences({ collapsedGroups: collapsedGroups.has(bucket) ? (preferences.collapsedGroups ?? []).filter((entry) => entry !== bucket) : [...(preferences.collapsedGroups ?? []), bucket] });
+  const toggleAllGroups = (buckets: readonly DeadlineBucket[], collapse: boolean) =>
+    actions.setPreferences({ collapsedGroups: collapse ? [...new Set([...(preferences.collapsedGroups ?? []), ...buckets])] : (preferences.collapsedGroups ?? []).filter((entry) => !buckets.includes(entry)) });
 
   // The thread lives here so the hero's suggestion chips and the tab body share one conversation. Inert without `ask`.
   const buildRequest = useCallback(
@@ -172,7 +179,10 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
     if (!item || !dashboard) return;
     const bucket = (Object.keys(dashboard.buckets) as (keyof typeof dashboard.buckets)[]).find((candidate) => dashboard.buckets[candidate].some((entry) => entry.key === key));
     const target = bucket ? focusCategoryOf(bucket) : "upcoming";
-    if (target !== category) actions.setPreferences({ focusCategory: target });
+    const patch: Partial<UiPreferences> = {};
+    if (target !== category) patch.focusCategory = target;
+    if (bucket && collapsedGroups.has(bucket)) patch.collapsedGroups = (preferences.collapsedGroups ?? []).filter((entry) => entry !== bucket);
+    if (Object.keys(patch).length > 0) actions.setPreferences(patch);
     setExpandedKey(key);
     requestAnimationFrame(() => document.getElementById(`details-${key.replace(/[^a-z0-9]+/gi, "-")}`)?.scrollIntoView({ block: "nearest" }));
   };
@@ -375,7 +385,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                         <span>{preferences.courseFilter ? "This course has nothing visible. Try All courses." : "Nova found no visible assignments or quizzes in your active courses."}</span>
                       </div>
                     ) : (
-                      <FocusList dashboard={dashboard} category={category} sort={preferences.sort} now={now} courseFiltered={preferences.courseFilter !== null} expandedKey={expandedKey} onExpand={setExpandedKey} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} onSetDone={actions.setLocalDone} showLongOverdue={showLongOverdue} onToggleLongOverdue={() => setShowLongOverdue((value) => !value)} />
+                      <FocusList dashboard={dashboard} category={category} sort={preferences.sort} now={now} courseFiltered={preferences.courseFilter !== null} expandedKey={expandedKey} onExpand={setExpandedKey} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} onSetDone={actions.setLocalDone} showLongOverdue={showLongOverdue} onToggleLongOverdue={() => setShowLongOverdue((value) => !value)} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup} onToggleAllGroups={toggleAllGroups} />
                     )
                   ) : (
                     <div className="empty">

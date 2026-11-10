@@ -41,17 +41,63 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/BRIGHTSPACE_ACCESS.md
 - `packages/agent`: compact snapshot, read-only tools, the agent loop, and model adapters
 - `packages/protocol`: Zod schemas shared by the extension and the API (compact snapshot, chat request, events, SSE parser)
 
-## Development
+## Run it locally
+
+Requirements: Node 22 or later, npm, and Chrome 116 or later.
 
 ```bash
+git clone https://github.com/khanhhlee05/nova-agent.git
+cd nova-agent
 npm install
-npm run dev              # public site
-npm run dev:extension    # side panel preview harness
-npm run dev:api          # Ask Nova API on :8787 (needs apps/api/.env)
-npm run check            # lint, typecheck, tests, build
 ```
 
-Load the extension from `apps/extension/dist` after `npm run build`.
+### 1. Try the side panel in a browser tab (no Chrome setup)
+
+```bash
+npm run dev:extension
+```
+
+Open `http://127.0.0.1:5174/preview.html?scenario=ready&tab=focus`. This preview harness renders the real side panel against fictional demo data with a stub host, so nothing touches Brightspace. Useful query parameters: `scenario=ready|changes|week|ask|empty|stale|offline|session-expired`, `tab=focus|week|changes|ask`, `theme=dark`, `mode=demo`.
+
+### 2. Install the extension in Chrome
+
+Build it:
+
+```bash
+npm run build --workspace @nova-agent/extension
+```
+
+Then load it:
+
+1. Open `chrome://extensions`.
+2. Turn on **Developer mode** (top right).
+3. Click **Load unpacked** and choose the `apps/extension/dist` folder.
+4. Pin Nova Agent in the toolbar.
+
+Open any page on `https://brightspace.villanova.edu` while signed in. A small Nova Orb appears bottom-right; click it (or the toolbar icon) to open Mission Control in the side panel. On first run choose **Explore with demo data** to look around, or **Connect to Brightspace** to run the read-only feasibility probe against your own courses.
+
+After pulling new code, rebuild with the same command, then click the reload arrow on the Nova Agent card in `chrome://extensions` and reopen the side panel. Local data (snapshots, done marks, your own deadlines) upgrades in place. If anything looks stale, use the panel menu's **Clear local data** and pick a data source again.
+
+To share a build without the Chrome Web Store, zip `apps/extension/dist`; the recipient unzips it and loads it the same way.
+
+### 3. Ask Nova (optional)
+
+The Ask tab needs the small API running on this machine and an OpenRouter key.
+
+```bash
+cp apps/api/.env.example apps/api/.env   # then put your key in OPENROUTER_API_KEY
+npm run dev:api                          # listens on 127.0.0.1:8787
+```
+
+In the panel, open the Ask tab, read the statement of what is sent, and turn it on. Keep the extension and the API on the same commit so they agree on the snapshot format. Details, environment variables, and a manual checklist are in [docs/ASK_NOVA.md](docs/ASK_NOVA.md).
+
+### 4. Checks
+
+```bash
+npm run check            # lint, typecheck, tests, build
+npm test                 # tests only
+npm run dev              # public landing page (apps/web)
+```
 
 ## Inspiration
 
