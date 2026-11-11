@@ -12,6 +12,8 @@ export type RunTurnInput = {
   message: string;
   /** What the student was looking at; a prompt hint only. */
   focus?: ChatFocus;
+  /** Summary of the conversation before `history`. Placed inside the data section of the prompt. */
+  summary?: string;
   model: ChatModel;
   tools?: readonly ToolSpec[];
   /** Tool rounds before the model is forced to answer. Default 4. */
@@ -61,7 +63,7 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
   const maxRounds = Math.max(1, input.maxRounds ?? 4);
   const definitions = toolSchemasForModel(tools);
   const messages: ModelMessage[] = [
-    { role: "system", content: buildSystemPrompt(input.snapshot, { focus: input.focus }) },
+    { role: "system", content: buildSystemPrompt(input.snapshot, { focus: input.focus, summary: input.summary }) },
     ...input.history.map((entry): ModelMessage => ({ role: entry.role, content: entry.content })),
     { role: "user", content: input.message },
   ];

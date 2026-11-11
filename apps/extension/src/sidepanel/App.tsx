@@ -3,10 +3,10 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExtensionHost } from "../platform/host";
 import type { NovaDb } from "../storage/novaDb";
-import { clearAllData, deleteChangeEvent, deletePersonalItem, getPreference, getSyncStatus, listChangeEvents, listLocalMarks, listPersonalItems, latestSnapshot, markAllRead, putPersonalItem, setEventRead, setLocalMark, setPreference, unreadCount } from "../storage/repositories";
+import { clearAllData, clearConversations, deleteChangeEvent, deleteConversation, deletePersonalItem, getConversation, getPreference, getSyncStatus, listChangeEvents, listConversations, listLocalMarks, listPersonalItems, latestSnapshot, markAllRead, putPersonalItem, saveConversation, setEventRead, setLocalMark, setPreference, unreadCount } from "../storage/repositories";
 import { DATA_MODE_PREFERENCE, DEMO_SCENARIO_PREFERENCE, SyncCoordinator, type TransportFactory } from "../sync/syncCoordinator";
 import { IDLE_STATE, isRunningPhase, type SyncRuntimeState } from "../sync/syncState";
-import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, defaultAskClientFactory, effectiveAskSettings, type AskClientFactory, type AskSettings } from "./ask";
+import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, defaultAskClientFactory, effectiveAskSettings, summarize, type AskClientFactory, type AskSettings, type ConversationStore } from "./ask";
 import { connectLive as runConnectLive } from "./connect";
 import { useSessionDismissals } from "./dismissals";
 import { DEFAULT_PREFERENCES, MissionControl, withPreferenceDefaults, type UiPreferences } from "./MissionControl";
@@ -55,10 +55,13 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
   const askClient = useMemo(() => (askSettings?.enabled ? askClientFactory(askSettings) : null), [askClientFactory, askSettings]);
   const setAskSettings = useCallback(
     (patch: Partial<AskSettings>) => {
+      // Turning saving off is a promise that nothing stays behind, so the saved conversations go with it.
+      if (askSettings?.persistConversations === true && patch.persistConversations === false) void clearConversations(db);
       void setPreference(db, ASK_SETTINGS_PREFERENCE, { ...(askSettings ?? DEFAULT_ASK_SETTINGS), ...patch });
     },
     [askSettings, db],
   );
+  const savedConversations = useLiveQuery(async () => (scope ? listConversations(db, scope) : []), [db, scope]);
 
   // Session-only dismissals: forgotten when the panel closes, restored whenever fresh data arrives.
   const { dismissals, dismissItem, dismissBanner, restoreAll } = useSessionDismissals(snapshot?.capturedAt ?? null);
@@ -135,6 +138,19 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
         ? buildDashboard({ snapshot, events: visibleEvents, now, courseFilter: preferences.courseFilter, dismissedItemKeys: dismissals.items, localMarks, personal: visiblePersonal ?? [] })
         : null,
     [snapshot, visibleEvents, now, preferences, dismissals, localMarks, visiblePersonal],
+  );
+
+  const conversationStore = useMemo<ConversationStore | undefined>(
+    () =>
+      scope
+        ? {
+            list: (savedConversations ?? []).map(summarize),
+            save: (conversation) => void saveConversation(db, scope, conversation, clock()),
+            load: (id) => getConversation(db, id),
+            remove: (id) => void deleteConversation(db, id),
+          }
+        : undefined,
+    [clock, db, savedConversations, scope],
   );
 
   const setPreferences = useCallback(
@@ -272,7 +288,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
       dismissals={dismissals}
       actions={actions}
       pendingDelete={pendingDelete}
-      ask={{ client: askClient, settings: askSettings, setSettings: setAskSettings, clientFactory: askClientFactory, events: visibleEvents ?? [], localMarks, personal: visiblePersonal ?? [] }}
+      ask={{ client: askClient, settings: askSettings, setSettings: setAskSettings, clientFactory: askClientFactory, events: visibleEvents ?? [], localMarks, personal: visiblePersonal ?? [], conversations: conversationStore }}
     />
   );
 };

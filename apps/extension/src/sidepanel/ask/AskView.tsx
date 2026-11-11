@@ -1,10 +1,12 @@
-import { FlaskConical, Settings2, Trash2 } from "lucide-react";
+import { FlaskConical, History, Settings2, SquarePen, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Banner } from "../components/Banners";
 import { Tip } from "../components/Tip";
 import type { Dashboard } from "../model";
 import type { AskClientFactory } from "./askClient";
 import { AskComposer, type AskAbout, type AskDraft } from "./AskComposer";
+import { AskConversations } from "./AskConversations";
+import type { ConversationSummary } from "./conversations";
 import type { AskLive } from "./AskRows";
 import { hostOf, type AskSettings } from "./askSettings";
 import { AskSetup } from "./AskSetup";
@@ -32,11 +34,22 @@ export type AskViewProps = {
   onClearAbout?: () => void;
   /** Sends from the composer, so the caller can attach the item the question is about. Defaults to `thread.send`. */
   onSend?: (text: string) => void;
+  /** Saved conversations. Only used while the student has saving turned on. */
+  conversations?: AskSavedConversations;
+};
+
+export type AskSavedConversations = {
+  list: readonly ConversationSummary[];
+  onOpen: (id: string) => void;
+  /** Deletes a saved conversation; when it is the one on screen, the thread is cleared too. */
+  onDelete: (id: string) => void;
 };
 
 /** The Ask tab body: setup card until enabled, then the thread and the composer. */
-export const AskView = ({ notices, thread, settings, onSettingsChange, clientFactory, dashboard, mode, now, canOpen, onOpen, live, draft = null, about = null, onClearAbout, onSend }: AskViewProps) => {
+export const AskView = ({ notices, thread, settings, onSettingsChange, clientFactory, dashboard, mode, now, canOpen, onOpen, live, draft = null, about = null, onClearAbout, onSend, conversations }: AskViewProps) => {
   const [editing, setEditing] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
+  const saved = settings.persistConversations === true && conversations ? conversations : null;
   const showSetup = !settings.enabled || editing;
   const streaming = thread.status === "streaming";
 
@@ -54,12 +67,26 @@ export const AskView = ({ notices, thread, settings, onSettingsChange, clientFac
         ) : (
           <div className="ask-status">
             <span>
-              Nova server · <span className="mono">{hostOf(settings.apiBaseUrl)}</span> · Cleared when you close the panel
+              Nova server · <span className="mono">{hostOf(settings.apiBaseUrl)}</span> · {saved ? "Saved on this device" : "Cleared when you close the panel"}
             </span>
             <span className="spacer" />
+            {saved && thread.messages.length > 0 ? (
+              <Tip label="New conversation">
+                <button type="button" className="icon-button icon-button-sm" aria-label="New conversation" onClick={thread.clear}>
+                  <SquarePen size={15} aria-hidden="true" />
+                </button>
+              </Tip>
+            ) : null}
+            {saved ? (
+              <Tip label="Conversations">
+                <button type="button" className="icon-button icon-button-sm" aria-label="Conversations" onClick={() => setBrowsing(true)}>
+                  <History size={15} aria-hidden="true" />
+                </button>
+              </Tip>
+            ) : null}
             {thread.messages.length > 0 ? (
-              <Tip label="Clear conversation">
-                <button type="button" className="icon-button icon-button-sm" aria-label="Clear conversation" onClick={thread.clear}>
+              <Tip label={saved ? "Delete conversation" : "Clear conversation"}>
+                <button type="button" className="icon-button icon-button-sm" aria-label={saved ? "Delete conversation" : "Clear conversation"} onClick={() => (saved ? saved.onDelete(thread.conversationId) : thread.clear())}>
                   <Trash2 size={15} aria-hidden="true" />
                 </button>
               </Tip>
@@ -85,6 +112,7 @@ export const AskView = ({ notices, thread, settings, onSettingsChange, clientFac
           {thread.announcement ?? ""}
         </p>
       </div>
+      {saved && browsing ? <AskConversations conversations={saved.list} currentId={thread.conversationId} now={now} onOpen={saved.onOpen} onDelete={saved.onDelete} onClose={() => setBrowsing(false)} /> : null}
       <AskComposer streaming={streaming} disabled={!settings.enabled || editing} onSend={onSend ?? thread.send} onStop={thread.stop} draft={draft} about={about} onClearAbout={onClearAbout} />
     </div>
   );

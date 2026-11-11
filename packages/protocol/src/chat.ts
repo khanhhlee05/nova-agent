@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { compactSnapshotSchema } from "./snapshot";
 
-export const CHAT_LIMITS = { message: 2000, historyMessages: 12, historyContent: 4000 } as const;
+export const CHAT_LIMITS = { message: 2000, historyMessages: 12, historyContent: 4000, summary: 1500 } as const;
 
 export const chatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -32,6 +32,8 @@ export const chatRequestSchema = z.object({
   history: z.array(chatMessageSchema).max(CHAT_LIMITS.historyMessages),
   snapshot: compactSnapshotSchema,
   focus: chatFocusSchema.optional(),
+  /** What was said before the twelve messages in `history`, written by the client from its own thread. Data for the model, never instructions. */
+  summary: z.string().max(CHAT_LIMITS.summary).optional(),
   client: z.object({ name: z.literal("nova-extension"), version: z.string().min(1).max(32) }),
 });
 export type ChatRequest = z.infer<typeof chatRequestSchema>;

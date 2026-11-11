@@ -19,6 +19,7 @@ export type AskSetupProps = {
 export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose }: AskSetupProps) => {
   const [apiBaseUrl, setApiBaseUrl] = useState(settings.apiBaseUrl || DEFAULT_ASK_SETTINGS.apiBaseUrl);
   const [token, setToken] = useState(settings.token ?? "");
+  const [persist, setPersist] = useState(settings.persistConversations === true);
   // The default server is prefilled, so the address and access code stay folded away until someone needs them.
   const [showServer, setShowServer] = useState(editing || apiBaseUrl !== DEFAULT_ASK_SETTINGS.apiBaseUrl || token !== "");
   const [check, setCheck] = useState<{ state: "idle" | "checking" | "ok" | "fail"; text: string }>({ state: "idle", text: "" });
@@ -37,7 +38,7 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose }
 
   const save = (enabled: boolean) => {
     if (!normalized) return;
-    onChange({ enabled, apiBaseUrl: normalized, token: token.trim() || null });
+    onChange({ enabled, apiBaseUrl: normalized, token: token.trim() || null, persistConversations: persist });
     onClose?.();
   };
 
@@ -78,6 +79,19 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose }
           </button>
         </p>
       )}
+      <label className="ask-toggle">
+        <input type="checkbox" className="checkbox" checked={persist} onChange={(event) => setPersist(event.target.checked)} />
+        <span>
+          <strong>Save conversations on this device</strong>
+          <span className="ask-toggle-note">
+            {persist
+              ? "Nova keeps your newest 20 conversations in this browser until you delete them. They are not sent anywhere."
+              : settings.persistConversations
+                ? "Saving this turns it off and deletes every saved conversation."
+                : "Off: a conversation is gone when you close the panel."}
+          </span>
+        </span>
+      </label>
       {check.state !== "idle" ? (
         <p className="ask-check" data-state={check.state} role="status">
           {check.text}

@@ -2,11 +2,11 @@ import type { FeasibilityReport } from "@nova-agent/brightspace";
 import { isSafeTenantLink } from "@nova-agent/brightspace";
 import { compactSnapshot, shortId } from "@nova-agent/agent";
 import type { AcademicItem, ChangeEvent, DeadlineBucket } from "@nova-agent/core";
-import type { ChatMessage, ChatRequest } from "@nova-agent/protocol";
+import type { ChatRequest } from "@nova-agent/protocol";
 import { CheckCheck, EyeOff, Plus } from "lucide-react";
 import { Tabs, Tooltip } from "radix-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AskChips, AskView, useAskThread, type AskAbout, type AskClient, type AskClientFactory, type AskDraft, type AskLive, type AskSendOptions, type AskSettings } from "./ask";
+import { AskChips, AskView, summaryOf, useAskThread, type AskAbout, type AskClient, type AskClientFactory, type AskDraft, type AskLive, type AskMessage, type AskRequestContext, type AskSettings, type ConversationStore } from "./ask";
 import type { SyncStatusRecord } from "../storage/novaDb";
 import { PHASE_LABELS, isRunningPhase, isStale, type SyncRuntimeState } from "../sync/syncState";
 import { StateBanners, SyncProgress } from "./components/Banners";
@@ -94,6 +94,8 @@ export type AskProps = {
   localMarks?: ReadonlyMap<string, string>;
   /** Every deadline the student added by hand, for all courses. */
   personal?: readonly PersonalDeadline[];
+  /** Where saved conversations live. Used only while the student has saving turned on. */
+  conversations?: ConversationStore;
 };
 
 export type MissionControlProps = {
@@ -159,11 +161,12 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
 
   // The thread lives here so the hero's suggestion chips and the tab body share one conversation. Inert without `ask`.
   const buildRequest = useCallback(
-    (message: string, history: ChatMessage[], options: AskSendOptions): ChatRequest | null =>
+    (message: string, context: AskRequestContext): ChatRequest | null =>
       dashboard && ask
         ? {
             message,
-            history,
+            history: context.history,
+            ...(context.summary ? { summary: context.summary } : {}),
             // Built from the whole snapshot, not the filtered dashboard: Ask covers every course, and honors what the panel honors.
             snapshot: compactSnapshot(dashboard.snapshot, ask.events, now, {
               mode: status.mode === "fixture" ? "demo" : "live",
@@ -172,13 +175,38 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
               dismissedItemKeys: dismissals.items,
               personal: ask.personal,
             }),
-            focus: { courseId: preferences.courseFilter, tab: lastTab.current, ...(options.focusItemId ? { itemId: options.focusItemId } : {}) },
+            focus: { courseId: preferences.courseFilter, tab: lastTab.current, ...(context.focusItemId ? { itemId: context.focusItemId } : {}) },
             client: { name: "nova-extension", version: CLIENT_VERSION },
           }
         : null,
     [ask, dashboard, dismissals.items, now, preferences.courseFilter, status.mode],
   );
-  const thread = useAskThread(ask?.client ?? null, buildRequest);
+  const thread = useAskThread(ask?.client ?? null, buildRequest, summaryOf);
+
+  // Saving is opt-in. While it is on, the thread is written after every finished answer; the array a save or a
+  // restore last saw is remembered so opening a conversation does not count as changing it.
+  const store = ask?.conversations;
+  const persist = !!store && ask?.settings.persistConversations === true;
+  const savedMessages = useRef<AskMessage[] | null>(null);
+  useEffect(() => {
+    if (!persist || !store || thread.status !== "idle" || thread.messages.length === 0 || thread.messages === savedMessages.current) return;
+    savedMessages.current = thread.messages;
+    store.save({ id: thread.conversationId, messages: thread.messages });
+  }, [persist, store, thread.conversationId, thread.messages, thread.status]);
+  const openConversation = (id: string) => {
+    void store?.load(id).then((conversation) => {
+      if (!conversation) return;
+      savedMessages.current = conversation.messages;
+      thread.load(conversation);
+    });
+  };
+  const deleteConversation = (id: string) => {
+    store?.remove(id);
+    if (id === thread.conversationId) {
+      savedMessages.current = null;
+      thread.clear();
+    }
+  };
 
   // A question another tab starts: written into the composer, with the item it is about, and the Ask tab opened.
   const [askDraft, setAskDraft] = useState<AskDraft | null>(null);
@@ -473,7 +501,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                 // Force-mounted and hidden so the conversation survives a switch to another tab.
                 <Tabs.Content className="tab-content tab-content-ask" value="ask" forceMount hidden={tab !== "ask"}>
                   {dashboard ? (
-                    <AskView notices={tab === "ask" ? stateBanners : null} thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} live={askLive} draft={askDraft} about={askAbout} onClearAbout={() => setAskAbout(null)} onSend={sendFromComposer} />
+                    <AskView notices={tab === "ask" ? stateBanners : null} thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} live={askLive} draft={askDraft} about={askAbout} onClearAbout={() => setAskAbout(null)} onSend={sendFromComposer} conversations={store ? { list: store.list, onOpen: openConversation, onDelete: deleteConversation } : undefined} />
                   ) : showSkeleton ? (
                     <FocusSkeleton />
                   ) : (

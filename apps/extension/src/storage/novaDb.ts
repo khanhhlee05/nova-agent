@@ -2,6 +2,7 @@ import Dexie, { type EntityTable } from "dexie";
 import type { FeasibilityReport, ResolvedVersions, SyncWarning, BrightspaceError } from "@nova-agent/brightspace";
 import type { AcademicSnapshot, ChangeEvent } from "@nova-agent/core";
 import type { SyncPhase } from "../messaging/protocol";
+import type { AskMessage } from "../sidepanel/ask/thread";
 
 /** Snapshot rows carry the tenant|user scope so multiple accounts never mix. */
 export type StoredSnapshot = AcademicSnapshot & { scope: string };
@@ -54,6 +55,20 @@ export type PersonalItemRecord = {
   updatedAt: string;
 };
 
+/**
+ * One saved Ask Nova conversation. Written only while the student has
+ * "Save conversations on this device" on; the messages are kept exactly as
+ * the thread held them, rows included, so a saved answer re-renders as it was.
+ */
+export type ConversationRecord = {
+  id: string;
+  scope: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: AskMessage[];
+};
+
 export class NovaDb extends Dexie {
   snapshots!: EntityTable<StoredSnapshot, "id">;
   changeEvents!: EntityTable<StoredChangeEvent, "id">;
@@ -63,6 +78,7 @@ export class NovaDb extends Dexie {
   feasibility!: EntityTable<FeasibilityRecord, "tenantOrigin">;
   localMarks!: EntityTable<LocalMarkRecord, "key">;
   personalItems!: EntityTable<PersonalItemRecord, "id">;
+  conversations!: EntityTable<ConversationRecord, "id">;
 
   constructor(name = "nova-agent") {
     super(name);
@@ -76,6 +92,7 @@ export class NovaDb extends Dexie {
     });
     this.version(2).stores({ localMarks: "key, scope" });
     this.version(3).stores({ personalItems: "id, scope, dueAt" });
+    this.version(4).stores({ conversations: "id, scope, updatedAt" });
   }
 }
 

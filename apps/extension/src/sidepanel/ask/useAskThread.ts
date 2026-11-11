@@ -1,65 +1,57 @@
-import type { AskErrorEvent, ChatMessage, ChatRequest, ModelUsage, ToolName, ToolRow } from "@nova-agent/protocol";
+import type { ChatRequest } from "@nova-agent/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AskClient } from "./askClient";
+import { historyOf, settleTools, type AskMessage, type AskRequestContext, type AskSendOptions } from "./thread";
 
-/** `input` is what the model passed to the lookup; follow-up chips read it. */
-export type AskTool = { id: string; name: ToolName; status: "running" | "ok" | "error"; summary: string | null; rows: number; input?: unknown };
-
-/** Context for one question that is not part of its text. */
-export type AskSendOptions = {
-  /** Short id of the item the question was started from. */
-  focusItemId?: string;
-};
-
-export type AskMessage = {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  tools: AskTool[];
-  rows: ToolRow[];
-  error: AskErrorEvent | null;
-  usage: ModelUsage | null;
-  grounded: boolean | null;
-  /** True when the student pressed Stop before the answer finished. */
-  stopped: boolean;
-};
+export * from "./thread";
 
 export type AskStatus = "idle" | "streaming";
 
 export type AskThread = {
+  /** Identity of the conversation on screen. Changes on clear, on a new conversation, and on load. */
+  conversationId: string;
   messages: AskMessage[];
   status: AskStatus;
   send: (text: string, options?: AskSendOptions) => void;
   stop: () => void;
   retryLast: () => void;
+  /** Empties the thread and starts a new conversation. */
   clear: () => void;
+  /** Replaces the thread with a saved conversation. */
+  load: (conversation: { id: string; messages: AskMessage[] }) => void;
   /** Polite live-region text for screen readers. */
   announcement: string | null;
 };
 
-export const HISTORY_LIMIT = 12;
-
 let counter = 0;
 const nextId = (): string => `ask-${Date.now().toString(36)}-${(counter++).toString(36)}`;
+const nextConversationId = (): string => `conversation-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
-/** Text-only history the server sees: user questions and completed answers, newest last, capped. */
-export const historyOf = (messages: readonly AskMessage[]): ChatMessage[] =>
-  messages
-    .filter((message) => message.text.trim() !== "" && (message.role === "user" || message.error === null))
-    .map((message): ChatMessage => ({ role: message.role, content: message.text.slice(0, 4000) }))
-    .slice(-HISTORY_LIMIT);
+const noSummary = (): null => null;
 
 /**
- * Session-only conversation state. Nothing is persisted: closing the panel
- * forgets the thread, the same rule as session dismissals.
+ * Conversation state for the Ask tab. The hook itself persists nothing: by
+ * default closing the panel forgets the thread, the same rule as session
+ * dismissals. A caller that saves conversations reads `conversationId` and
+ * `messages` and restores with `load`.
+ *
+ * `summarize` writes what came before the history window, so a long thread
+ * keeps its context without sending every message.
  */
-export const useAskThread = (client: AskClient | null, buildRequest: (message: string, history: ChatMessage[], options: AskSendOptions) => ChatRequest | null): AskThread => {
+export const useAskThread = (
+  client: AskClient | null,
+  buildRequest: (message: string, context: AskRequestContext) => ChatRequest | null,
+  summarize: (messages: readonly AskMessage[]) => string | null = noSummary,
+): AskThread => {
+  const [conversationId, setConversationId] = useState(nextConversationId);
   const [messages, setMessages] = useState<AskMessage[]>([]);
   const [status, setStatus] = useState<AskStatus>("idle");
   const [announcement, setAnnouncement] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
   const latest = useRef(messages);
   latest.current = messages;
+  // What the last question was sent with, so Retry asks the same thing about the same item.
+  const lastOptions = useRef<AskSendOptions>({});
 
   useEffect(() => () => controller.current?.abort(), []);
 
@@ -71,8 +63,9 @@ export const useAskThread = (client: AskClient | null, buildRequest: (message: s
     (text: string, options: AskSendOptions = {}) => {
       const question = text.trim();
       if (!client || question === "" || controller.current) return;
-      const request = buildRequest(question, historyOf(latest.current), options);
+      const request = buildRequest(question, { ...options, history: historyOf(latest.current), summary: summarize(latest.current) });
       if (!request) return;
+      lastOptions.current = options;
       const userId = nextId();
       const answerId = nextId();
       const empty: Omit<AskMessage, "id" | "role"> = { text: "", tools: [], rows: [], error: null, usage: null, grounded: null, stopped: false };
@@ -125,14 +118,18 @@ export const useAskThread = (client: AskClient | null, buildRequest: (message: s
             abort.signal.aborted ? { ...message, stopped: true } : { ...message, error: { type: "error", code: "internal", message: failure ?? "Nova hit an unexpected problem.", retryable: true } },
           );
         } finally {
-          controller.current = null;
-          setStatus("idle");
-          // The answer itself is announced, not just that one arrived: the thread is not a live region.
-          setAnnouncement(outcome === "answered" ? (answer.trim() ? `Nova answered: ${answer.trim()}` : "Nova answered.") : outcome === "stopped" ? "Stopped." : `Nova could not answer. ${failure ?? ""}`.trim());
+          patch(answerId, settleTools);
+          // A turn that was replaced (thread cleared, another conversation loaded) must not touch the one that replaced it.
+          if (controller.current === abort) {
+            controller.current = null;
+            setStatus("idle");
+            // The answer itself is announced, not just that one arrived: the thread is not a live region.
+            setAnnouncement(outcome === "answered" ? (answer.trim() ? `Nova answered: ${answer.trim()}` : "Nova answered.") : outcome === "stopped" ? "Stopped." : `Nova could not answer. ${failure ?? ""}`.trim());
+          }
         }
       })();
     },
-    [buildRequest, client, patch],
+    [buildRequest, client, patch, summarize],
   );
 
   const stop = useCallback(() => controller.current?.abort(), []);
@@ -146,14 +143,24 @@ export const useAskThread = (client: AskClient | null, buildRequest: (message: s
       return index === -1 ? prev : prev.slice(0, index);
     });
     latest.current = latest.current.slice(0, latest.current.findIndex((message) => message.id === lastUser.id));
-    send(lastUser.text);
+    send(lastUser.text, lastOptions.current);
   }, [send]);
 
-  const clear = useCallback(() => {
+  /** Ends whatever is streaming and hands the thread over to `next` at once, so a question can follow immediately. */
+  const replace = useCallback((id: string, next: AskMessage[], note: string) => {
     controller.current?.abort();
-    setMessages([]);
-    setAnnouncement("Conversation cleared.");
+    controller.current = null;
+    lastOptions.current = {};
+    latest.current = next;
+    setMessages(next);
+    setConversationId(id);
+    setStatus("idle");
+    setAnnouncement(note);
   }, []);
 
-  return useMemo(() => ({ messages, status, send, stop, retryLast, clear, announcement }), [messages, status, send, stop, retryLast, clear, announcement]);
+  const clear = useCallback(() => replace(nextConversationId(), [], "Conversation cleared."), [replace]);
+
+  const load = useCallback((conversation: { id: string; messages: AskMessage[] }) => replace(conversation.id, conversation.messages, "Conversation restored."), [replace]);
+
+  return useMemo(() => ({ conversationId, messages, status, send, stop, retryLast, clear, load, announcement }), [conversationId, messages, status, send, stop, retryLast, clear, load, announcement]);
 };

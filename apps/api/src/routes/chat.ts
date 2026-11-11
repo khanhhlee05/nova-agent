@@ -52,6 +52,7 @@ export const chatRoute = (context: AppContext): Hono =>
           history: request.history,
           message: request.message,
           focus: request.focus,
+          summary: request.summary,
           model,
           maxRounds: context.config.MAX_ROUNDS,
           maxTokens: context.config.MAX_TOKENS,

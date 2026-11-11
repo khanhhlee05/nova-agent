@@ -460,6 +460,20 @@ h1, h2, h3, h4, p { margin: 0; }
 .ask-text-input { min-height: 36px; padding: 0 10px; border: 1px solid var(--nova-rule-strong); border-radius: var(--nova-radius-sm); background: var(--nova-bg); color: var(--nova-ink); font: inherit; font-size: 14px; font-weight: 500; }
 .ask-text-input[aria-invalid="true"] { border-color: var(--nova-overdue); }
 .ask-field-error { font-weight: 500; color: var(--nova-overdue); }
+.ask-toggle { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 10px; font-size: 13.5px; color: var(--nova-ink); cursor: pointer; }
+.ask-toggle .checkbox { margin-top: 2px; }
+.ask-toggle strong { display: block; font-weight: 600; }
+.ask-toggle-note { display: block; margin-top: 2px; font-size: 12.5px; line-height: 1.4; color: var(--nova-muted); }
+.ask-conversations { padding-top: 16px; }
+.dialog-close { position: absolute; top: 10px; right: 10px; }
+.ask-conversations-empty { margin-top: 12px; font-size: 13.5px; }
+.ask-conversation-list { display: flex; flex-direction: column; margin-top: 12px; max-height: min(52vh, 420px); overflow-y: auto; border-top: 1px solid var(--nova-rule); scrollbar-width: thin; }
+.ask-conversation { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px; border-bottom: 1px solid var(--nova-rule); }
+.ask-conversation-open { display: flex; flex-direction: column; gap: 2px; min-width: 0; min-height: 52px; padding: 8px 6px; border: 0; border-radius: var(--nova-radius-sm); background: transparent; color: var(--nova-ink); text-align: left; }
+.ask-conversation-open:hover { background: var(--nova-surface); }
+.ask-conversation[data-current="true"] .ask-conversation-title { color: var(--nova-accent); }
+.ask-conversation-title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ask-conversation-meta { font-size: 12.5px; color: var(--nova-muted); }
 .ask-check { font-size: 12.5px; color: var(--nova-muted); }
 .ask-check[data-state="ok"] { color: var(--nova-done); font-weight: 600; }
 .ask-check[data-state="fail"] { color: var(--nova-overdue); font-weight: 600; }

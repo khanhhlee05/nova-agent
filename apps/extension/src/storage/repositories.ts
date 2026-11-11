@@ -9,7 +9,9 @@ import {
   type AcademicSnapshot,
   type ChangeEvent,
 } from "@nova-agent/core";
-import type { LocalMarkRecord, NovaDb, PersonalItemRecord, StoredChangeEvent, StoredSnapshot, SyncStatusRecord } from "./novaDb";
+import { MAX_CONVERSATIONS, conversationTitle, reviveMessages, type StoredConversation } from "../sidepanel/ask/conversations";
+import type { AskMessage } from "../sidepanel/ask/thread";
+import type { ConversationRecord, LocalMarkRecord, NovaDb, PersonalItemRecord, StoredChangeEvent, StoredSnapshot, SyncStatusRecord } from "./novaDb";
 
 export const INITIAL_SYNC_STATUS: SyncStatusRecord = {
   key: "current",
@@ -143,6 +145,46 @@ export const putPersonalItem = async (db: NovaDb, item: PersonalItemRecord): Pro
 
 export const deletePersonalItem = async (db: NovaDb, id: string): Promise<void> => {
   await db.personalItems.delete(id);
+};
+
+const toStored = (record: ConversationRecord): StoredConversation => ({ id: record.id, title: record.title, createdAt: record.createdAt, updatedAt: record.updatedAt, messages: reviveMessages(record.messages) });
+
+/** Saved conversations for one account, most recently used first. */
+export const listConversations = async (db: NovaDb, scope: string): Promise<StoredConversation[]> =>
+  (await db.conversations.where("scope").equals(scope).toArray()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)).map(toStored);
+
+export const getConversation = async (db: NovaDb, id: string): Promise<StoredConversation | null> => {
+  const record = await db.conversations.get(id);
+  return record ? toStored(record) : null;
+};
+
+/**
+ * Adds or replaces one conversation, titled by its first question, then keeps
+ * the newest `MAX_CONVERSATIONS` for the account. An empty thread is never
+ * saved, and saving an empty thread over a stored one removes it.
+ */
+export const saveConversation = async (db: NovaDb, scope: string, conversation: { id: string; messages: AskMessage[] }, now: Date): Promise<void> => {
+  await db.transaction("rw", db.conversations, async () => {
+    if (conversation.messages.length === 0) {
+      await db.conversations.delete(conversation.id);
+      return;
+    }
+    const existing = await db.conversations.get(conversation.id);
+    const at = now.toISOString();
+    await db.conversations.put({ id: conversation.id, scope, title: conversationTitle(conversation.messages), createdAt: existing?.createdAt ?? at, updatedAt: at, messages: conversation.messages });
+    const all = await db.conversations.where("scope").equals(scope).toArray();
+    const stale = all.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)).slice(MAX_CONVERSATIONS);
+    if (stale.length > 0) await db.conversations.bulkDelete(stale.map((entry) => entry.id));
+  });
+};
+
+export const deleteConversation = async (db: NovaDb, id: string): Promise<void> => {
+  await db.conversations.delete(id);
+};
+
+/** Turning "Save conversations" off deletes every saved one, for every account on this device. */
+export const clearConversations = async (db: NovaDb): Promise<void> => {
+  await db.conversations.clear();
 };
 
 export const getPreference = async <T>(db: NovaDb, key: string, fallback: T): Promise<T> => {

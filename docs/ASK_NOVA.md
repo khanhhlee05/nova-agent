@@ -101,7 +101,26 @@ Course names, codes, and item titles come from Brightspace and can contain anyth
 
 ## States the tab carries
 
-Off (setup card), API unreachable, API without a key, streaming (Stop replaces Send), stopped, typed errors (rate limited with retry-after, budget exhausted, unauthorized, timeout), demo banner, empty data. The thread is session-only and survives switching tabs, not closing the panel.
+Off (setup card), API unreachable, API without a key, streaming (Stop replaces Send), stopped, typed errors (rate limited with retry-after, budget exhausted, unauthorized, timeout), demo banner, empty data. A lookup that never reported back before Stop reads as stopped, not as still running. Clearing the thread or opening another conversation mid-answer cancels that answer at once, and the cancelled turn cannot write into the thread that replaced it.
+
+## Saved conversations
+
+Off by default: the thread lives in memory, survives switching tabs, and is gone when the panel closes. The setup card and the Ask settings carry one checkbox, **Save conversations on this device**. The status line under the tabs always says which mode is on ("Cleared when you close the panel" or "Saved on this device").
+
+While saving is on:
+
+- The thread is written to the extension's own database (`conversations` table in IndexedDB, version 4 of the schema) after every finished answer, exactly as the thread holds it, rows included, so a saved answer re-renders as it was. Nothing is saved while an answer streams, and an empty thread is never saved.
+- A conversation is titled by its first question, clipped to 60 characters. No model call names it.
+- The newest 20 per Brightspace account are kept; the oldest is deleted first.
+- The status line gains **New conversation** and **Conversations**. The list shows title, number of questions, and age; opening one restores the thread, with rows collapsed and still actionable, and continues it under the same id. Deleting one is immediate. The panel always opens on a fresh thread.
+- Stored messages are read back defensively: a row, lookup, or message in a shape this build does not know is dropped on its own, never the whole conversation.
+- Turning saving off deletes every saved conversation, and the checkbox says so before it is saved. **Clear local Nova data** deletes them too.
+
+Saved conversations never leave the device. The server stays stateless.
+
+### Long threads
+
+The server sees the last twelve messages. When a thread is longer, the panel writes a summary of what came before, without a model: each earlier question, and for each earlier answer the summaries of the lookups it made (or its first words when it made none). It is capped at 1500 characters, dropping the oldest exchanges first, and goes with the request as `summary`. The server puts it inside the data section of the prompt, on one cleaned line, labeled as data and not instructions.
 
 ## Testing
 
@@ -116,6 +135,6 @@ Run on a developer machine with Chrome and network access:
 3. `npm run build --workspace @nova-agent/extension`, load `apps/extension/dist`, open the Ask tab, Test connection, Turn on Ask Nova, and ask the three suggested questions on demo data.
 4. Rotate the OpenRouter key afterwards if it was ever shared outside `.env`.
 
-## Not in slice 1
+## Not built yet
 
-Sign-in, a database, saved conversations, per-user quotas, Google Calendar, the no-model intent matcher as an offline fallback, hosting, and the on-device model adapter. See `ASK_NOVA_PLAN.md` for the next slices and `BACKEND_PLAN.md` for the hosted backend.
+Sign-in, a server-side database, conversations across devices, per-user quotas, Google Calendar, hosting, and the on-device model adapter. See `ASK_NOVA_PLAN.md` for the next slices and `BACKEND_PLAN.md` for the hosted backend.
