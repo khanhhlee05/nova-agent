@@ -1,16 +1,18 @@
-import { DEMO_LE_VERSION, buildDemoTenant, demoFileFetch, isSafeTenantLink, type FeasibilityReport, type FileAccessReport, type RawFileFetch } from "@nova-agent/brightspace";
-import type { AcademicItem, ItemAttachment } from "@nova-agent/core";
+import { BrightspaceClient, DEMO_LE_VERSION, buildDemoTenant, demoFileFetch, isSafeTenantLink, type FeasibilityReport, type FileAccessReport, type RawFileFetch } from "@nova-agent/brightspace";
+import type { AcademicItem, CourseMaterial, ItemAttachment } from "@nova-agent/core";
 import { ATTACHMENT_FAILURE_COPY, readAttachment, type AttachmentOutcome } from "../files/attachments";
 import type { PdfReader } from "../files/extract";
+import { firstMaterialPath, readMaterial, readCourse, refreshToc, type CourseReadProgress, type MaterialDeps } from "../files/materials";
 import { readPdf as defaultReadPdf } from "../files/pdf";
+import { buildIndex } from "../files/search";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExtensionHost } from "../platform/host";
 import type { DataMode, NovaDb } from "../storage/novaDb";
-import { attachmentTextId, clearAllData, clearConversations, createDexieVersionCache, deleteChangeEvent, deleteConversation, deletePersonalItem, deletePlanItems, getConversation, getPreference, getSyncStatus, listAttachmentTexts, listChangeEvents, listConversations, listLocalMarks, listPersonalItems, latestSnapshot, markAllRead, putPersonalItem, replacePlanItems, saveConversation, setEventRead, setLocalMark, setPreference, unreadCount } from "../storage/repositories";
-import { DATA_MODE_PREFERENCE, DEMO_SCENARIO_PREFERENCE, SyncCoordinator, type TransportFactory } from "../sync/syncCoordinator";
+import { attachmentTextId, clearAllData, clearConversations, createDexieVersionCache, deleteChangeEvent, deleteConversation, deletePersonalItem, deletePlanItems, forgetCourseMaterials, listMaterialTexts, listMaterialTocs, materialTextId, getConversation, getPreference, getSyncStatus, listAttachmentTexts, listChangeEvents, listConversations, listLocalMarks, listPersonalItems, latestSnapshot, markAllRead, putPersonalItem, replacePlanItems, saveConversation, setEventRead, setLocalMark, setPreference, unreadCount } from "../storage/repositories";
+import { DATA_MODE_PREFERENCE, DEMO_SCENARIO_PREFERENCE, SyncCoordinator, defaultTransportFactory, type TransportFactory } from "../sync/syncCoordinator";
 import { IDLE_STATE, isRunningPhase, type SyncRuntimeState } from "../sync/syncState";
-import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, availableClientTools, defaultAskClientFactory, effectiveAskSettings, runReadAttachment, summarize, type AskClientFactory, type AskSettings, type ClientToolAnswer, type ConsentRequest, type ConversationStore } from "./ask";
+import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, availableClientTools, defaultAskClientFactory, effectiveAskSettings, runReadAttachment, runReadMaterial, runSearchMaterials, summarize, type AskMaterialsControls, type MaterialsToolDeps, type AskClientFactory, type AskSettings, type ClientToolAnswer, type ConsentRequest, type ConversationStore } from "./ask";
 import { FILE_ACCESS_PREFERENCE, checkFileAccess as runCheckFileAccess, connectLive as runConnectLive } from "./connect";
 import { useSessionDismissals } from "./dismissals";
 import { DEFAULT_PREFERENCES, MissionControl, withPreferenceDefaults, type UiPreferences } from "./MissionControl";
@@ -69,13 +71,21 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
   // A saved address that no longer passes the https rule turns Ask off rather than producing a client.
   const askSettings = useLiveQuery(async () => effectiveAskSettings(await getPreference<AskSettings>(db, ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS)), [db]);
   const askClient = useMemo(() => (askSettings?.enabled ? askClientFactory(askSettings) : null), [askClientFactory, askSettings]);
+  // Changes are written one after another, each on top of what is stored, so two quick changes never undo each other.
+  const settingsWrite = useRef<Promise<void>>(Promise.resolve());
   const setAskSettings = useCallback(
-    (patch: Partial<AskSettings>) => {
-      // Turning saving off is a promise that nothing stays behind, so the saved conversations go with it.
-      if (askSettings?.persistConversations === true && patch.persistConversations === false) void clearConversations(db);
-      void setPreference(db, ASK_SETTINGS_PREFERENCE, { ...(askSettings ?? DEFAULT_ASK_SETTINGS), ...patch });
+    (patch: Partial<AskSettings>): Promise<void> => {
+      settingsWrite.current = settingsWrite.current
+        .then(async () => {
+          const current = effectiveAskSettings(await getPreference<AskSettings>(db, ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS));
+          // Turning saving off is a promise that nothing stays behind, so the saved conversations go with it.
+          if (current.persistConversations === true && patch.persistConversations === false) await clearConversations(db);
+          await setPreference(db, ASK_SETTINGS_PREFERENCE, { ...current, ...patch });
+        })
+        .catch(() => undefined);
+      return settingsWrite.current;
     },
-    [askSettings, db],
+    [db],
   );
   const savedConversations = useLiveQuery(async () => (scope ? listConversations(db, scope) : []), [db, scope]);
 
@@ -123,22 +133,102 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
     setCheckingFiles(true);
     void (async () => {
       try {
-        const report = await runCheckFileAccess(db, fileFetch, await leVersion(), snapshot.items, clock);
+        const le = await leVersion();
+        const report = await runCheckFileAccess(db, fileFetch, le, snapshot.items, clock, le && scope ? await firstMaterialPath(db, scope, le) : null);
         const served = report.steps.filter((step) => step.outcome === "ok").length;
         const tested = report.steps.filter((step) => step.outcome !== "not-tested").length;
-        setAnnouncement(tested === 0 ? "No assignment files in your courses to try yet." : `File access checked: Brightspace served ${served} of ${tested} kinds of file.`);
+        setAnnouncement(tested === 0 ? "No files in your courses to try yet." : `File access checked: Brightspace served ${served} of ${tested} kinds of file.`);
       } finally {
         setCheckingFiles(false);
       }
     })();
-  }, [clock, db, fileFetch, leVersion, snapshot]);
+  }, [clock, db, fileFetch, leVersion, scope, snapshot]);
   // Permission to read a file for an answer is asked once per panel session and never stored.
   const fileConsent = useRef(false);
   const [pendingConsent, setPendingConsent] = useState<ConsentRequest | null>(null);
-  const clientToolNames = useMemo(() => availableClientTools({ readAttachments: askSettings?.readAttachments !== false, canFetchFiles: fileFetch !== null }), [askSettings, fileFetch]);
+  const [readingConsent, setReadingConsent] = useState(false);
+  const clientToolNames = useMemo(() => availableClientTools({ readAttachments: askSettings?.readAttachments !== false, canFetchFiles: fileFetch !== null, materials: true }), [askSettings, fileFetch]);
+
+  // Course materials: a course's Content area is listed and read only after the student turns that course on.
+  const allowedCourses = useMemo(() => new Set(askSettings?.materialsCourses ?? []), [askSettings]);
+  const excludedTopics = useMemo(() => askSettings?.materialsExcluded ?? {}, [askSettings]);
+  const materialTocs = useLiveQuery(async () => (scope ? listMaterialTocs(db, scope) : []), [db, scope]);
+  const materialTexts = useLiveQuery(async () => (scope ? listMaterialTexts(db, scope) : []), [db, scope]);
+  const tocByCourse = useMemo(() => new Map((materialTocs ?? []).map((record) => [record.courseId, record])), [materialTocs]);
+  const allowedTexts = useMemo(() => (materialTexts ?? []).filter((record) => allowedCourses.has(record.courseId)), [allowedCourses, materialTexts]);
+  const materialIndex = useMemo(() => buildIndex(allowedTexts), [allowedTexts]);
+  const [materialProgress, setMaterialProgress] = useState<ReadonlyMap<string, CourseReadProgress>>(() => new Map());
+  const [materialErrors, setMaterialErrors] = useState<ReadonlyMap<string, string>>(() => new Map());
+  const materialDeps = useMemo<MaterialDeps | null>(() => (scope ? { db, scope, tenantOrigin: host.tenantOrigin, fetchFile: fileFetch, leVersion, readPdf, now: clock } : null), [clock, db, fileFetch, host.tenantOrigin, leVersion, readPdf, scope]);
+  // The same transport a refresh uses, for the one extra request that lists a course's Content area.
+  const brightspace = useMemo(
+    () => new BrightspaceClient((transportFactory ?? defaultTransportFactory(host))(mode, { now: clock(), demoScenario: "baseline" }), { tenantOrigin: host.tenantOrigin, versionCache: createDexieVersionCache(db, host.tenantOrigin), now: clock }),
+    [clock, db, host, mode, transportFactory],
+  );
+  const readingCourses = useRef(new Set<string>());
+  const excludedRef = useRef(excludedTopics);
+  excludedRef.current = excludedTopics;
+  const setCourseNote = (update: (prev: ReadonlyMap<string, string>) => Map<string, string>) => setMaterialErrors((prev) => update(prev));
+  /** Lists one course's Content area, then reads what is chosen and new. One course at a time per course; never throws. */
+  const loadCourseMaterials = useCallback(
+    async (courseId: string): Promise<void> => {
+      if (!materialDeps || readingCourses.current.has(courseId)) return;
+      readingCourses.current.add(courseId);
+      const progress = (value: CourseReadProgress | null) => setMaterialProgress((prev) => new Map(value ? [...prev, [courseId, value]] : [...prev].filter(([key]) => key !== courseId)));
+      progress({ done: 0, total: 0, title: null });
+      setCourseNote((prev) => new Map([...prev].filter(([key]) => key !== courseId)));
+      try {
+        const listed = await refreshToc(db, materialDeps.scope, courseId, (id) => brightspace.listMaterials(id), clock);
+        if (!listed.ok) {
+          setCourseNote((prev) => new Map(prev).set(courseId, listed.message));
+          return;
+        }
+        const result = await readCourse(materialDeps, courseId, listed.record.topics, new Set(excludedRef.current[courseId] ?? []), progress);
+        const notes = [
+          ...(result.failed.length > 0 ? [`${result.failed.length} ${result.failed.length === 1 ? "file" : "files"} could not be read. ${result.failed[0]?.message ?? ""}`] : []),
+          ...(result.stoppedAtLimit ? ["Nova stopped at this course's download limit of 150 MB."] : []),
+        ];
+        if (notes.length > 0) setCourseNote((prev) => new Map(prev).set(courseId, notes.join(" ")));
+      } finally {
+        readingCourses.current.delete(courseId);
+        progress(null);
+      }
+    },
+    [brightspace, clock, db, materialDeps],
+  );
+  // After a refresh, the turned-on courses are listed again and anything new or changed is read. A course whose
+  // listing is newer than the snapshot is left alone, so opening the panel does not download anything by itself.
+  const capturedAt = snapshot?.capturedAt ?? null;
+  useEffect(() => {
+    if (!capturedAt || !materialTocs || !fileFetch) return;
+    for (const courseId of allowedCourses) {
+      const listed = tocByCourse.get(courseId);
+      if (listed && listed.fetchedAt >= capturedAt) continue;
+      void loadCourseMaterials(courseId);
+    }
+  }, [allowedCourses, capturedAt, fileFetch, loadCourseMaterials, materialTocs, tocByCourse]);
+  // What a lookup reads is taken at the moment it runs, not when the question was sent: a course turned on a
+  // moment ago is searched by the retried question even if a render is still on its way.
+  const materialsLive = useRef<Omit<MaterialsToolDeps, "askPermission" | "read" | "canOpen">>({ courses: [], allowed: allowedCourses, toc: new Map(), texts: [], index: materialIndex });
+  materialsLive.current = { courses: (snapshot?.courses ?? []).filter((course) => course.active), allowed: allowedCourses, toc: new Map([...tocByCourse].map(([courseId, record]) => [courseId, record.topics])), texts: allowedTexts, index: materialIndex };
+  // Courses allowed a moment ago whose setting may not have come back from storage yet. A lookup counts them as on.
+  const justAllowed = useRef(new Set<string>());
   const runClientTool = useCallback(
     async (name: string, input: unknown): Promise<ClientToolAnswer> => {
-      if (name !== "read_attachment" || !snapshot) return { ok: false, summary: "", data: null, rows: [], error: "This panel cannot make that lookup." };
+      const none: ClientToolAnswer = { ok: false, summary: "", data: null, rows: [], error: "This panel cannot make that lookup." };
+      if (!snapshot) return none;
+      if (name === "search_course_materials" || name === "read_course_material") {
+        const live = materialsLive.current;
+        const deps: MaterialsToolDeps = {
+          ...live,
+          allowed: new Set([...live.allowed, ...justAllowed.current]),
+          askPermission: setPendingConsent,
+          read: async (material: CourseMaterial) => (materialDeps ? readMaterial(materialDeps, material) : { ok: false, reason: "no-version", message: ATTACHMENT_FAILURE_COPY["no-version"] }),
+          canOpen: (url) => isSafeTenantLink(url, host.tenantOrigin),
+        };
+        return name === "search_course_materials" ? runSearchMaterials(input, deps) : runReadMaterial(input, deps);
+      }
+      if (name !== "read_attachment") return none;
       return runReadAttachment(input, {
         items: snapshot.items,
         courseById: new Map(snapshot.courses.map((course) => [course.id, course])),
@@ -149,7 +239,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
         canOpen: (url) => isSafeTenantLink(url, host.tenantOrigin),
       });
     },
-    [attachmentTexts, host.tenantOrigin, readFile, snapshot],
+    [attachmentTexts, host.tenantOrigin, materialDeps, readFile, snapshot],
   );
   const attachmentControls = useMemo(
     () => (clientToolNames.includes("read_attachment") && askSettings?.enabled ? { texts: attachmentTexts, busy: readingFiles, errors: fileErrors, onRead: (item: AcademicItem, attachment: ItemAttachment) => void readFile(item, attachment) } : undefined),
@@ -374,6 +464,11 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
       ...(mode === "live" ? { checkFileAccess: checkFiles } : {}),
       clearData: async () => {
         await clearAllData(db);
+        // Permissions given in this session go with the data they were given for.
+        fileConsent.current = false;
+        justAllowed.current.clear();
+        setPendingConsent(null);
+        setMaterialErrors(new Map());
         await host.publishBadge(0);
         setRuntime(IDLE_STATE);
         setAnnouncement("Local Nova data cleared.");
@@ -384,9 +479,70 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
 
   if (!status || !preferences || feasibility === undefined || !askSettings || !personalItems) return null;
 
+  const allowCourse = async (courseId: string): Promise<void> => {
+    justAllowed.current.add(courseId);
+    if (!allowedCourses.has(courseId)) await setAskSettings({ materialsCourses: [...new Set([...allowedCourses, ...justAllowed.current])] });
+    await loadCourseMaterials(courseId);
+  };
+  const forgetCourse = (courseId: string): void => {
+    justAllowed.current.delete(courseId);
+    const { [courseId]: _dropped, ...restExcluded } = excludedTopics;
+    void _dropped;
+    void setAskSettings({ materialsCourses: [...allowedCourses].filter((id) => id !== courseId), materialsExcluded: restExcluded });
+    setMaterialErrors((prev) => new Map([...prev].filter(([key]) => key !== courseId)));
+    if (scope) void forgetCourseMaterials(db, scope, courseId).then(() => setAnnouncement("Forgot this course's materials. Nothing read from it is kept."));
+  };
+  const toggleTopic = (courseId: string, topicId: string, include: boolean): void => {
+    const current = new Set(excludedTopics[courseId] ?? []);
+    if (include) current.delete(topicId);
+    else current.add(topicId);
+    void setAskSettings({ materialsExcluded: { ...excludedTopics, [courseId]: [...current] } });
+    // An unticked topic's text goes at once; a ticked one is read with the next "Read".
+    if (!include && scope) void db.materialText.delete(materialTextId(scope, courseId, topicId));
+  };
+  const materials: AskMaterialsControls | undefined =
+    snapshot && fileFetch && clientToolNames.includes("search_course_materials")
+      ? {
+          courses: [...snapshot.courses]
+            .filter((course) => course.active)
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((course) => {
+              const texts = (materialTexts ?? []).filter((record) => record.courseId === course.id);
+              return {
+                course,
+                allowed: allowedCourses.has(course.id),
+                topics: tocByCourse.get(course.id)?.topics ?? null,
+                fetchedAt: tocByCourse.get(course.id)?.fetchedAt ?? null,
+                excluded: new Set(excludedTopics[course.id] ?? []),
+                readIds: new Set(texts.filter((record) => record.failure === null).map((record) => record.topicId)),
+                unreadableIds: new Set(texts.filter((record) => record.failure !== null).map((record) => record.topicId)),
+                chars: texts.reduce((sum, record) => sum + record.chars, 0),
+                progress: materialProgress.get(course.id) ?? null,
+                error: materialErrors.get(course.id) ?? null,
+              };
+            }),
+          onAllow: allowCourse,
+          onForget: forgetCourse,
+          onRead: (courseId) => void loadCourseMaterials(courseId),
+          onToggleTopic: toggleTopic,
+        }
+      : undefined;
+
+  const consentCourse = pendingConsent?.kind === "materials" ? pendingConsent.courseId : null;
+  const consentProgress = consentCourse ? materialProgress.get(consentCourse) : undefined;
   const consent = {
     pending: pendingConsent,
+    // While a course is being read after Allow, the card says how far it is instead of offering the buttons again.
+    working: consentCourse && readingConsent ? (consentProgress?.title ? `Reading ${consentProgress.done + 1} of ${consentProgress.total}: ${consentProgress.title}` : "Listing the course's Content area…") : null,
     onAllow: () => {
+      if (pendingConsent?.kind === "materials") {
+        setReadingConsent(true);
+        void allowCourse(pendingConsent.courseId).finally(() => {
+          setReadingConsent(false);
+          setPendingConsent(null);
+        });
+        return;
+      }
       fileConsent.current = true;
       setPendingConsent(null);
     },
@@ -407,7 +563,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
       dismissals={dismissals}
       actions={actions}
       pendingDelete={pendingDelete}
-      ask={{ client: askClient, settings: askSettings, setSettings: setAskSettings, clientFactory: askClientFactory, events: visibleEvents ?? [], localMarks, personal: visiblePersonal ?? [], conversations: conversationStore, clientTools: { names: clientToolNames, run: runClientTool }, consent }}
+      ask={{ client: askClient, settings: askSettings, setSettings: setAskSettings, clientFactory: askClientFactory, events: visibleEvents ?? [], localMarks, personal: visiblePersonal ?? [], conversations: conversationStore, clientTools: { names: clientToolNames, run: runClientTool }, consent, materials }}
       attachments={attachmentControls}
       checkingFiles={checkingFiles}
       fileAccess={fileAccess ?? null}

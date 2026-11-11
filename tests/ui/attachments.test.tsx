@@ -230,7 +230,7 @@ describe("runReadAttachment", () => {
     expect(refused.ok).toBe(false);
     expect(refused.error).toContain("has not allowed Nova to read attachments in this session yet");
     expect(refused.error).toContain("Do not guess what the file says");
-    expect(asked).toEqual([{ itemTitle: "Lab 3: Timer Interrupts", fileName: "Lab 3 handout.pdf", size: expect.any(Number) }]);
+    expect(asked).toEqual([{ kind: "attachment", itemTitle: "Lab 3: Timer Interrupts", fileName: "Lab 3 handout.pdf", size: expect.any(Number) }]);
     expect(reads).toEqual([]);
     // Listing names is not reading, and needs no permission.
     expect(await runReadAttachment({ itemId: id("Lab 3: Timer Interrupts") }, d)).toMatchObject({ ok: true });
@@ -399,7 +399,7 @@ describe("a file question from permission to answer: end to end", () => {
     const card = await screen.findByRole("region", { name: /permission to read a file/i }, LONG);
     expect(within(card).getByText("Proposal rubric.txt")).toBeTruthy();
     expect(card.textContent).toContain('from "Project Proposal"');
-    expect(seen[0]?.clientTools).toEqual(["read_attachment"]);
+    expect(seen[0]?.clientTools).toEqual(["read_attachment", "search_course_materials", "read_course_material"]);
     expect(seen[0]?.snapshot.items.find((item) => item.title === "Project Proposal")?.attachments?.[0]?.name).toBe("Proposal rubric.txt");
     expect(JSON.stringify(seen[0])).not.toContain("Problem statement: 8 points");
     expect(fetchFile.paths).toEqual([]);
@@ -466,7 +466,7 @@ describe("a file question from permission to answer: end to end", () => {
     await screen.findByRole("textbox", { name: /ask nova a question/i }, LONG);
     ask("What does the proposal rubric say?");
     await screen.findByRole("group", { name: /follow-up questions/i }, LONG);
-    expect(seen[0]?.clientTools).toBeUndefined();
+    expect(seen[0]?.clientTools).toEqual(["search_course_materials", "read_course_material"]);
     expect(JSON.stringify(seen[0])).not.toContain("rubric.txt");
     expect(screen.queryByRole("region", { name: /permission to read a file/i })).toBeNull();
     // The item still lists its file by name, with nothing to press.
@@ -500,6 +500,8 @@ describe("a file question from permission to answer: end to end", () => {
     expect(within(section).getByText("served")).toBeTruthy();
     expect(section.textContent).toContain("Instructor attachments");
     expect(section.textContent).toContain("Your submitted files");
+    // No course's materials are turned on, so there is no such file to ask for.
+    expect(section.textContent).toContain("Course materials: not tested: turn on a course under Course materials in the Ask tab first");
     // Two header-only requests, one per kind of file, and nothing stored but the outcome.
     expect(fetchFile.paths).toHaveLength(2);
     expect(await db.attachmentText.count()).toBe(0);

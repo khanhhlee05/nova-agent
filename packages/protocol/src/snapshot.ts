@@ -9,7 +9,7 @@ import { z } from "zod";
  * Time-zone facts (buckets, local date strings, days ago) are computed in the
  * browser so a server in any zone reads the same "today" the student sees.
  */
-export const COMPACT_LIMITS = { courses: 12, items: 200, announcements: 30, changes: 60, personal: 100, title: 200, reasons: 3, attachments: 10, fileName: 120 } as const;
+export const COMPACT_LIMITS = { courses: 12, items: 200, announcements: 30, changes: 60, personal: 100, title: 200, reasons: 3, attachments: 10, fileName: 120, materials: 80 } as const;
 
 const title = z.string().min(1).max(COMPACT_LIMITS.title);
 const iso = z.string().min(1);
@@ -24,12 +24,29 @@ export type CompactBucket = z.infer<typeof compactBucketSchema>;
 export const compactItemStatusSchema = z.enum(["not-started", "in-progress", "submitted", "completed", "unknown"]);
 export const compactItemKindSchema = z.enum(["assignment", "quiz"]);
 
+/** One topic of a course's Content area, by name. Never its contents. */
+export const compactMaterialSchema = z.object({
+  id: z.string().min(1).max(12),
+  title: z.string().min(1).max(COMPACT_LIMITS.fileName),
+  /** The modules it sits under, joined with " › ". */
+  module: z.string().max(COMPACT_LIMITS.title),
+  type: z.enum(["file", "page", "link", "other"]),
+  /** Whether its text has been read on the device, so a search can find it. */
+  read: z.boolean(),
+});
+export type CompactMaterial = z.infer<typeof compactMaterialSchema>;
+
 export const compactCourseSchema = z.object({
   id: z.string().min(1),
   name: title,
   code: z.string().max(64).nullable(),
   homeUrl: safeUrl,
   active: z.boolean(),
+  /**
+   * The course's Content topics, by name. Present only for a course whose materials the student has let Nova
+   * read; its presence, even empty, is what tells the model the course can be searched.
+   */
+  materials: z.array(compactMaterialSchema).max(COMPACT_LIMITS.materials).optional(),
 });
 export type CompactCourse = z.infer<typeof compactCourseSchema>;
 

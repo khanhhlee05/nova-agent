@@ -10,3 +10,4 @@ export * from "./client";
 export * from "./probe";
 export * from "./fixtures/demoTenant";
 export * from "./fixtures/pdf";
+export * from "./fixtures/zip";

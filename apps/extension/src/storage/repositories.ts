@@ -11,7 +11,7 @@ import {
 } from "@nova-agent/core";
 import { MAX_CONVERSATIONS, conversationTitle, reviveMessages, type StoredConversation } from "../sidepanel/ask/conversations";
 import type { AskMessage } from "../sidepanel/ask/thread";
-import type { AttachmentTextRecord, ConversationRecord, LocalMarkRecord, NovaDb, PersonalItemRecord, StoredChangeEvent, StoredSnapshot, SyncStatusRecord } from "./novaDb";
+import type { AttachmentTextRecord, ConversationRecord, LocalMarkRecord, MaterialTextRecord, MaterialTocRecord, NovaDb, PersonalItemRecord, StoredChangeEvent, StoredSnapshot, SyncStatusRecord } from "./novaDb";
 
 export const INITIAL_SYNC_STATUS: SyncStatusRecord = {
   key: "current",
@@ -231,6 +231,37 @@ export const putAttachmentText = async (db: NovaDb, record: AttachmentTextRecord
     if (stale.length > 0) await db.attachmentText.bulkDelete(stale.map((entry) => entry.id));
   });
 };
+
+export const materialTocId = (scope: string, courseId: string): string => `${scope}#${courseId}`;
+export const materialTextId = (scope: string, courseId: string, topicId: string): string => `${scope}#${courseId}#${topicId}`;
+
+export const listMaterialTocs = async (db: NovaDb, scope: string): Promise<MaterialTocRecord[]> => db.materialToc.where("scope").equals(scope).toArray();
+
+export const putMaterialToc = async (db: NovaDb, record: MaterialTocRecord): Promise<void> => {
+  await db.materialToc.put(record);
+};
+
+export const listMaterialTexts = async (db: NovaDb, scope: string): Promise<MaterialTextRecord[]> => db.materialText.where("scope").equals(scope).toArray();
+
+export const putMaterialText = async (db: NovaDb, record: MaterialTextRecord): Promise<void> => {
+  await db.materialText.put(record);
+};
+
+/** "Forget materials": the course's table of contents and every passage read from it. */
+export const forgetCourseMaterials = async (db: NovaDb, scope: string, courseId: string): Promise<void> => {
+  await db.transaction("rw", db.materialToc, db.materialText, async () => {
+    await db.materialToc.delete(materialTocId(scope, courseId));
+    await db.materialText.where("[scope+courseId]").equals([scope, courseId]).delete();
+  });
+};
+
+/** Drops the stored text of topics that are no longer in the course, or that the student unticked. */
+export const pruneMaterialTexts = async (db: NovaDb, scope: string, courseId: string, keepTopicIds: ReadonlySet<string>): Promise<number> =>
+  db.materialText
+    .where("[scope+courseId]")
+    .equals([scope, courseId])
+    .filter((record) => !keepTopicIds.has(record.topicId))
+    .delete();
 
 export const getPreference = async <T>(db: NovaDb, key: string, fallback: T): Promise<T> => {
   const row = await db.preferences.get(key);

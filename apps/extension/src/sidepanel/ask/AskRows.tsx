@@ -1,7 +1,7 @@
 import { shortId } from "@nova-agent/agent";
 import { isDone, type AcademicItem, type ChangeEvent } from "@nova-agent/core";
 import type { ToolRow } from "@nova-agent/protocol";
-import { BookOpen, CalendarDays, Check, ChevronDown, ExternalLink, EyeOff, FileText, ListFilter, Megaphone, PenLine, Pin } from "lucide-react";
+import { BookOpen, BookText, CalendarDays, Check, ChevronDown, ExternalLink, EyeOff, FileText, ListFilter, Megaphone, PenLine, Pin } from "lucide-react";
 import { useId, useMemo, useState, type ReactNode } from "react";
 import { KindIcon, StatusIcon, changeIcon } from "../components/icons";
 import { Tip } from "../components/Tip";
@@ -54,11 +54,12 @@ type ChangeRow = Extract<ToolRow, { kind: "change" }>;
 type PersonalRow = Extract<ToolRow, { kind: "personal" }>;
 type CourseRow = Extract<ToolRow, { kind: "course" }>;
 type AttachmentRow = Extract<ToolRow, { kind: "attachment" }>;
+type MaterialRow = Extract<ToolRow, { kind: "material" }>;
 
 /** Rows the list under an answer knows how to draw. Other kinds have their own cards. */
-export type ListRow = ItemRow | AnnouncementRow | ChangeRow | PersonalRow | CourseRow | AttachmentRow;
+export type ListRow = ItemRow | AnnouncementRow | ChangeRow | PersonalRow | CourseRow | AttachmentRow | MaterialRow;
 
-export const isListRow = (row: ToolRow): row is ListRow => row.kind === "item" || row.kind === "announcement" || row.kind === "change" || row.kind === "personal" || row.kind === "course" || row.kind === "attachment";
+export const isListRow = (row: ToolRow): row is ListRow => row.kind === "item" || row.kind === "announcement" || row.kind === "change" || row.kind === "personal" || row.kind === "course" || row.kind === "attachment" || row.kind === "material";
 
 const asEvent = (row: ChangeRow): ChangeEvent => ({
   id: row.id,
@@ -157,6 +158,37 @@ export const AskRows = ({ rows, dashboard, now, canOpen, onOpen, live }: AskRows
                     <Megaphone size={15} aria-hidden="true" />
                   </span>
                   {openButton(row.title, row.url, row.courseId)}
+                </div>
+              </div>
+            </li>
+          );
+        }
+        if (row.kind === "material") {
+          return (
+            <li key={`material-${row.id}`} className="task">
+              <div className="task-row">
+                <div className="task-main">
+                  <span className="task-title" title={row.title}>
+                    {row.title}
+                  </span>
+                  <span className="task-sub">
+                    <span className="task-course">
+                      {dotFor(row.courseId)}
+                      {row.courseName}
+                    </span>
+                    {row.module ? <span className="due">{row.module}</span> : null}
+                    {row.part !== null && row.partKind ? (
+                      <span className="due">
+                        {row.partKind === "slide" ? "Slide" : "Page"} {row.part}
+                      </span>
+                    ) : null}
+                  </span>
+                </div>
+                <div className="task-aside">
+                  <span className="kind-chip" role="img" aria-label="Course material">
+                    <BookText size={15} aria-hidden="true" />
+                  </span>
+                  {openButton(row.title, row.url, null)}
                 </div>
               </div>
             </li>

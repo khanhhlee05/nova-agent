@@ -127,3 +127,42 @@ export const newsItemSchema = z.object({
 });
 export type NewsItem = z.infer<typeof newsItemSchema>;
 export const newsListSchema = z.array(newsItemSchema);
+
+export type TocTopic = { TopicId: string; Title: string; TypeIdentifier?: string | null | undefined; Url?: string | null | undefined; IsHidden?: boolean | undefined; LastModifiedDate: string | null };
+export type TocModule = { ModuleId: string; Title: string; IsHidden?: boolean | undefined; Modules: TocModule[]; Topics: TocTopic[] };
+
+export const tocTopicSchema = z.object({
+  TopicId: id,
+  Title: z.string(),
+  /** "File" for an uploaded file or an HTML page, "Link" for an address; other values exist. */
+  TypeIdentifier: z.string().nullable().optional(),
+  Url: z.string().nullable().optional(),
+  IsHidden: z.boolean().optional(),
+  LastModifiedDate: isoDate,
+});
+
+// A module may hold modules. One malformed topic or module is dropped on its own; its siblings stay.
+const listOf = <T>(schema: z.ZodType<T>) =>
+  z
+    .array(z.unknown())
+    .nullable()
+    .optional()
+    .transform((entries): T[] =>
+      (entries ?? []).flatMap((entry) => {
+        const parsed = schema.safeParse(entry);
+        return parsed.success ? [parsed.data] : [];
+      }),
+    );
+
+export const tocModuleSchema: z.ZodType<TocModule> = z.lazy(() =>
+  z.object({
+    ModuleId: id,
+    Title: z.string(),
+    IsHidden: z.boolean().optional(),
+    Modules: listOf(tocModuleSchema),
+    Topics: listOf(tocTopicSchema as z.ZodType<TocTopic>),
+  }),
+) as z.ZodType<TocModule>;
+
+export const contentTocSchema = z.object({ Modules: listOf(tocModuleSchema) });
+export type ContentToc = z.infer<typeof contentTocSchema>;

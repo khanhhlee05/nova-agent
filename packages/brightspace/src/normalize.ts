@@ -5,6 +5,7 @@ import {
   type AcademicItem,
   type Announcement,
   type Course,
+  type CourseMaterial,
   type ItemAttachment,
   type ItemScore,
   type ItemStatus,
@@ -12,7 +13,7 @@ import {
   type Visibility,
 } from "@nova-agent/core";
 import { pageLinks } from "./routes";
-import type { DropboxFolder, EntityDropbox, MyOrgUnitInfo, NewsItem, QuizReadData } from "./schemas";
+import type { ContentToc, DropboxFolder, EntityDropbox, MyOrgUnitInfo, NewsItem, QuizReadData, TocModule } from "./schemas";
 
 /**
  * Course color slots. These are the light-theme swatches (each at least 3:1
@@ -226,4 +227,56 @@ export const toAnnouncement = (news: NewsItem, courseId: string, ctx: NormalizeC
     pinned: news.IsPinned ?? false,
     url: pageLinks.news(origin, courseId),
   };
+};
+
+/** Bounds on one course's table of contents: deep enough for any real course, small enough to store and to show. */
+export const MATERIAL_LIMITS = { topics: 400, depth: 8, title: 200 } as const;
+
+const fileNameOf = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  const path = url.split(/[?#]/)[0] ?? "";
+  const last = path.split("/").filter(Boolean).pop() ?? "";
+  let name = last;
+  try {
+    name = decodeURIComponent(last);
+  } catch {
+    name = last;
+  }
+  return /\.[a-z0-9]{1,8}$/i.test(name) ? name.slice(0, MATERIAL_LIMITS.title) : null;
+};
+
+/**
+ * Flattens a course's table of contents into its topics, in the order a
+ * student sees them. Hidden modules and topics are left out, as is anything
+ * past the depth or count limit. Nothing is fetched here.
+ */
+export const toMaterials = (toc: ContentToc, courseId: string, tenantOrigin: string): CourseMaterial[] => {
+  const origin = normalizeOrigin(tenantOrigin);
+  const out: CourseMaterial[] = [];
+  const walk = (modules: readonly TocModule[], path: string[], depth: number): void => {
+    for (const module of modules) {
+      if (module.IsHidden || depth > MATERIAL_LIMITS.depth) continue;
+      const here = [...path, module.Title.trim().slice(0, MATERIAL_LIMITS.title) || "Untitled module"];
+      for (const topic of module.Topics) {
+        if (out.length >= MATERIAL_LIMITS.topics) return;
+        if (topic.IsHidden || !/^\d{1,12}$/.test(topic.TopicId) || topic.Title.trim() === "") continue;
+        const fileName = fileNameOf(topic.Url);
+        const kind = (topic.TypeIdentifier ?? "").toLowerCase();
+        const type: CourseMaterial["type"] = kind === "link" ? "link" : kind === "file" ? (fileName && /\.html?$/i.test(fileName) ? "page" : "file") : "other";
+        out.push({
+          id: topic.TopicId,
+          courseId,
+          title: topic.Title.trim().slice(0, MATERIAL_LIMITS.title),
+          modulePath: here,
+          type,
+          fileName: type === "file" || type === "page" ? fileName : null,
+          url: pageLinks.contentTopic(origin, courseId, topic.TopicId),
+          updatedAt: normalizeIso(topic.LastModifiedDate),
+        });
+      }
+      walk(module.Modules, here, depth + 1);
+    }
+  };
+  walk(toc.Modules, [], 1);
+  return out;
 };

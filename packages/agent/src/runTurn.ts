@@ -1,5 +1,5 @@
 import { PROPOSAL_LIMITS, type AskEvent, type ChatFocus, type ChatMessage, type ClientToolName, type ClientToolResult, type CompactSnapshot, type ModelUsage, type ToolName } from "@nova-agent/protocol";
-import { checkHonesty } from "./honesty";
+import { addEvidence, checkHonesty, emptyEvidence, unverifiedQuotes } from "./honesty";
 import { ModelError, addUsage, isAbortError, type ChatModel, type ModelMessage, type ToolCall } from "./model";
 import { briefTitles, buildSystemPrompt, quote } from "./prompt";
 import { TOOLS, executeTool, isClientToolName, isToolName, rowTitles, toolSchemasForModel, toolsFor, type ToolResult, type ToolSpec } from "./tools";
@@ -70,6 +70,9 @@ const parseArgs = (raw: string): unknown => {
   }
 };
 
+const quoteNudge = (quoted: string): string =>
+  `Your draft puts ${quote(quoted.slice(0, 160))} in quotation marks, but those exact words are not in the course data or in any tool result. Answer again: quote only text a tool returned, exactly as written, or say it in your own words without quotation marks.`;
+
 const nudge = (title: string, canLookUp: boolean): string =>
   `Your draft names ${quote(title)}, which no tool result or course data line contains. ${canLookUp ? "Call a tool to verify it, then answer using only tool results and the course data." : "Answer again without naming it, using only the course data and the tool results above."}`;
 
@@ -92,6 +95,9 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
     { role: "user", content: input.message },
   ];
   const allowedTitles = new Set(briefTitles(input.snapshot, { focus: input.focus }));
+  // What a quotation in the answer may come from: everything the model was shown this turn.
+  const evidence = emptyEvidence();
+  for (const message of messages) addEvidence(evidence, message.content);
   const returnedTitles = new Set<string>();
   const toolNames: ToolName[] = [];
   let usage: ModelUsage | null = null;
@@ -169,6 +175,9 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
           if (name) toolNames.push(name);
           if (result.ok) {
             for (const row of result.rows) for (const title of rowTitles(row)) returnedTitles.add(title);
+            addEvidence(evidence, result.summary);
+            addEvidence(evidence, result.data);
+            addEvidence(evidence, result.rows);
             yield { type: "tool_result", id: call.id, name: name ?? "get_brief", ok: true, summary: result.summary, rows: result.rows };
             if (result.proposal) {
               proposals += 1;
@@ -188,15 +197,17 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
       // Final answer. A tool call on the last round is dropped in favour of the text, or a fallback.
       if (text.trim() === "") text = stop === "max_tokens" ? FALLBACK : calls.length > 0 ? FALLBACK : "I do not have enough to answer that. Try asking about deadlines, changes, or what to start first.";
       const check = checkHonesty(text, input.snapshot, [...allowedTitles, ...returnedTitles]);
+      const quotes = unverifiedQuotes(text, evidence);
+      const sound = check.ok && quotes.length === 0;
       // One correction, and only while a round is left: the last round is reserved for the answer.
-      if (!check.ok && !corrected && !lastRound) {
+      if (!sound && !corrected && !lastRound) {
         corrected = true;
         messages.push({ role: "assistant", content: text });
-        messages.push({ role: "user", content: nudge(check.unverified[0] ?? "", rounds + 1 < maxRounds) });
+        messages.push({ role: "user", content: check.ok ? quoteNudge(quotes[0] ?? "") : nudge(check.unverified[0] ?? "", rounds + 1 < maxRounds) });
         continue;
       }
       finalText = text;
-      grounded = check.ok;
+      grounded = sound;
       yield { type: "text", delta: text };
       yield { type: "done", model: modelId, usage, rounds, grounded, corrected };
       return finish("ok");

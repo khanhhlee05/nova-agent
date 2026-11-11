@@ -1,4 +1,4 @@
-import { FlaskConical, History, Settings2, SquarePen, Trash2 } from "lucide-react";
+import { FlaskConical, History, LibraryBig, Settings2, SquarePen, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Banner } from "../components/Banners";
 import { Tip } from "../components/Tip";
@@ -6,6 +6,7 @@ import type { Dashboard } from "../model";
 import type { AskClientFactory } from "./askClient";
 import { AskComposer, type AskAbout, type AskDraft } from "./AskComposer";
 import { AskConversations } from "./AskConversations";
+import { AskMaterials, type AskMaterialsControls } from "./AskMaterials";
 import type { ConversationSummary } from "./conversations";
 import type { ProposalAction } from "./AskProposals";
 import type { AskProposal, ProposalContext } from "./proposals";
@@ -44,13 +45,17 @@ export type AskViewProps = {
   onProposal?: (messageId: string, proposal: AskProposal, action: ProposalAction) => void;
   /** Present while Nova is waiting for the student to allow reading a file. */
   consent?: AskConsent;
+  /** Course materials, course by course. Absent when files cannot be read at all. */
+  materials?: AskMaterialsControls;
 };
 
 export type AskConsent = {
   pending: ConsentRequest | null;
-  /** Allows reading attachments for the rest of this session and asks the question again. */
+  /** Allows what was asked (and, for a course, reads its materials first), then asks the question again. */
   onAllow: () => void;
   onDecline: () => void;
+  /** Shown while a course's materials are being read after Allow. */
+  working?: string | null;
 };
 
 export type AskSavedConversations = {
@@ -61,9 +66,10 @@ export type AskSavedConversations = {
 };
 
 /** The Ask tab body: setup card until enabled, then the thread and the composer. */
-export const AskView = ({ notices, thread, settings, onSettingsChange, clientFactory, dashboard, mode, now, canOpen, onOpen, live, draft = null, about = null, onClearAbout, onSend, conversations, proposalContext, onProposal, consent }: AskViewProps) => {
+export const AskView = ({ notices, thread, settings, onSettingsChange, clientFactory, dashboard, mode, now, canOpen, onOpen, live, draft = null, about = null, onClearAbout, onSend, conversations, proposalContext, onProposal, consent, materials }: AskViewProps) => {
   const [editing, setEditing] = useState(false);
   const [browsing, setBrowsing] = useState(false);
+  const [choosing, setChoosing] = useState(false);
   const saved = settings.persistConversations === true && conversations ? conversations : null;
   const showSetup = !settings.enabled || editing;
   const streaming = thread.status === "streaming";
@@ -106,6 +112,13 @@ export const AskView = ({ notices, thread, settings, onSettingsChange, clientFac
                 </button>
               </Tip>
             ) : null}
+            {materials ? (
+              <Tip label="Course materials">
+                <button type="button" className="icon-button icon-button-sm" aria-label="Course materials" onClick={() => setChoosing(true)}>
+                  <LibraryBig size={15} aria-hidden="true" />
+                </button>
+              </Tip>
+            ) : null}
             <Tip label="Ask Nova settings">
               <button type="button" className="icon-button icon-button-sm" aria-label="Ask Nova settings" onClick={() => setEditing(true)}>
                 <Settings2 size={15} aria-hidden="true" />
@@ -124,25 +137,38 @@ export const AskView = ({ notices, thread, settings, onSettingsChange, clientFac
           )
         ) : null}
         {settings.enabled && !editing && consent?.pending ? (
-          <section className="ask-proposal ask-consent" data-state="pending" aria-label="Permission to read a file">
+          <section className="ask-proposal ask-consent" data-state="pending" aria-label={consent.pending.kind === "attachment" ? "Permission to read a file" : "Permission to read course materials"}>
             <p className="ask-proposal-kicker">Nova asks</p>
-            <p className="ask-proposal-text">
-              May Nova read <strong>{consent.pending.fileName}</strong> ({formatBytes(consent.pending.size)}) from "{consent.pending.itemTitle}"? It is downloaded through your Brightspace session and opened on this device. The part your question needs goes to the Nova server with it.
-            </p>
-            <div className="card-actions">
-              <button type="button" className="button button-primary button-sm" onClick={consent.onAllow} disabled={streaming}>
-                Allow for this session
-              </button>
-              <button type="button" className="button button-ghost button-sm" onClick={consent.onDecline}>
-                Not now
-              </button>
-            </div>
+            {consent.pending.kind === "attachment" ? (
+              <p className="ask-proposal-text">
+                May Nova read <strong>{consent.pending.fileName}</strong> ({formatBytes(consent.pending.size)}) from "{consent.pending.itemTitle}"? It is downloaded through your Brightspace session and opened on this device. The part your question needs goes to the Nova server with it.
+              </p>
+            ) : (
+              <p className="ask-proposal-text">
+                May Nova read the course materials of <strong>{consent.pending.courseName}</strong>? Nova downloads the files in its Content area through your Brightspace session, keeps their text on this device, and sends only the passages a question needs. You can undo this under Course materials.
+              </p>
+            )}
+            {consent.working ? (
+              <p className="ask-proposal-status" role="status">
+                {consent.working}
+              </p>
+            ) : (
+              <div className="card-actions">
+                <button type="button" className="button button-primary button-sm" onClick={consent.onAllow} disabled={streaming}>
+                  {consent.pending.kind === "attachment" ? "Allow for this session" : "Allow and read"}
+                </button>
+                <button type="button" className="button button-ghost button-sm" onClick={consent.onDecline}>
+                  Not now
+                </button>
+              </div>
+            )}
           </section>
         ) : null}
         <p className="sr-only" aria-live="polite" aria-atomic="true">
           {thread.announcement ?? ""}
         </p>
       </div>
+      {materials && choosing ? <AskMaterials {...materials} now={now} onClose={() => setChoosing(false)} /> : null}
       {saved && browsing ? <AskConversations conversations={saved.list} currentId={thread.conversationId} now={now} onOpen={saved.onOpen} onDelete={saved.onDelete} onClose={() => setBrowsing(false)} /> : null}
       <AskComposer streaming={streaming} disabled={!settings.enabled || editing} onSend={onSend ?? thread.send} onStop={thread.stop} draft={draft} about={about} onClearAbout={onClearAbout} />
     </div>

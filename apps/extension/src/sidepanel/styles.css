@@ -437,6 +437,18 @@ h1, h2, h3, h4, p { margin: 0; }
 .ask-rows-toggle:hover { color: var(--nova-accent); background: var(--nova-accent-soft); }
 .ask-rows { display: flex; flex-direction: column; margin-top: 2px; border-top: 1px solid var(--nova-rule); }
 .ask-note { font-size: 12.5px; color: var(--nova-muted); }
+.ask-materials { width: min(400px, calc(100vw - 24px)); max-height: calc(100vh - 32px); overflow-y: auto; padding-top: 16px; scrollbar-width: thin; }
+.ask-material-courses { display: flex; flex-direction: column; margin-top: 12px; border-top: 1px solid var(--nova-rule); }
+.ask-material-course { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--nova-rule); }
+.ask-material-head { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.ask-materials .ask-material-status { margin-top: 0; font-size: 12.5px; line-height: 1.4; }
+.ask-material-status[data-tone="error"] { color: var(--nova-overdue); }
+.ask-materials .card-actions { justify-content: flex-start; margin-top: 2px; flex-wrap: wrap; }
+.ask-material-topics { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.ask-material-topic { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 10px; padding: 6px 0; cursor: pointer; }
+.ask-material-topic .checkbox { margin-top: 2px; }
+.ask-material-title { display: block; font-size: 13.5px; font-weight: 600; color: var(--nova-ink); overflow-wrap: anywhere; }
+.ask-material-meta { display: block; font-size: 12.5px; color: var(--nova-muted); }
 .report-files { margin-top: 12px; font-size: 13px; }
 .report-files h3 { font-size: 13px; font-weight: 700; }
 .report-files ul { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; color: var(--nova-muted); }

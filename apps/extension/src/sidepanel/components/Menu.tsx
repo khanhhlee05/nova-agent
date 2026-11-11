@@ -38,7 +38,10 @@ const fileOutcomeText: Record<string, string> = {
   "unsafe-path": "refused: off the allowlist",
 };
 
-const FILE_ROUTE_LABELS = { dropboxAttachment: "Instructor attachments", submissionFile: "Your submitted files" } as const;
+const FILE_ROUTE_LABELS = { dropboxAttachment: "Instructor attachments", submissionFile: "Your submitted files", contentTopicFile: "Course materials" } as const;
+
+/** Why a kind of file was not tried: there was none to ask for. */
+const NOT_TESTED: Partial<Record<keyof typeof FILE_ROUTE_LABELS, string>> = { contentTopicFile: "not tested: turn on a course under Course materials in the Ask tab first" };
 
 export const Menu = ({ mode, feasibility, busy, onConnectLive, onUseDemo, onClearData, onCheckFiles, checkingFiles = false, fileAccess = null }: MenuProps) => {
   const [reportOpen, setReportOpen] = useState(false);
@@ -144,13 +147,13 @@ export const Menu = ({ mode, feasibility, busy, onConnectLive, onUseDemo, onClea
                   <ul>
                     {fileAccess.steps.map((step) => (
                       <li key={step.operation}>
-                        {FILE_ROUTE_LABELS[step.operation]}: <strong>{fileOutcomeText[step.outcome] ?? step.outcome}</strong>
+                        {FILE_ROUTE_LABELS[step.operation]}: <strong>{(step.outcome === "not-tested" ? NOT_TESTED[step.operation] : undefined) ?? fileOutcomeText[step.outcome] ?? step.outcome}</strong>
                         {step.status !== null ? ` (${step.status}${step.contentType ? `, ${step.contentType.split(";")[0]}` : ""})` : ""}
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p>Not checked yet. Ask Nova reads assignment files only if Brightspace serves them to your session.</p>
+                  <p>Not checked yet. Ask Nova reads assignment files and course materials only if Brightspace serves them to your session.</p>
                 )}
               </section>
             ) : null}

@@ -280,10 +280,13 @@ describe("probeFileRoute", () => {
     expect(await probeFileRoute(null, "dropboxAttachment", ATTACHMENT)).toMatchObject({ outcome: "network" });
   });
 
-  it("checks the demo tenant's two kinds of file and finds both served", async () => {
+  it("checks the demo tenant's kinds of file and finds them served", async () => {
     const { probeFileRoute } = await import("@nova-agent/brightspace");
     const fetch = demoFileFetch(buildDemoTenant(NOW));
     expect(await probeFileRoute(fetch, "dropboxAttachment", ATTACHMENT)).toMatchObject({ outcome: "ok", contentType: "application/pdf" });
     expect(await probeFileRoute(fetch, "submissionFile", SUBMISSION)).toMatchObject({ outcome: "ok" });
+    expect(await probeFileRoute(fetch, "contentTopicFile", routes.contentTopicFile(LE, "31001", "8104"))).toMatchObject({ outcome: "ok", contentType: "application/pdf" });
+    // A link topic has no file: the route answers 404 and the check says so.
+    expect(await probeFileRoute(fetch, "contentTopicFile", routes.contentTopicFile(LE, "31001", "8103"))).toMatchObject({ outcome: "not-found", status: 404 });
   });
 });

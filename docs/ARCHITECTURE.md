@@ -73,6 +73,8 @@ Ask tab ──compactSnapshot()──▶ POST /v1/chat (question, history, snaps
 - The compact snapshot is built in the browser so buckets and local dates follow the student's time zone; the server never does date math.
 - The server is stateless: history travels with the request, usage is an in-memory daily counter, logs carry counts only.
 - Rows under an answer come from tool results, never from the model's text. The tab is force-mounted so the session-only thread survives switching tabs.
+- Some lookups are made by the panel, not the server, because only the panel can reach Brightspace and the student's storage: reading an assignment's file, and searching or reading a course's materials. The server sends a `client_tool` event, waits for `POST /v1/chat/{turnId}/tool-result`, and treats the answer as tool data.
+- Course materials are indexed on the device: text is cut into passages in `materialText`, and a BM25 keyword search (`src/files/search.ts`) picks the few passages a question needs. No embeddings and no index on the server.
 - Details, environment, and privacy statement: [ASK_NOVA.md](./ASK_NOVA.md).
 
 ## Authentication outcome
@@ -81,6 +83,6 @@ See [BRIGHTSPACE_ACCESS.md](./BRIGHTSPACE_ACCESS.md). In short: the feasibility 
 
 ## Data retention and privacy
 
-- Stored locally only: normalized academic metadata (including the names and sizes of assignment files), change events, sync status, UI preferences, resolved API versions, the sanitized feasibility report and file access check, done marks, the student's own deadlines, saved Ask Nova conversations when saving is on, and the extracted text of assignment files the student had Nova read (newest 50; never the files themselves).
+- Stored locally only: normalized academic metadata (including the names and sizes of assignment files), change events, sync status, UI preferences, resolved API versions, the sanitized feasibility report and file access check, done marks, the student's own deadlines, saved Ask Nova conversations when saving is on, the extracted text of assignment files the student had Nova read (newest 50; never the files themselves), and, for each course whose materials the student turned on, its table of contents and the text of its files as passages (never the files themselves).
 - Never stored or logged: cookies, tokens, raw HTML, raw Brightspace payloads, announcement attachments.
 - **Clear local Nova data** in the panel menu wipes every table after confirmation.

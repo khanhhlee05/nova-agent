@@ -32,7 +32,15 @@ export type CompactOptions = {
   personal?: readonly PersonalInput[];
   /** Send the names of each item's files. Only while the student lets Ask Nova read attachments. */
   includeAttachments?: boolean;
+  /**
+   * Content topics per course, for the courses whose materials the student lets Ask Nova read. A course in this
+   * map is sent with its topic names (possibly none); a course outside it is sent without the field.
+   */
+  materials?: ReadonlyMap<string, readonly MaterialInput[]>;
 };
+
+/** The fields of a Content topic the compact snapshot needs. */
+export type MaterialInput = { id: string; title: string; modulePath: readonly string[]; type: "file" | "page" | "link" | "other"; read: boolean };
 
 /** The fields of a student-added deadline the compact snapshot needs. */
 export type PersonalInput = { id: string; title: string; dueAt: string; courseId: string | null; completedAt: string | null; planId?: string | null };
@@ -130,7 +138,24 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
     .filter((course) => course.active)
     .sort((a, b) => a.name.localeCompare(b.name))
     .slice(0, COMPACT_LIMITS.courses)
-    .map((course) => ({ id: course.id, name: clip(course.name), code: course.code ? cleanText(course.code).slice(0, 64) : null, homeUrl: course.homeUrl, active: course.active }));
+    .map((course) => {
+      const topics = options.materials?.get(course.id);
+      return {
+        id: course.id,
+        name: clip(course.name),
+        code: course.code ? cleanText(course.code).slice(0, 64) : null,
+        homeUrl: course.homeUrl,
+        active: course.active,
+        ...(topics
+          ? {
+              materials: topics
+                .filter((topic) => /^\d{1,12}$/.test(topic.id) && cleanText(topic.title) !== "")
+                .slice(0, COMPACT_LIMITS.materials)
+                .map((topic) => ({ id: topic.id, title: cleanText(topic.title).slice(0, COMPACT_LIMITS.fileName), module: cleanText(topic.modulePath.join(" › ")).slice(0, COMPACT_LIMITS.title), type: topic.type, read: topic.read })),
+            }
+          : {}),
+      };
+    });
   const courseIds = new Set(courses.map((course) => course.id));
 
   const window = deadlineWindow(now);

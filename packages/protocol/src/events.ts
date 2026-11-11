@@ -14,6 +14,8 @@ export const toolNameSchema = z.enum([
   "propose_mark_read",
   "propose_personal_deadline",
   "read_attachment",
+  "search_course_materials",
+  "read_course_material",
 ]);
 export type ToolName = z.infer<typeof toolNameSchema>;
 
@@ -23,10 +25,10 @@ export type ToolName = z.infer<typeof toolNameSchema>;
  * extension's own storage). The server offers one to the model only when the
  * request says this panel can answer it.
  */
-export const clientToolNameSchema = z.enum(["read_attachment"]);
+export const clientToolNameSchema = z.enum(["read_attachment", "search_course_materials", "read_course_material"]);
 export type ClientToolName = z.infer<typeof clientToolNameSchema>;
 
-export const CLIENT_TOOL_LIMITS = { dataBytes: 24_000, summary: 300, error: 600, rows: 25, text: 12_000 } as const;
+export const CLIENT_TOOL_LIMITS = { dataBytes: 24_000, summary: 300, error: 600, rows: 25, text: 12_000, passages: 8, passageChars: 1000 } as const;
 
 const url = z.url({ protocol: /^https?$/ }).nullable();
 
@@ -92,6 +94,22 @@ export const toolRowSchema = z.discriminatedUnion("kind", [
     /** Whether its text has been read on this device. */
     read: z.boolean(),
     /** The assignment's own page; a file is opened from there. */
+    url,
+  }),
+  z.object({
+    kind: z.literal("material"),
+    /** The topic id: one row per topic, however many passages came from it. */
+    id: z.string(),
+    /** The topic title. */
+    title: z.string(),
+    courseId: z.string(),
+    courseName: z.string(),
+    /** The modules it sits under, joined with " › ". */
+    module: z.string(),
+    /** The page or slide the best passage came from, when the file has them. */
+    part: z.number().int().min(1).nullable(),
+    partKind: z.enum(["page", "slide"]).nullable(),
+    /** The topic's page in Brightspace. */
     url,
   }),
   z.object({

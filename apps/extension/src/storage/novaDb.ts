@@ -1,7 +1,8 @@
 import Dexie, { type EntityTable } from "dexie";
 import type { FeasibilityReport, ResolvedVersions, SyncWarning, BrightspaceError } from "@nova-agent/brightspace";
-import type { AcademicSnapshot, ChangeEvent } from "@nova-agent/core";
+import type { AcademicSnapshot, ChangeEvent, CourseMaterial } from "@nova-agent/core";
 import type { ExtractFailure, FileKind, TextPart } from "../files/extract";
+import type { Passage } from "../files/search";
 import type { SyncPhase } from "../messaging/protocol";
 import type { AskMessage } from "../sidepanel/ask/thread";
 
@@ -95,6 +96,46 @@ export type AttachmentTextRecord = {
   extractedAt: string;
 };
 
+/**
+ * The table of contents of one course's Content area: topic names and
+ * places only. Fetched for a course whose materials the student has Nova
+ * read, and refreshed with the course.
+ */
+export type MaterialTocRecord = {
+  /** `${scope}#${courseId}`. */
+  id: string;
+  scope: string;
+  courseId: string;
+  topics: CourseMaterial[];
+  fetchedAt: string;
+};
+
+/**
+ * The text of one Content topic, cut into passages, extracted on this device.
+ * The search index is built from these rows. A topic that gave no text is
+ * kept with the reason, so it is not downloaded again each time.
+ */
+export type MaterialTextRecord = {
+  /** `${scope}#${courseId}#${topicId}`. */
+  id: string;
+  scope: string;
+  courseId: string;
+  topicId: string;
+  title: string;
+  modulePath: string[];
+  kind: FileKind | null;
+  passages: Passage[];
+  /** Characters of text kept. */
+  chars: number;
+  truncated: boolean;
+  failure: ExtractFailure | null;
+  /** Size of the file that was read, in bytes. */
+  bytes: number;
+  extractedAt: string;
+  /** The topic's last-modified time when it was read; a later one means it is read again. */
+  sourceUpdatedAt: string | null;
+};
+
 export class NovaDb extends Dexie {
   snapshots!: EntityTable<StoredSnapshot, "id">;
   changeEvents!: EntityTable<StoredChangeEvent, "id">;
@@ -106,6 +147,8 @@ export class NovaDb extends Dexie {
   personalItems!: EntityTable<PersonalItemRecord, "id">;
   conversations!: EntityTable<ConversationRecord, "id">;
   attachmentText!: EntityTable<AttachmentTextRecord, "id">;
+  materialToc!: EntityTable<MaterialTocRecord, "id">;
+  materialText!: EntityTable<MaterialTextRecord, "id">;
 
   constructor(name = "nova-agent") {
     super(name);
@@ -121,6 +164,7 @@ export class NovaDb extends Dexie {
     this.version(3).stores({ personalItems: "id, scope, dueAt" });
     this.version(4).stores({ conversations: "id, scope, updatedAt" });
     this.version(5).stores({ attachmentText: "id, scope, itemKey, extractedAt" });
+    this.version(6).stores({ materialToc: "id, scope", materialText: "id, scope, [scope+courseId]" });
   }
 }
 

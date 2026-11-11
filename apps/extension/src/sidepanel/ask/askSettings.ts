@@ -19,11 +19,15 @@ export type AskSettings = {
    * Off: files are never read for an answer, and their names are not sent.
    */
   readAttachments?: boolean;
+  /** Courses whose Content area the student lets Nova read. Empty by default: each course is turned on by itself. */
+  materialsCourses?: string[];
+  /** Per course, the Content topics the student unticked. */
+  materialsExcluded?: Record<string, string[]>;
 };
 
 export const ASK_SETTINGS_PREFERENCE = "ai.settings";
 
-export const DEFAULT_ASK_SETTINGS: AskSettings = { enabled: false, apiBaseUrl: "http://localhost:8787", token: null, persistConversations: false, readAttachments: true };
+export const DEFAULT_ASK_SETTINGS: AskSettings = { enabled: false, apiBaseUrl: "http://localhost:8787", token: null, persistConversations: false, readAttachments: true, materialsCourses: [], materialsExcluded: {} };
 
 export type ApiBaseUrlReason = "invalid" | "insecure";
 export type ApiBaseUrlCheck = { url: string; reason: null } | { url: null; reason: ApiBaseUrlReason };

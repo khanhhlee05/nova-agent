@@ -2,6 +2,7 @@ import { bytesToBase64, type RawFileFetch, type RawFileResponse } from "../files
 import { isApprovedFilePath, routes, VILLANOVA_BRIGHTSPACE_ORIGIN } from "../routes";
 import { jsonResponse, type FixtureResolver, type RawResponse } from "../transport";
 import { minimalPdf } from "./pdf";
+import { storedZip } from "./zip";
 
 /**
  * Sanitized, fictional demo tenant shaped like real D2L responses. Dates are
@@ -130,7 +131,7 @@ export type DemoTenantData = {
   versions: unknown;
   whoami: unknown;
   enrollments: unknown;
-  courseData: Record<string, { folders: unknown[]; quizzes: unknown[]; news: unknown[]; submissions: Record<string, unknown[]> }>;
+  courseData: Record<string, { folders: unknown[]; quizzes: unknown[]; news: unknown[]; submissions: Record<string, unknown[]>; toc?: unknown }>;
   /** Fictional files behind the file routes, keyed by the path that serves them. */
   files: Record<string, DemoFile>;
 };
@@ -150,6 +151,46 @@ const DEMO_HANDOUT = minimalPdf([
 ]);
 const DEMO_RUBRIC = text(["Project Proposal rubric (25 points)", "", "Problem statement: 8 points. One paragraph, specific and testable.", "Parts list and budget: 7 points. Under 40 dollars per team.", "Schedule: 5 points. Weekly milestones through week 12.", "Team roles: 5 points. Every member has a named responsibility."]);
 const DEMO_REPORT = text(["Lab 1: Toolchain Setup", "Demo Student", "", "Installed avr-gcc 12.1 and avrdude. Built and flashed the blink example.", "Problem: the programmer was not detected until the USB driver was replaced."]);
+
+/** Course materials. Written so questions about a syllabus, a lecture, or a lab manual have real answers in demo mode. */
+const DEMO_SYLLABUS = text([
+  "<html><head><title>Syllabus</title><style>body{font-family:serif}</style></head><body>",
+  "<h1>ECE 2042 Microcontrollers: Syllabus</h1>",
+  "<h2>Late work</h2><p>Late work loses 10 percent per day, for up to three days. After three days it is not accepted.</p>",
+  "<h2>Office hours</h2><p>Tuesday 2 to 4 PM in CEER 210, or by appointment.</p>",
+  "<h2>Grading</h2><ul><li>Labs: 40 percent</li><li>Quizzes: 20 percent</li><li>Project: 25 percent</li><li>Final exam: 15 percent</li></ul>",
+  "<h2>Collaboration</h2><p>Discuss ideas freely, but every line of code you hand in must be your own or your team's.</p>",
+  "</body></html>",
+]);
+const slide = (title: string, bullets: string[]): string => `<p:sld xmlns:a="a" xmlns:p="p"><p:cSld><p:spTree><a:p><a:r><a:t>${title}</a:t></a:r></a:p>${bullets.map((bullet) => `<a:p><a:r><a:t>${bullet}</a:t></a:r></a:p>`).join("")}</p:spTree></p:cSld></p:sld>`;
+const DEMO_SLIDES = storedZip({
+  "[Content_Types].xml": "<Types/>",
+  "ppt/presentation.xml": "<p:presentation/>",
+  "ppt/slides/slide1.xml": slide("Lecture 5: Interrupts", ["Why polling wastes cycles", "What an interrupt is"]),
+  "ppt/slides/slide2.xml": slide("Interrupt service routines", ["Keep an ISR short: set a flag and return", "Declare shared variables volatile", "Never call delay inside an ISR"]),
+  "ppt/slides/slide3.xml": slide("Interrupt latency", ["Latency is the time from the event to the first ISR instruction", "On the ATmega328P it is at least four clock cycles", "Disabling interrupts globally adds to the worst case"]),
+});
+const DEMO_MANUAL = minimalPdf([
+  ["ECE 2042 Lab Manual", "Section 3: Timers", "", "Timer1 is a 16 bit timer. In CTC mode it counts up to OCR1A and resets.", "The compare match frequency is f_clk divided by the prescaler times (OCR1A + 1)."],
+  ["Section 3.2: Measuring with the oscilloscope", "", "Probe the LED pin and trigger on the rising edge.", "Record the period over at least ten cycles and average."],
+]);
+const DEMO_NOTES = text(["Fourier series notes", "", "A periodic signal with period T can be written as a sum of sines and cosines at multiples of 1/T.", "The coefficient a_n is 2/T times the integral of x(t) cos(2 pi n t / T) over one period.", "Even signals have only cosine terms. Odd signals have only sine terms."]);
+
+const topic = (id: number, title: string, type: "File" | "Link", url: string) => ({ TopicId: id, Identifier: String(id), TypeIdentifier: type, Title: title, Bookmarked: false, Unread: false, Url: url, StartDateTime: null, EndDateTime: null, IsHidden: false, IsLocked: false, LastModifiedDate: "2026-08-25T14:00:00.000Z" });
+const tocModule = (id: number, title: string, topics: unknown[], modules: unknown[] = []) => ({ ModuleId: id, Title: title, Modules: modules, Topics: topics, IsHidden: false, IsLocked: false, LastModifiedDate: "2026-08-25T14:00:00.000Z" });
+
+const MICRO_TOC = {
+  Modules: [
+    tocModule(7101, "Course information", [topic(8101, "Syllabus", "File", "/content/enforced/31001-ECE2042/syllabus.html")]),
+    tocModule(
+      7102,
+      "Week 3: Interrupts",
+      [topic(8102, "Lecture 5: Interrupts", "File", "/content/enforced/31001-ECE2042/lecture5-interrupts.pptx"), topic(8103, "Background reading on latency", "Link", "https://example.invalid/interrupt-latency")],
+      [tocModule(7103, "Lab materials", [topic(8104, "Lab manual", "File", "/content/enforced/31001-ECE2042/lab-manual.pdf")])],
+    ),
+  ],
+};
+const SIGNALS_TOC = { Modules: [tocModule(7301, "Notes", [topic(8301, "Fourier series notes", "File", "/content/enforced/31003-ECE3040/fourier-notes.txt")])] };
 
 const HANDOUT_REF: DemoFileRef = { FileId: 9101, FileName: "Lab 3 handout.pdf", Size: DEMO_HANDOUT.length };
 const RUBRIC_REF: DemoFileRef = { FileId: 9103, FileName: "Proposal rubric.txt", Size: DEMO_RUBRIC.length };
@@ -193,6 +234,7 @@ export const buildDemoTenant = (now: Date, scenario: DemoScenario = "baseline"):
         // Lab 1 comes back graded on the second demo refresh.
         "4104": [submission(1, true, days(-13, now, 21, 4), changed ? 18 : null, [REPORT_REF])],
       },
+      toc: MICRO_TOC,
     },
     "31002": {
       folders: [
@@ -221,6 +263,7 @@ export const buildDemoTenant = (now: Date, scenario: DemoScenario = "baseline"):
       quizzes: [],
       news: [],
       submissions: { "4301": [submission(2, false)], "4302": [submission(0, false)], "4303": [submission(0, false)] },
+      toc: SIGNALS_TOC,
     },
     "31004": {
       folders: [
@@ -239,6 +282,10 @@ export const buildDemoTenant = (now: Date, scenario: DemoScenario = "baseline"):
     [routes.dropboxAttachment(le, "31001", "4101", String(HANDOUT_REF.FileId))]: { bytes: DEMO_HANDOUT, contentType: "application/pdf" },
     [routes.dropboxAttachment(le, "31001", "4103", String(RUBRIC_REF.FileId))]: { bytes: DEMO_RUBRIC, contentType: "text/plain; charset=utf-8" },
     [routes.submissionFile(le, "31001", "4104", String(DEMO_SUBMISSION_ID), String(REPORT_REF.FileId))]: { bytes: DEMO_REPORT, contentType: "text/plain; charset=utf-8" },
+    [routes.contentTopicFile(le, "31001", "8101")]: { bytes: DEMO_SYLLABUS, contentType: "text/html; charset=utf-8" },
+    [routes.contentTopicFile(le, "31001", "8102")]: { bytes: DEMO_SLIDES, contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation" },
+    [routes.contentTopicFile(le, "31001", "8104")]: { bytes: DEMO_MANUAL, contentType: "application/pdf" },
+    [routes.contentTopicFile(le, "31003", "8301")]: { bytes: DEMO_NOTES, contentType: "text/plain; charset=utf-8" },
   };
 
   return { versions, whoami, enrollments, courseData, files };
@@ -273,12 +320,14 @@ export const demoResolver = (data: DemoTenantData, overrides: DemoOverrides = {}
     if (path === routes.versions()) return data.versions;
     if (path === routes.whoami(lp)) return data.whoami;
     if (path.startsWith(`/d2l/api/lp/${lp}/enrollments/myenrollments/`)) return data.enrollments;
-    const course = /^\/d2l\/api\/le\/[\d.]+\/(\d+)\/(dropbox\/folders\/|quizzes\/|news\/)/.exec(path);
+    const course = /^\/d2l\/api\/le\/[\d.]+\/(\d+)\/(dropbox\/folders\/|quizzes\/|news\/|content\/toc$)/.exec(path);
     if (!course) return undefined;
     const entry = data.courseData[course[1] as string];
     if (!entry) return jsonResponse({ Errors: [{ Message: "Not found" }] }, 404);
     const submissions = /dropbox\/folders\/(\d+)\/submissions\/mysubmissions\/$/.exec(path);
     if (submissions) return entry.submissions[submissions[1] as string] ?? jsonResponse(null, 404);
+    // A course with nothing in Content answers with an empty table, the way Brightspace does.
+    if (path.endsWith("/content/toc")) return entry.toc ?? { Modules: [] };
     if (path.endsWith("/dropbox/folders/")) return entry.folders;
     if (path.includes("/quizzes/")) return { Objects: entry.quizzes, Next: null };
     if (path.includes("/news/")) return entry.news;

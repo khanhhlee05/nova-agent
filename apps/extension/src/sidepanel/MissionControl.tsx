@@ -6,7 +6,7 @@ import type { ChatRequest, ClientToolName } from "@nova-agent/protocol";
 import { CheckCheck, EyeOff, Plus } from "lucide-react";
 import { Tabs, Tooltip } from "radix-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AskChips, AskView, canUndo, resolveProposal, summaryOf, useAskThread, type AskAbout, type AskProposal, type ProposalAction, type ProposalApplied, type ProposalContext, type AskClient, type AskClientFactory, type AskConsent, type AskDraft, type AskHandlers, type AskLive, type AskMessage, type AskRequestContext, type AskSettings, type ConversationStore, type PlanDraft } from "./ask";
+import { AskChips, AskView, canUndo, resolveProposal, summaryOf, useAskThread, type AskAbout, type AskProposal, type ProposalAction, type ProposalApplied, type ProposalContext, type AskClient, type AskClientFactory, type AskConsent, type AskDraft, type AskHandlers, type AskMaterialsControls, type AskLive, type AskMessage, type AskRequestContext, type AskSettings, type ConversationStore, type PlanDraft } from "./ask";
 import type { SyncStatusRecord } from "../storage/novaDb";
 import { PHASE_LABELS, isRunningPhase, isStale, type SyncRuntimeState } from "../sync/syncState";
 import { StateBanners, SyncProgress } from "./components/Banners";
@@ -105,8 +105,10 @@ export type AskProps = {
   conversations?: ConversationStore;
   /** The lookups this panel can make on the device for a turn, and the function that makes them. */
   clientTools?: { names: readonly ClientToolName[]; run: NonNullable<AskHandlers["clientTool"]> };
-  /** The permission card for reading a file. */
+  /** The permission card for reading a file or a course's materials. */
   consent?: AskConsent;
+  /** Course materials, course by course. */
+  materials?: AskMaterialsControls;
 };
 
 export type MissionControlProps = {
@@ -192,6 +194,8 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
               dismissedItemKeys: dismissals.items,
               personal: ask.personal,
               includeAttachments: ask.clientTools?.names.includes("read_attachment") === true,
+              // Topic names go only for the courses the student turned on; the field's presence is what says "this course can be searched".
+              materials: new Map((ask.materials?.courses ?? []).filter((entry) => entry.allowed).map((entry) => [entry.course.id, (entry.topics ?? []).map((topic) => ({ id: topic.id, title: topic.title, modulePath: topic.modulePath, type: topic.type, read: entry.readIds.has(topic.id) }))])),
             }),
             focus: { courseId: preferences.courseFilter, tab: lastTab.current, ...(context.focusItemId ? { itemId: context.focusItemId } : {}) },
             ...(ask.clientTools && ask.clientTools.names.length > 0 ? { clientTools: [...ask.clientTools.names] } : {}),
@@ -203,6 +207,23 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
   const runClientTool = ask?.clientTools?.run;
   const askHandlers = useMemo<AskHandlers | undefined>(() => (runClientTool ? { clientTool: runClientTool } : undefined), [runClientTool]);
   const thread = useAskThread(ask?.client ?? null, buildRequest, summaryOf, askHandlers);
+
+  // After the student allows a course's materials, the question is asked again once the reading has finished and
+  // the panel has re-rendered with what was read, so the new request carries it.
+  const [awaitingMaterials, setAwaitingMaterials] = useState(false);
+  const consentPending = ask?.consent?.pending ?? null;
+  useEffect(() => {
+    if (!awaitingMaterials || consentPending !== null || thread.status !== "idle") return;
+    setAwaitingMaterials(false);
+    thread.retryLast();
+  }, [awaitingMaterials, consentPending, thread]);
+  const allowConsent = () => {
+    const pending = ask?.consent?.pending;
+    if (!pending || !ask?.consent) return;
+    ask.consent.onAllow();
+    if (pending.kind === "materials") setAwaitingMaterials(true);
+    else thread.retryLast();
+  };
 
   // Saving is opt-in. While it is on, the thread is written after every finished answer; the array a save or a
   // restore last saw is remembered so opening a conversation does not count as changing it.
@@ -601,7 +622,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                 // Force-mounted and hidden so the conversation survives a switch to another tab.
                 <Tabs.Content className="tab-content tab-content-ask" value="ask" forceMount hidden={tab !== "ask"}>
                   {dashboard ? (
-                    <AskView notices={tab === "ask" ? stateBanners : null} thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} live={askLive} draft={askDraft} about={askAbout} onClearAbout={() => setAskAbout(null)} onSend={sendFromComposer} conversations={store ? { list: store.list, onOpen: openConversation, onDelete: deleteConversation } : undefined} proposalContext={proposalContext} onProposal={onProposal} consent={ask.consent ? { pending: ask.consent.pending, onDecline: ask.consent.onDecline, onAllow: () => { ask.consent?.onAllow(); thread.retryLast(); } } : undefined} />
+                    <AskView notices={tab === "ask" ? stateBanners : null} thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} live={askLive} draft={askDraft} about={askAbout} onClearAbout={() => setAskAbout(null)} onSend={sendFromComposer} conversations={store ? { list: store.list, onOpen: openConversation, onDelete: deleteConversation } : undefined} proposalContext={proposalContext} onProposal={onProposal} consent={ask.consent ? { pending: ask.consent.pending, working: ask.consent.working, onDecline: ask.consent.onDecline, onAllow: allowConsent } : undefined} materials={ask.materials} />
                   ) : showSkeleton ? (
                     <FocusSkeleton />
                   ) : (

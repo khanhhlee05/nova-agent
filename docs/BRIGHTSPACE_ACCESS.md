@@ -71,11 +71,24 @@ Used only when the student lets Ask Nova read assignment files, and only for a f
 | `GET /d2l/api/le/{v}/{orgUnitId}/dropbox/folders/{folderId}/attachments/{fileId}` | A file the instructor attached to an assignment |
 | `GET /d2l/api/le/{v}/{orgUnitId}/dropbox/folders/{folderId}/submissions/{submissionId}/files/{fileId}` | A file from the student's own submission |
 
-Exported as `OPTIONAL_FILE_ROUTES`. The file names and sizes come from the two dropbox routes above (`Attachments` on a folder, `Files` on a submission); no extra request is made during a refresh. Which OAuth scope covers the downloads has not been confirmed on the Villanova tenant.
+The file names and sizes come from the two dropbox routes above (`Attachments` on a folder, `Files` on a submission); no extra request is made during a refresh.
 
-Whether the tenant serves these to a session is a separate check, **Check file access** in the Connection report (live mode only, after a refresh). It asks each route for the headers of one file the last refresh found, records the status, content type, and size, and nothing else: no body is read, and no file name or id is kept. A route with no file to try is reported as not tested. Result on the Villanova tenant: not yet run.
+### Optional: course materials (Ask Nova only)
 
-Deliberately not used: quiz attempt routes (unreliable for learners, so quiz status is always `unknown`), calendar routes, any page scraping, and any undocumented endpoint.
+Used only for a course whose materials the student turned on in the Ask tab. A course that is off is never asked about its Content area.
+
+| Route | Purpose |
+|---|---|
+| `GET /d2l/api/le/{v}/{orgUnitId}/content/toc` | The course's table of contents: module and topic names, kinds, last-modified times (JSON) |
+| `GET /d2l/api/le/{v}/{orgUnitId}/content/topics/{topicId}/file` | One topic's file, for topics that are files or pages |
+
+The table of contents is requested once when a course is turned on and once after each refresh. A topic's file is downloaded once, and again only when its last-modified time changes. Per course: at most 60 files and 150 MB, one request at a time, and reading stops on a sign-in page or a 429. The address Brightspace lists for a link topic is never requested or stored.
+
+All four optional routes are exported as `OPTIONAL_FILE_ROUTES`. Which OAuth scopes cover them has not been confirmed on the Villanova tenant.
+
+Whether the tenant serves these to a session is a separate check, **Check file access** in the Connection report (live mode only, after a refresh). It asks each download route for the headers of one file (an instructor attachment and a submitted file the last refresh found, and one topic of a course whose materials are on), records the status, content type, and size, and nothing else: no body is read, and no file name or id is kept. A route with no file to try is reported as not tested. Result on the Villanova tenant: not yet run.
+
+Deliberately not used: Content module and topic detail routes (the table of contents is enough), quiz attempt routes (unreliable for learners, so quiz status is always `unknown`), calendar routes, any page scraping, and any undocumented endpoint.
 
 ## Next step if authorization is required
 

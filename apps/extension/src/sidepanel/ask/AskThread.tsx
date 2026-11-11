@@ -23,6 +23,8 @@ const TOOL_COPY: Record<ToolName, { running: string; done: string; failed: strin
   build_study_plan: { running: "Building a study plan", done: "Built a study plan", failed: "Could not build a study plan" },
   get_course_load: { running: "Comparing your courses", done: "Compared your courses", failed: "Could not compare your courses" },
   read_attachment: { running: "Reading a file", done: "", failed: "Could not read the file" },
+  search_course_materials: { running: "Searching your course materials", done: "Searched your course materials", failed: "Could not search your course materials" },
+  read_course_material: { running: "Reading a topic", done: "", failed: "Could not read the topic" },
   propose_mark_done: SUGGESTION_COPY,
   propose_hide: SUGGESTION_COPY,
   propose_mark_read: SUGGESTION_COPY,

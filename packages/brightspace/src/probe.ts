@@ -59,7 +59,7 @@ export type FeasibilityReport = {
   activeEnrollmentCount: number | null;
 };
 
-export type FileProbeOperation = "dropboxAttachment" | "submissionFile";
+export type FileProbeOperation = "dropboxAttachment" | "submissionFile" | "contentTopicFile";
 
 /**
  * `ok`: the route answered 2xx. `not-tested`: the student's data has no such
@@ -204,12 +204,15 @@ export const REQUIRED_READ_ONLY_ROUTES = [
 ] as const;
 
 /**
- * Read-only file routes Ask Nova uses when the student lets it read assignment files. Not needed for Mission
- * Control itself. The OAuth scope that covers the downloads has not been confirmed on the Villanova tenant.
+ * Read-only routes Ask Nova uses when the student lets it read assignment files or a course's Content area.
+ * Not needed for Mission Control itself. The table of contents is JSON; the other three are downloads. The
+ * OAuth scopes that cover them have not been confirmed on the Villanova tenant.
  */
 export const OPTIONAL_FILE_ROUTES = [
   "GET /d2l/api/le/{version}/{orgUnitId}/dropbox/folders/{folderId}/attachments/{fileId}",
   "GET /d2l/api/le/{version}/{orgUnitId}/dropbox/folders/{folderId}/submissions/{submissionId}/files/{fileId}",
+  "GET /d2l/api/le/{version}/{orgUnitId}/content/toc",
+  "GET /d2l/api/le/{version}/{orgUnitId}/content/topics/{topicId}/file",
 ] as const;
 
 /** D2L OAuth 2 scopes that cover the routes above. */

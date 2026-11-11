@@ -18,10 +18,12 @@ export type BrightspaceOperation =
   | "quizzes"
   | "news"
   | "dropboxAttachment"
-  | "submissionFile";
+  | "submissionFile"
+  | "contentToc"
+  | "contentTopicFile";
 
 /** Operations that answer with a file, not JSON. Only the file bridge may request them, and it may request nothing else. */
-export const FILE_OPERATIONS: ReadonlySet<BrightspaceOperation> = new Set<BrightspaceOperation>(["dropboxAttachment", "submissionFile"]);
+export const FILE_OPERATIONS: ReadonlySet<BrightspaceOperation> = new Set<BrightspaceOperation>(["dropboxAttachment", "submissionFile", "contentTopicFile"]);
 
 type RouteRule = { operation: BrightspaceOperation; pattern: RegExp; params: readonly string[] };
 
@@ -47,6 +49,9 @@ const ROUTE_RULES: readonly RouteRule[] = [
   // Read-only file downloads, by exact ids. No listing, no wildcard, no query string.
   { operation: "dropboxAttachment", pattern: new RegExp(String.raw`^/d2l/api/le/${VERSION}/${ID}/dropbox/folders/${ID}/attachments/${ID}$`), params: [] },
   { operation: "submissionFile", pattern: new RegExp(String.raw`^/d2l/api/le/${VERSION}/${ID}/dropbox/folders/${ID}/submissions/${ID}/files/${ID}$`), params: [] },
+  // A course's Content area: its table of contents (JSON), and one topic's file by exact id.
+  { operation: "contentToc", pattern: new RegExp(String.raw`^/d2l/api/le/${VERSION}/${ID}/content/toc$`), params: [] },
+  { operation: "contentTopicFile", pattern: new RegExp(String.raw`^/d2l/api/le/${VERSION}/${ID}/content/topics/${ID}/file$`), params: [] },
 ];
 
 const SAFE_PARAM_VALUE = /^[A-Za-z0-9._~%+:-]*$/;
@@ -150,6 +155,11 @@ export const routes = {
     approve(
       `/d2l/api/le/${assertVersion(le)}/${assertId(orgUnitId, "orgUnitId")}/dropbox/folders/${assertId(folderId, "folderId")}/submissions/${assertId(submissionId, "submissionId")}/files/${assertId(fileId, "fileId")}`,
     ),
+  /** The table of contents of a course's Content area. */
+  contentToc: (le: string, orgUnitId: string): ApprovedBrightspacePath => approve(`/d2l/api/le/${assertVersion(le)}/${assertId(orgUnitId, "orgUnitId")}/content/toc`),
+  /** The file behind one Content topic. */
+  contentTopicFile: (le: string, orgUnitId: string, topicId: string): ApprovedBrightspacePath =>
+    approve(`/d2l/api/le/${assertVersion(le)}/${assertId(orgUnitId, "orgUnitId")}/content/topics/${assertId(topicId, "topicId")}/file`),
 };
 
 /** True when `path` is on the allowlist and answers with a file. */
@@ -166,6 +176,7 @@ export const pageLinks = {
   quiz: (tenantOrigin: string, orgUnitId: string, quizId: string): string =>
     `${tenantOrigin}/d2l/lms/quizzing/user/quiz_summary.d2l?ou=${assertId(orgUnitId, "orgUnitId")}&qi=${assertId(quizId, "quizId")}`,
   news: (tenantOrigin: string, orgUnitId: string): string => `${tenantOrigin}/d2l/lms/news/main.d2l?ou=${assertId(orgUnitId, "orgUnitId")}`,
+  contentTopic: (tenantOrigin: string, orgUnitId: string, topicId: string): string => `${tenantOrigin}/d2l/le/content/${assertId(orgUnitId, "orgUnitId")}/viewContent/${assertId(topicId, "topicId")}/View`,
 };
 
 /** Villanova's confirmed Brightspace host. Configurable per build; never the retired learn.villanova.edu. */

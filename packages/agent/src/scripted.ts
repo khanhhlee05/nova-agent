@@ -60,7 +60,7 @@ const lastUserText = (input: ModelInput): string => {
   return "";
 };
 
-type ToolEcho = { summary?: string; proposed?: string; error?: string; items?: { id?: string }[]; text?: string; file?: string };
+type ToolEcho = { summary?: string; proposed?: string; error?: string; items?: { id?: string }[]; text?: string; file?: string; topic?: string; results?: { topic?: string; text?: string; page?: number; slide?: number }[] };
 
 const parseTool = (content: string): ToolEcho => {
   try {
@@ -76,6 +76,26 @@ const todayOf = (input: ModelInput): string | null => /Today is \w{3} (\d{4}-\d{
 /** The files the system prompt lists, as the model would read them. */
 const filesOf = (input: ModelInput): { name: string; item: string; itemId: string; fileId: string }[] =>
   [...(input.messages[0]?.content ?? "").matchAll(/"([^"]+)" on "([^"]+)" \[item ([a-z]\d+), file (\d+)\]/g)].map((match) => ({ name: match[1] ?? "", item: match[2] ?? "", itemId: match[3] ?? "", fileId: match[4] ?? "" }));
+
+/** The Content topics the system prompt lists, as the model would read them. */
+const topicsOf = (input: ModelInput): { title: string; topicId: string }[] => [...(input.messages[0]?.content ?? "").matchAll(/"([^"]+)" \[topic (\d+)\]/g)].map((match) => ({ title: match[1] ?? "", topicId: match[2] ?? "" }));
+
+/** The course the question names, from the courses the system prompt lists. */
+const courseIn = (input: ModelInput, question: string): string | null => {
+  const names = [...(input.messages[0]?.content ?? "").matchAll(/"([^"]+)" \[id \d+/g)].map((match) => match[1] ?? "");
+  return names.find((name) => name !== "" && question.includes(name.toLowerCase())) ?? null;
+};
+
+/** Up to `max` characters, ending on a whole word. */
+const excerpt = (text: string, max: number): string => {
+  const flat = text.replace(/\[(?:Page|Slide) \d+\]/g, " ").replace(/\s+/g, " ").trim();
+  if (flat.length <= max) return flat;
+  const cut = flat.slice(0, max);
+  return cut.slice(0, Math.max(cut.lastIndexOf(" "), 1)).trim();
+};
+
+const WANTS_MATERIALS = /\b(syllabus|lecture|lectures|slides?|materials?|readings?|notes|manual|late work|office hours|grading|policy|covered|chapter)\b/;
+const WANTS_WHOLE_TOPIC = /\b(summari[sz]e|walk me through|read me|go over)\b/;
 
 const WANTS_FILE = /\b(handout|rubric|attachment|attached|file|instructions|submitted|report)\b/;
 
@@ -100,7 +120,18 @@ export const demoRouter: ScriptedRouter = (input) => {
     if (result.proposed) return { text: [result.summary ?? "I made a suggestion", ". ", "It waits for you to confirm below; nothing has changed yet."], usage: { promptTokens: 140, completionTokens: 20, totalTokens: 160 } };
     // Waiting on the student: say so plainly, the way a model following its instructions would.
     if (result.error && /has not allowed Nova to read attachments/.test(result.error)) return { text: ["I need your permission before I can read that file. Press Allow below and I will answer."] };
+    // Waiting on the student for a course's materials, or for them to say which course.
+    if (result.error && /has not turned on course materials for any course/.test(result.error)) return { text: ["Course materials are not turned on for any course yet. Tell me which course you mean and I will ask to read it."] };
+    if (result.error && /has not turned on course materials/.test(result.error)) return { text: ["I need your permission before I can read that course's materials. Press Allow below and I will answer."] };
     if (result.error) return { text: ["I could not do that: ", result.error] };
+    // A search came back: quote the best passage word for word and say where it is from.
+    const best = result.results?.[0];
+    if (best?.text && best.topic) {
+      const where = best.page ? `, page ${best.page}` : best.slide ? `, slide ${best.slide}` : "";
+      return { text: [`From ${best.topic}${where}: "${excerpt(best.text, 220)}"`], usage: { promptTokens: 380, completionTokens: 50, totalTokens: 430 } };
+    }
+    if (result.results && result.results.length === 0) return { text: [result.summary ?? "I found nothing about that in the materials.", ". Try other words."] };
+    if (typeof result.text === "string" && result.topic) return { text: [`${result.topic} covers: `, excerpt(result.text, 260)], usage: { promptTokens: 400, completionTokens: 60, totalTokens: 460 } };
     // A file was read: quote its opening lines, so the answer visibly comes from the file.
     if (typeof result.text === "string" && result.file) return { text: [`${result.file} says: `, result.text.replace(/\[(?:Page|Slide) \d+\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 260)], usage: { promptTokens: 400, completionTokens: 60, totalTokens: 460 } };
     return { text: [result.summary ?? "Here is what I found.", " ", "The rows below come straight from your Brightspace data."], usage: { promptTokens: 120, completionTokens: 24, totalTokens: 144 } };
@@ -117,6 +148,20 @@ export const demoRouter: ScriptedRouter = (input) => {
     const score = (file: (typeof files)[number]): number => words.filter((word) => `${file.name} ${file.item}`.toLowerCase().includes(word)).length;
     const best = [...files].sort((a, b) => score(b) - score(a))[0] as (typeof files)[number];
     return { toolCalls: [{ name: "read_attachment", args: { itemId: best.itemId, fileId: best.fileId } }] };
+  }
+  if (WANTS_MATERIALS.test(question) && input.tools.some((tool) => tool.function.name === "search_course_materials")) {
+    const topics = topicsOf(input);
+    if (WANTS_WHOLE_TOPIC.test(question) && topics.length > 0) {
+      const words = question.split(/[^a-z0-9]+/).filter((word) => word.length > 2);
+      const score = (topic: (typeof topics)[number]): number => words.filter((word) => topic.title.toLowerCase().includes(word)).length;
+      const best = [...topics].sort((a, b) => score(b) - score(a))[0] as (typeof topics)[number];
+      return { toolCalls: [{ name: "read_course_material", args: { topicId: best.topicId } }] };
+    }
+    const course = courseIn(input, question);
+    // Search with the words the material would use: what follows "about" or "covered", without the course's name.
+    const asked = question.replace(/[?.!]+$/, "");
+    const subject = (/\b(?:about|covered|cover|covers|regarding)\s+(.+)$/.exec(asked)?.[1] ?? asked).replace(course ? new RegExp(`\\s+(?:in|for|of)\\s+${course.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) : /$^/, "").trim();
+    return { toolCalls: [{ name: "search_course_materials", args: { query: (subject.length >= 2 ? subject : asked).slice(0, 200), ...(course ? { course } : {}) } }] };
   }
   if (/\bmark\b.*\bread\b/.test(question)) return { toolCalls: [{ name: "propose_mark_read", args: { all: true } }] };
   const remind = /\b(?:remind me to|add a deadline to|add a reminder to)\s+(.+?)(?:\s+(today|tonight|tomorrow))?(?:\s+at\s+(\d{1,2}(?::\d{2})?\s?(?:am|pm)))?[.?!]*$/.exec(question);

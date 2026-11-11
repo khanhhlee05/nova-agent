@@ -33,6 +33,29 @@ export type ItemAttachment = {
   submissionId?: string;
 };
 
+/**
+ * One topic from a course's Content area: a file the instructor uploaded, a
+ * page written in Brightspace, or a link. Only its place and name are kept
+ * from the table of contents; a file's bytes are fetched when the student
+ * has Nova read the course's materials.
+ */
+export type CourseMaterial = {
+  /** Brightspace topic id. */
+  id: string;
+  courseId: string;
+  title: string;
+  /** The modules the topic sits under, outermost first. */
+  modulePath: string[];
+  /** `file`: an uploaded file. `page`: an HTML page. `link`: an address elsewhere. `other`: anything else (a quiz, a discussion). */
+  type: "file" | "page" | "link" | "other";
+  /** The file's own name, when the topic is a file or a page. */
+  fileName: string | null;
+  /** The topic's page in Brightspace. */
+  url: string | null;
+  /** When Brightspace says the topic last changed. */
+  updatedAt: string | null;
+};
+
 /** A score Brightspace reported for the student on this item. `earned` is null when feedback exists without a number. */
 export type ItemScore = { earned: number | null; graded: boolean };
 
