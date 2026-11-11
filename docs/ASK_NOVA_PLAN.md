@@ -29,7 +29,7 @@ Found in the code and the docs, not guessed:
 
 ## Slices
 
-Each slice is one PR into `main`, `npm run check` green, then a release to `master` when the student can see it. Ordered by value per unit of work; 2 and 3 are independent of each other, 4 depends on 2, 5 depends on 2 and 3, 6 depends on 2 and on the Villanova tenant serving the attachment routes.
+Each slice is one PR into `main`, `npm run check` green, then a release to `master` when the student can see it. Ordered by value per unit of work; 2 and 3 are independent of each other, 4 depends on 2, 5 depends on 2 and 3, 6a depends on 2 and on the Villanova tenant serving the attachment routes, 6b depends on 6a and the content routes.
 
 ### Slice 2: answers match what the panel shows
 
@@ -115,7 +115,7 @@ The model can propose a local action; the student confirms; the extension execut
 
 Tests: each proposal kind round-trips through the protocol; the scripted model's proposal renders a card; confirm writes, dismiss does not; unknown ids never reach the UI.
 
-### Slice 6: attachments, the agent reads what the student has to read
+### Slice 6a: attachments, the agent reads what the student has to read
 
 Lets Ask answer from an assignment's handout and the student's own submitted files. Read-only, through the student's session, on demand only, text extracted on the device. This is the first slice where the model can ask the extension for data it does not have yet, so it also introduces the callback tool channel that later features (announcement bodies, assignment descriptions) reuse.
 
@@ -149,6 +149,42 @@ Lets Ask answer from an assignment's handout and the student's own submitted fil
 
 Tests: schema parsing with and without `Attachments`; route allowlist accepts the two routes and rejects `/dropbox/folders/{id}/attachments/` without a file id; bridge binary cap; extraction of a fixture PDF, docx, and txt; cache round trip and wipe; the callback channel with a scripted model (call, timeout, unknown file id); the consent card appears once per session; the tool is absent from the schema list when reading is off.
 
+### Slice 6b: course materials, the agent knows the course
+
+Widens 6a from one assignment's files to everything the instructor put in Content: syllabus, slides, readings, lab handouts. Same rules: read-only through the student's session, names at sync time, bytes only on request, text extracted and indexed on the device, the server sees clipped passages for one turn only. Reuses the bridge, extraction, cache, and callback channel from 6a.
+
+**Brightspace side**:
+
+- Two allowlisted GET routes: the course table of contents (`/content/toc`) and a topic file (`/content/topics/{topicId}/file`). The probe gains a check for both.
+- `contentTocSchema`: modules with title and nested modules; topics with id, title, type (file, link, HTML page), file name and size when present, and the learner-facing URL.
+- `AcademicSnapshot` gains `materials` per course: the flattened table of contents (topic id, title, module path, type, size, url). Names only; one request per course per sync.
+
+**On the device**:
+
+- Consent per course: "Let Nova read Microcontrollers materials" in course settings or on the first question that needs it. Caps: 60 files and 150 MB per course, 20 MB per file. Over the cap, the student picks which files.
+- Download and extraction in the panel, queued, resumable, with a progress line. Formats from 6a plus pptx (`ppt/slides/*.xml`) and the HTML page topics. Each file is split into passages of about 800 characters with page or slide numbers kept.
+- Storage: Dexie `materialText` (`topicId, courseId, title, modulePath, passages[], extractedAt, bytes`), wiped by "Clear local Nova data", re-read when the topic's size or title changes in the next sync.
+- Index: keyword search (BM25 over passages) built in the extension from `materialText`. No embeddings in this slice, so nothing leaves the device to build the index.
+- Course settings show what was read, when, how much space it takes, and a "Forget materials" button per course.
+
+**Ask side**:
+
+- Callback tools `search_course_materials { courseId?, query, limit? }` (passages with topic title, module path, page or slide, score) and `read_course_material { topicId, page? | from?, to? }` (one clipped section, 12 000 characters). The snapshot carries the table of contents names so the model knows what exists.
+- Rows: a new kind `material` (`topicId, courseId, title, modulePath, page, url`) with Open (the topic page in Brightspace). An answer that used a passage shows the row as its citation.
+- Honesty check accepts passage text as a source: a phrase the answer quotes must appear in a passage the tools returned that turn.
+- Consent: the setup card says "the text of course materials, only for courses you allowed and only the passages a question needs". The tool list sent to the model excludes the two tools for courses without consent, by passing the allowed course ids in the request.
+
+**What it answers**: "What does the syllabus say about late work", "which lecture covered interrupts", "what should I read before Thursday's quiz", "which chapter does Lab 3 build on", and study plans in slice 4 that attach readings to each slot.
+
+**Risks and bounds**:
+
+- Volume and time: caps, queueing, and names-only sync keep the regular refresh unchanged.
+- Copyright and policy: materials belong to the instructor. Files and the index stay on the device; the server holds clipped passages in memory for one request. The privacy table states this.
+- Prompt injection surface grows from titles to whole documents: same markers and read-only tools; tests feed a hostile slide deck through extraction, search, and the loop.
+- Tokens per turn rise when passages ride along. `search_course_materials` returns at most 8 passages, the status line shows the cost, and the daily cap still applies.
+
+Tests: table-of-contents parsing with nested modules and link topics; the allowlist accepts both routes and rejects a topic path without an id; extraction of fixture pptx and HTML; passage splitting keeps page numbers; BM25 returns the fixture syllabus passage for "late work"; consent gates the tool list; the honesty check passes a quoted phrase from a passage and flags one from nowhere; cap behaviour when a course exceeds 60 files; "Forget materials" empties the table and the index.
+
 ### Slice 7: quality and resilience
 
 **Offline fallback** (`IntentsModel` from `CHATBOT_PLAN.md`): a small grammar in the extension maps the chip questions and their close variants ("what's due", "overdue", "changed", "start first", "next week", "<course name> this week") to one tool call and a templated sentence, run in-process with the same tools. Used when the server is unreachable, has no key, is rate limited, or the budget is exhausted, with a note "Answered on this device without the AI model". Questions the grammar does not match keep the current error banner.
@@ -167,7 +203,7 @@ Tests: schema parsing with and without `Attachments`; route allowlist accepts th
 
 ### Slice 8: hosted backend
 
-Unchanged from `BACKEND_PLAN.md`: sign-in, per-user quotas, saved conversations across devices, Google Calendar through confirmed proposals. Slices 3 and 5 are designed so that moving storage and execution to the server later is a transport change, not a UI change. Attachment text from slice 6 never moves to the server: it stays a callback from the device.
+Unchanged from `BACKEND_PLAN.md`: sign-in, per-user quotas, saved conversations across devices, Google Calendar through confirmed proposals. Slices 3 and 5 are designed so that moving storage and execution to the server later is a transport change, not a UI change. Attachment and course material text from slice 6 never moves to the server: it stays a callback from the device, and the index stays in the extension.
 
 ## Protocol changes by slice
 
@@ -177,22 +213,23 @@ Unchanged from `BACKEND_PLAN.md`: sign-in, per-user quotas, saved conversations 
 | 3 | `summary?` | `done.summary?` | none |
 | 4 | none | rows `plan-day`, `course` | none |
 | 5 | none | `proposal` | none |
-| 6 | none | `client_tool`, plus `POST /v1/chat/{turnId}/tool-result`; rows `attachment` | `items[].attachments` (optional) |
+| 6a | none | `client_tool`, plus `POST /v1/chat/{turnId}/tool-result`; rows `attachment` | `items[].attachments` (optional) |
+| 6b | `materialsAllowed: courseId[]` | rows `material` | `courses[].materials` (optional, names only) |
 | 7 | none | `text` deltas, `verdict` | none |
 
 The API keeps accepting the previous version for one release so an older extension gets answers, not `bad_request`.
 
 ## Privacy statement after slices 2 and 6
 
-Added to the "what is sent" table after slice 2: done marks (as a flag per item), personal deadlines (title, date, course), the active course filter and tab, the count of hidden items. After slice 6: attachment names and sizes with every question, and the extracted text of one attachment only in a turn where the student asked about it and attachment reading is on. Still never sent: cookies, raw responses, the tenant, the student id or name, announcement bodies, the contents of hidden items, attachment bytes (only extracted text, clipped).
+Added to the "what is sent" table after slice 2: done marks (as a flag per item), personal deadlines (title, date, course), the active course filter and tab, the count of hidden items. After slice 6a: attachment names and sizes with every question, and the extracted text of one attachment only in a turn where the student asked about it and attachment reading is on. After slice 6b: the table of contents of each course (titles, module names, file names, sizes) with every question, and up to eight passages of course material per turn, only from courses the student allowed and only when a question needed them. Still never sent: cookies, raw responses, the tenant, the student id or name, announcement bodies, the contents of hidden items, attachment or material bytes (only extracted text, clipped), the search index.
 
 ## Testing additions
 
-- Fixture scenarios in the preview harness: `ask-plan`, `ask-proposal`, `ask-restored`, `ask-attachment`, `ask-offline`.
+- Fixture scenarios in the preview harness: `ask-plan`, `ask-proposal`, `ask-restored`, `ask-attachment`, `ask-materials`, `ask-offline`.
 - Screenshots for the new states in `docs/screenshots/`.
 - A scripted-model transcript per new tool and per proposal kind.
 - `npm run smoke:api` gains `--question "Plan my next three days"` and asserts a `plan-day` row, and `--question "What does the Lab 3 handout ask for"` with a fixture callback that asserts a `client_tool` event and an `attachment` row.
-- `npm run probe` reports whether the two attachment routes answer on the tenant.
+- `npm run probe` reports whether the two attachment routes and the two content routes answer on the tenant.
 
 ## Open decisions
 
@@ -202,3 +239,5 @@ Added to the "what is sent" table after slice 2: done marks (as a flag per item)
 4. Whether the offline intent matcher ships before or after proposals. Recommended: after slice 4, because it reuses the planning tool.
 5. Whether attachment names and sizes ride along with every question (slice 6 as written) or only appear through the tool. Recommended: with every question, since names are no more sensitive than titles and let the model call the tool without a round of guessing.
 6. Whether to extract text at sync time for small files (under 200 KB) so the first question is instant. Recommended: no, keep it on demand until the tenant check passes and usage shows it is wanted.
+7. Whether 6b needs embeddings. Recommended: no until keyword search is shown to miss real questions; embeddings mean either a model on the device or sending every file to the server.
+8. Whether course material consent is per course (6b as written) or one switch for all courses. Recommended: per course, because the cost and the copyright question are per course.
