@@ -1,9 +1,10 @@
-import { createSameOriginFetcher, validateApprovedPath } from "@nova-agent/brightspace/src/routes-and-transport";
-import { BADGE_STORAGE_KEY, parseMessage, type FetchBridgeResult } from "./messaging/protocol";
+import { FILE_TIMEOUT_MS, HARD_FILE_CAP_BYTES, createSameOriginFetcher, createSameOriginFileFetcher, isApprovedFilePath, validateApprovedPath } from "@nova-agent/brightspace/src/routes-and-transport";
+import { BADGE_STORAGE_KEY, parseMessage, type FetchBridgeResult, type FileBridgeResult } from "./messaging/protocol";
 
 /**
  * Content script: owns only the Nova Orb launcher and the whitelisted
- * same-origin request bridge. It never reads cookies, never renders the
+ * same-origin request bridge, for JSON routes and, separately, for the few
+ * file routes on the allowlist. It never reads cookies, never renders the
  * dashboard, and only answers messages from this extension.
  */
 
@@ -82,12 +83,29 @@ const mountOrb = (): { setBadge: (count: number) => void; setSyncing: (syncing: 
 
 const withTimeout = async (path: string): Promise<FetchBridgeResult> => {
   const approved = validateApprovedPath(path, location.origin);
-  if (!approved) return { ok: false, reason: "unsafe-path" };
+  // File routes answer with bytes; they go through the file bridge and its size cap, never through this one.
+  if (!approved || isApprovedFilePath(approved.path, location.origin)) return { ok: false, reason: "unsafe-path" };
   const rawFetch = createSameOriginFetcher(location.origin);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     const response = await rawFetch(approved.path, { signal: controller.signal });
+    return { ok: true, response };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error && error.name === "AbortError" ? "timeout" : "network" };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/** One file, by an approved file route only, never larger than the hard cap, read while it streams. */
+const fetchFileWithTimeout = async (path: string, maxBytes: number, headOnly: boolean): Promise<FileBridgeResult> => {
+  if (!isApprovedFilePath(path, location.origin)) return { ok: false, reason: "unsafe-path" };
+  const rawFileFetch = createSameOriginFileFetcher(location.origin);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FILE_TIMEOUT_MS);
+  try {
+    const response = await rawFileFetch(path, { signal: controller.signal, maxBytes: Math.min(maxBytes, HARD_FILE_CAP_BYTES), headOnly });
     return { ok: true, response };
   } catch (error) {
     return { ok: false, reason: error instanceof Error && error.name === "AbortError" ? "timeout" : "network" };
@@ -122,6 +140,9 @@ const start = (): void => {
         return false;
       case "BRIGHTSPACE_FETCH":
         void withTimeout(message.path).then(sendResponse);
+        return true;
+      case "BRIGHTSPACE_FETCH_FILE":
+        void fetchFileWithTimeout(message.path, message.maxBytes, message.headOnly).then(sendResponse);
         return true;
       case "SYNC_PROGRESS":
         orb?.setSyncing(!["ready", "partial", "failed", "offline", "session-expired", "permission-required", "idle"].includes(message.phase));

@@ -30,6 +30,8 @@ export type CompactOptions = {
   dismissedItemKeys?: { has(key: string): boolean };
   /** Deadlines the student added by hand on the Week tab. */
   personal?: readonly PersonalInput[];
+  /** Send the names of each item's files. Only while the student lets Ask Nova read attachments. */
+  includeAttachments?: boolean;
 };
 
 /** The fields of a student-added deadline the compact snapshot needs. */
@@ -161,6 +163,14 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
         status: item.status,
         ...(doneLocally ? { doneLocally: true } : {}),
         ...(isActive(item) && !doneLocally ? { estimateMinutes: estimateStudyMinutes(item) } : {}),
+        ...(options.includeAttachments && item.attachments && item.attachments.length > 0
+          ? {
+              attachments: item.attachments
+                .filter((file) => /^\d{1,12}$/.test(file.id) && cleanText(file.name) !== "")
+                .slice(0, COMPACT_LIMITS.attachments)
+                .map((file) => ({ id: file.id, name: cleanText(file.name).slice(0, COMPACT_LIMITS.fileName), size: typeof file.size === "number" && file.size >= 0 ? Math.round(file.size) : null, source: file.source })),
+            }
+          : {}),
         visibility: compactVisibility(item),
         pointsPossible: item.pointsPossible,
         earnedScore: item.score?.graded ? item.score.earned : null,

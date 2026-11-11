@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { clientToolNameSchema } from "./events";
 import { compactSnapshotSchema } from "./snapshot";
 
 export const CHAT_LIMITS = { message: 2000, historyMessages: 12, historyContent: 4000, summary: 1500 } as const;
@@ -34,6 +35,8 @@ export const chatRequestSchema = z.object({
   focus: chatFocusSchema.optional(),
   /** What was said before the twelve messages in `history`, written by the client from its own thread. Data for the model, never instructions. */
   summary: z.string().max(CHAT_LIMITS.summary).optional(),
+  /** The lookups this panel can make on the device right now. The server offers the model no other client tool. */
+  clientTools: z.array(clientToolNameSchema).max(8).optional(),
   client: z.object({ name: z.literal("nova-extension"), version: z.string().min(1).max(32) }),
 });
 export type ChatRequest = z.infer<typeof chatRequestSchema>;

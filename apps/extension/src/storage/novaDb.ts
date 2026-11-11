@@ -1,6 +1,7 @@
 import Dexie, { type EntityTable } from "dexie";
 import type { FeasibilityReport, ResolvedVersions, SyncWarning, BrightspaceError } from "@nova-agent/brightspace";
 import type { AcademicSnapshot, ChangeEvent } from "@nova-agent/core";
+import type { ExtractFailure, FileKind, TextPart } from "../files/extract";
 import type { SyncPhase } from "../messaging/protocol";
 import type { AskMessage } from "../sidepanel/ask/thread";
 
@@ -71,6 +72,29 @@ export type ConversationRecord = {
   messages: AskMessage[];
 };
 
+/**
+ * The text of one assignment file, extracted on this device after the student
+ * asked for it. Kept so a second question does not download the file again.
+ * A file that gave no text is remembered too, with the reason, for the same
+ * purpose. The bytes themselves are never stored.
+ */
+export type AttachmentTextRecord = {
+  /** `${itemKey}#${fileId}`. */
+  id: string;
+  itemKey: string;
+  fileId: string;
+  scope: string;
+  name: string;
+  /** Null when the file gave no text; `failure` says why. */
+  kind: FileKind | null;
+  parts: TextPart[];
+  truncated: boolean;
+  failure: ExtractFailure | null;
+  /** Size of the file that was read, in bytes. */
+  bytes: number;
+  extractedAt: string;
+};
+
 export class NovaDb extends Dexie {
   snapshots!: EntityTable<StoredSnapshot, "id">;
   changeEvents!: EntityTable<StoredChangeEvent, "id">;
@@ -81,6 +105,7 @@ export class NovaDb extends Dexie {
   localMarks!: EntityTable<LocalMarkRecord, "key">;
   personalItems!: EntityTable<PersonalItemRecord, "id">;
   conversations!: EntityTable<ConversationRecord, "id">;
+  attachmentText!: EntityTable<AttachmentTextRecord, "id">;
 
   constructor(name = "nova-agent") {
     super(name);
@@ -95,6 +120,7 @@ export class NovaDb extends Dexie {
     this.version(2).stores({ localMarks: "key, scope" });
     this.version(3).stores({ personalItems: "id, scope, dueAt" });
     this.version(4).stores({ conversations: "id, scope, updatedAt" });
+    this.version(5).stores({ attachmentText: "id, scope, itemKey, extractedAt" });
   }
 }
 

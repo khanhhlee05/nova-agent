@@ -28,14 +28,14 @@ flowchart TD
 
 | Area | Responsibility |
 |---|---|
-| `packages/brightspace` | Route allowlist and builders, version discovery, both paging forms, retries and rate limiting, session detection, Zod schemas, error union, normalization, feasibility probe, demo tenant fixtures |
+| `packages/brightspace` | Route allowlist and builders, version discovery, both paging forms, retries and rate limiting, session detection, Zod schemas, error union, normalization, feasibility probe, the capped file transport for the two assignment-file routes, demo tenant fixtures |
 | `packages/core` | Canonical models, stable keys, local-timezone deadline buckets, snapshots, retention constants, semantic diff |
 | `packages/planner` | Pure priority score, stable ordering, reason text |
-| `apps/extension` | Manifest V3 lifecycle, Nova Orb content script, typed messaging, Chrome host boundary, Dexie persistence, sync coordinator, Mission Control UI |
+| `apps/extension` | Manifest V3 lifecycle, Nova Orb content script, typed messaging (a JSON bridge and a separate, capped file bridge), Chrome host boundary, Dexie persistence, sync coordinator, on-device text extraction (`src/files`), Mission Control UI |
 | `apps/web` | Public demo only. Untouched by this slice. |
 | `packages/protocol` | Zod schemas shared by extension and API: compact snapshot, chat request, server-sent events, SSE parser |
 | `packages/agent` | Compact snapshot builder (runs in the browser), read-only tools, `runTurn` loop with the honesty check, `ChatModel` adapters (OpenAI-compatible streaming, scripted) |
-| `apps/api` | Node + Hono: `POST /v1/chat` (SSE), `GET /healthz`, CORS allowlist, body limit, optional dev token, daily token cap, content-free logs. Stateless. |
+| `apps/api` | Node + Hono: `POST /v1/chat` (SSE), `POST /v1/chat/{turnId}/tool-result` (the panel's answer to a lookup only it can make), `GET /healthz`, CORS allowlist, body limit, optional dev token, daily token cap, content-free logs. Stores nothing; a turn's pending lookups live in memory until it ends. |
 
 ## Sync state machine
 
@@ -81,6 +81,6 @@ See [BRIGHTSPACE_ACCESS.md](./BRIGHTSPACE_ACCESS.md). In short: the feasibility 
 
 ## Data retention and privacy
 
-- Stored locally only: normalized academic metadata, change events, sync status, UI preferences, resolved API versions, and the sanitized feasibility report.
+- Stored locally only: normalized academic metadata (including the names and sizes of assignment files), change events, sync status, UI preferences, resolved API versions, the sanitized feasibility report and file access check, done marks, the student's own deadlines, saved Ask Nova conversations when saving is on, and the extracted text of assignment files the student had Nova read (newest 50; never the files themselves).
 - Never stored or logged: cookies, tokens, raw HTML, raw Brightspace payloads, announcement attachments.
 - **Clear local Nova data** in the panel menu wipes every table after confirmation.

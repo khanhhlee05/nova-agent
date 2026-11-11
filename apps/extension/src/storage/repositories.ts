@@ -11,7 +11,7 @@ import {
 } from "@nova-agent/core";
 import { MAX_CONVERSATIONS, conversationTitle, reviveMessages, type StoredConversation } from "../sidepanel/ask/conversations";
 import type { AskMessage } from "../sidepanel/ask/thread";
-import type { ConversationRecord, LocalMarkRecord, NovaDb, PersonalItemRecord, StoredChangeEvent, StoredSnapshot, SyncStatusRecord } from "./novaDb";
+import type { AttachmentTextRecord, ConversationRecord, LocalMarkRecord, NovaDb, PersonalItemRecord, StoredChangeEvent, StoredSnapshot, SyncStatusRecord } from "./novaDb";
 
 export const INITIAL_SYNC_STATUS: SyncStatusRecord = {
   key: "current",
@@ -211,6 +211,25 @@ export const deleteConversation = async (db: NovaDb, id: string): Promise<void> 
 /** Turning "Save conversations" off deletes every saved one, for every account on this device. */
 export const clearConversations = async (db: NovaDb): Promise<void> => {
   await db.conversations.clear();
+};
+
+/** How many read files are kept per account. The oldest read goes first. */
+export const MAX_ATTACHMENT_TEXTS = 50;
+
+export const attachmentTextId = (itemKey: string, fileId: string): string => `${itemKey}#${fileId}`;
+
+export const listAttachmentTexts = async (db: NovaDb, scope: string): Promise<AttachmentTextRecord[]> => db.attachmentText.where("scope").equals(scope).toArray();
+
+export const getAttachmentText = async (db: NovaDb, itemKey: string, fileId: string): Promise<AttachmentTextRecord | null> => (await db.attachmentText.get(attachmentTextId(itemKey, fileId))) ?? null;
+
+/** Stores one file's text and keeps the newest `MAX_ATTACHMENT_TEXTS` for the account. */
+export const putAttachmentText = async (db: NovaDb, record: AttachmentTextRecord): Promise<void> => {
+  await db.transaction("rw", db.attachmentText, async () => {
+    await db.attachmentText.put(record);
+    const all = await db.attachmentText.where("scope").equals(record.scope).toArray();
+    const stale = all.sort((a, b) => b.extractedAt.localeCompare(a.extractedAt) || a.id.localeCompare(b.id)).slice(MAX_ATTACHMENT_TEXTS);
+    if (stale.length > 0) await db.attachmentText.bulkDelete(stale.map((entry) => entry.id));
+  });
 };
 
 export const getPreference = async <T>(db: NovaDb, key: string, fallback: T): Promise<T> => {

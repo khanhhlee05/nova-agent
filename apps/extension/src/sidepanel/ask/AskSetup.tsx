@@ -20,6 +20,7 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose }
   const [apiBaseUrl, setApiBaseUrl] = useState(settings.apiBaseUrl || DEFAULT_ASK_SETTINGS.apiBaseUrl);
   const [token, setToken] = useState(settings.token ?? "");
   const [persist, setPersist] = useState(settings.persistConversations === true);
+  const [readFiles, setReadFiles] = useState(settings.readAttachments !== false);
   // The default server is prefilled, so the address and access code stay folded away until someone needs them.
   const [showServer, setShowServer] = useState(editing || apiBaseUrl !== DEFAULT_ASK_SETTINGS.apiBaseUrl || token !== "");
   const [check, setCheck] = useState<{ state: "idle" | "checking" | "ok" | "fail"; text: string }>({ state: "idle", text: "" });
@@ -38,7 +39,7 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose }
 
   const save = (enabled: boolean) => {
     if (!normalized) return;
-    onChange({ enabled, apiBaseUrl: normalized, token: token.trim() || null, persistConversations: persist });
+    onChange({ enabled, apiBaseUrl: normalized, token: token.trim() || null, persistConversations: persist, readAttachments: readFiles });
     onClose?.();
   };
 
@@ -89,6 +90,17 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose }
               : settings.persistConversations
                 ? "Saving this turns it off and deletes every saved conversation."
                 : "Off: a conversation is gone when you close the panel."}
+          </span>
+        </span>
+      </label>
+      <label className="ask-toggle">
+        <input type="checkbox" className="checkbox" checked={readFiles} onChange={(event) => setReadFiles(event.target.checked)} />
+        <span>
+          <strong>Let Nova read assignment files when a question needs one</strong>
+          <span className="ask-toggle-note">
+            {readFiles
+              ? "Nova asks once per session before the first file. The file is opened on this device, and the text your question needs is sent with it. File names go with every question."
+              : "Off: Nova never opens a handout or a submitted file, and their names are not sent."}
           </span>
         </span>
       </label>

@@ -9,7 +9,7 @@ import { z } from "zod";
  * Time-zone facts (buckets, local date strings, days ago) are computed in the
  * browser so a server in any zone reads the same "today" the student sees.
  */
-export const COMPACT_LIMITS = { courses: 12, items: 200, announcements: 30, changes: 60, personal: 100, title: 200, reasons: 3 } as const;
+export const COMPACT_LIMITS = { courses: 12, items: 200, announcements: 30, changes: 60, personal: 100, title: 200, reasons: 3, attachments: 10, fileName: 120 } as const;
 
 const title = z.string().min(1).max(COMPACT_LIMITS.title);
 const iso = z.string().min(1);
@@ -32,6 +32,16 @@ export const compactCourseSchema = z.object({
   active: z.boolean(),
 });
 export type CompactCourse = z.infer<typeof compactCourseSchema>;
+
+/** A file on an assignment, by name. The bytes and the text never ride in the snapshot. */
+export const compactAttachmentSchema = z.object({
+  id: z.string().min(1).max(12),
+  name: z.string().min(1).max(COMPACT_LIMITS.fileName),
+  size: z.number().int().min(0).nullable(),
+  /** `instructor`: attached to the assignment. `submission`: handed in by the student. */
+  source: z.enum(["instructor", "submission"]),
+});
+export type CompactAttachment = z.infer<typeof compactAttachmentSchema>;
 
 export const compactItemSchema = z.object({
   /** Short id: kind initial plus the Brightspace source id, for example "a4101" or "q5101". */
@@ -66,6 +76,8 @@ export const compactItemSchema = z.object({
   /** Priority score 0..100 from the planner, null when the item is not rankable. */
   priority: z.number().int().min(0).max(100).nullable(),
   reasons: z.array(z.string().max(160)).max(COMPACT_LIMITS.reasons),
+  /** Names of the files on the assignment. Sent only while the student lets Ask Nova read attachments. */
+  attachments: z.array(compactAttachmentSchema).max(COMPACT_LIMITS.attachments).optional(),
 });
 export type CompactItem = z.infer<typeof compactItemSchema>;
 

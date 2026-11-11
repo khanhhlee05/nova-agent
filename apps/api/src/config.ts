@@ -20,6 +20,8 @@ export const configSchema = z.object({
   MAX_TOKENS: z.coerce.number().int().min(64).max(4096).default(700),
   MAX_ROUNDS: z.coerce.number().int().min(1).max(8).default(4),
   REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).default(60_000),
+  /** How long a turn waits for the panel to answer a lookup only it can make. */
+  CLIENT_TOOL_TIMEOUT_MS: z.coerce.number().int().min(500).max(120_000).default(30_000),
   DAILY_TOKEN_CAP: z.coerce.number().int().min(0).default(200_000),
   /** Worst-case tokens reserved per request before the model is called. Defaults to MAX_TOKENS × MAX_ROUNDS. */
   TURN_TOKEN_ESTIMATE: z.coerce.number().int().min(1).optional(),

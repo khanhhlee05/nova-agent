@@ -6,6 +6,7 @@ import type { ApiConfig } from "./config";
 import { matchOrigin } from "./cors";
 import { errorBody } from "./errors";
 import { silentLogger, type Logger } from "./log";
+import { PendingClientCalls } from "./pending";
 import { chatRoute } from "./routes/chat";
 import { healthRoute } from "./routes/health";
 import { UsageCounter } from "./usage";
@@ -17,9 +18,10 @@ export type AppDeps = {
   logger?: Logger;
   usage?: UsageCounter;
   now?: () => Date;
+  pending?: PendingClientCalls;
 };
 
-export type AppContext = { config: ApiConfig; model: ChatModel | null; logger: Logger; usage: UsageCounter; now: () => Date };
+export type AppContext = { config: ApiConfig; model: ChatModel | null; logger: Logger; usage: UsageCounter; now: () => Date; pending: PendingClientCalls };
 
 export const MAX_BODY_BYTES = 256 * 1024;
 
@@ -40,6 +42,7 @@ export const createApp = (deps: AppDeps): Hono => {
     logger: deps.logger ?? silentLogger,
     usage: deps.usage ?? new UsageCounter(deps.config.DAILY_TOKEN_CAP),
     now: deps.now ?? (() => new Date()),
+    pending: deps.pending ?? new PendingClientCalls(),
   };
   const app = new Hono();
 

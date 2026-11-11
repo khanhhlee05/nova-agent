@@ -1,12 +1,13 @@
 import { shortId } from "@nova-agent/agent";
 import { isDone, type AcademicItem, type ChangeEvent } from "@nova-agent/core";
 import type { ToolRow } from "@nova-agent/protocol";
-import { BookOpen, CalendarDays, Check, ChevronDown, ExternalLink, EyeOff, ListFilter, Megaphone, PenLine, Pin } from "lucide-react";
+import { BookOpen, CalendarDays, Check, ChevronDown, ExternalLink, EyeOff, FileText, ListFilter, Megaphone, PenLine, Pin } from "lucide-react";
 import { useId, useMemo, useState, type ReactNode } from "react";
 import { KindIcon, StatusIcon, changeIcon } from "../components/icons";
 import { Tip } from "../components/Tip";
 import { formatDeadline, formatRelative, pluralize } from "../format";
 import { STATUS_LABELS, changeVerb, type Dashboard, type PersonalDeadline } from "../model";
+import { formatBytes } from "../../files/attachments";
 import { courseSwatch } from "../theme";
 import type { PlanDraft } from "./AskPlan";
 
@@ -52,11 +53,12 @@ type AnnouncementRow = Extract<ToolRow, { kind: "announcement" }>;
 type ChangeRow = Extract<ToolRow, { kind: "change" }>;
 type PersonalRow = Extract<ToolRow, { kind: "personal" }>;
 type CourseRow = Extract<ToolRow, { kind: "course" }>;
+type AttachmentRow = Extract<ToolRow, { kind: "attachment" }>;
 
 /** Rows the list under an answer knows how to draw. Other kinds have their own cards. */
-export type ListRow = ItemRow | AnnouncementRow | ChangeRow | PersonalRow | CourseRow;
+export type ListRow = ItemRow | AnnouncementRow | ChangeRow | PersonalRow | CourseRow | AttachmentRow;
 
-export const isListRow = (row: ToolRow): row is ListRow => row.kind === "item" || row.kind === "announcement" || row.kind === "change" || row.kind === "personal" || row.kind === "course";
+export const isListRow = (row: ToolRow): row is ListRow => row.kind === "item" || row.kind === "announcement" || row.kind === "change" || row.kind === "personal" || row.kind === "course" || row.kind === "attachment";
 
 const asEvent = (row: ChangeRow): ChangeEvent => ({
   id: row.id,
@@ -155,6 +157,35 @@ export const AskRows = ({ rows, dashboard, now, canOpen, onOpen, live }: AskRows
                     <Megaphone size={15} aria-hidden="true" />
                   </span>
                   {openButton(row.title, row.url, row.courseId)}
+                </div>
+              </div>
+            </li>
+          );
+        }
+        if (row.kind === "attachment") {
+          return (
+            <li key={`attachment-${row.id}`} className="task">
+              <div className="task-row">
+                <div className="task-main">
+                  <span className="task-title" title={row.title}>
+                    {row.title}
+                  </span>
+                  <span className="task-sub">
+                    <span className="task-course">
+                      {dotFor(row.courseId)}
+                      {row.itemTitle}
+                    </span>
+                    <span className="due">
+                      {row.source === "instructor" ? "From your instructor" : "You handed this in"} · {formatBytes(row.size)}
+                    </span>
+                    {row.read ? <span className="mark-label">Read on this device</span> : null}
+                  </span>
+                </div>
+                <div className="task-aside">
+                  <span className="kind-chip" role="img" aria-label="File">
+                    <FileText size={15} aria-hidden="true" />
+                  </span>
+                  {openButton(row.itemTitle, row.url, row.courseId)}
                 </div>
               </div>
             </li>

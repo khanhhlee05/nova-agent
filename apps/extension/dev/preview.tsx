@@ -5,6 +5,7 @@ import {
   SessionTransport,
   VILLANOVA_BRIGHTSPACE_ORIGIN,
   buildDemoTenant,
+  demoFileFetch,
   demoResolver,
   htmlResponse,
   jsonResponse,
@@ -127,7 +128,8 @@ const main = async () => {
 
   createRoot(document.getElementById("root") as HTMLElement).render(
     <StrictMode>
-      <App db={db} host={host} now={fixedNow ? now : undefined} transportFactory={factory} autoSync={autoSync} askClientFactory={askClientFactory} />
+      {/* The harness has no Brightspace tab, so files come from the demo tenant whatever the data is labeled as. */}
+      <App db={db} host={host} now={fixedNow ? now : undefined} transportFactory={factory} autoSync={autoSync} askClientFactory={askClientFactory} fileFetchFactory={() => demoFileFetch(buildDemoTenant(now()))} />
     </StrictMode>,
   );
 };

@@ -144,7 +144,9 @@ describe("Ask tab", () => {
     fireEvent.click(screen.getByRole("button", { name: /turn on ask nova/i }));
     // Saving conversations is offered on the card and is off unless the student ticks it.
     expect((screen.getByRole("checkbox", { name: /save conversations on this device/i }) as HTMLInputElement).checked).toBe(false);
-    expect(ask.settingsCalls).toEqual([{ enabled: true, apiBaseUrl: "http://localhost:8787", token: null, persistConversations: false }]);
+    // Reading assignment files is on unless unticked; it still asks once per session before the first file.
+    expect((screen.getByRole("checkbox", { name: /let nova read assignment files/i }) as HTMLInputElement).checked).toBe(true);
+    expect(ask.settingsCalls).toEqual([{ enabled: true, apiBaseUrl: "http://localhost:8787", token: null, persistConversations: false, readAttachments: true }]);
   });
 
   it("tests the connection from the setup card", async () => {

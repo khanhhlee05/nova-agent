@@ -9,6 +9,7 @@ import { AskConversations } from "./AskConversations";
 import type { ConversationSummary } from "./conversations";
 import type { ProposalAction } from "./AskProposals";
 import type { AskProposal, ProposalContext } from "./proposals";
+import { formatBytes, type ConsentRequest } from "./clientTools";
 import type { AskLive } from "./AskRows";
 import { hostOf, type AskSettings } from "./askSettings";
 import { AskSetup } from "./AskSetup";
@@ -41,6 +42,15 @@ export type AskViewProps = {
   /** The data suggestions are checked against, and the handler that carries one out. */
   proposalContext?: ProposalContext;
   onProposal?: (messageId: string, proposal: AskProposal, action: ProposalAction) => void;
+  /** Present while Nova is waiting for the student to allow reading a file. */
+  consent?: AskConsent;
+};
+
+export type AskConsent = {
+  pending: ConsentRequest | null;
+  /** Allows reading attachments for the rest of this session and asks the question again. */
+  onAllow: () => void;
+  onDecline: () => void;
 };
 
 export type AskSavedConversations = {
@@ -51,7 +61,7 @@ export type AskSavedConversations = {
 };
 
 /** The Ask tab body: setup card until enabled, then the thread and the composer. */
-export const AskView = ({ notices, thread, settings, onSettingsChange, clientFactory, dashboard, mode, now, canOpen, onOpen, live, draft = null, about = null, onClearAbout, onSend, conversations, proposalContext, onProposal }: AskViewProps) => {
+export const AskView = ({ notices, thread, settings, onSettingsChange, clientFactory, dashboard, mode, now, canOpen, onOpen, live, draft = null, about = null, onClearAbout, onSend, conversations, proposalContext, onProposal, consent }: AskViewProps) => {
   const [editing, setEditing] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const saved = settings.persistConversations === true && conversations ? conversations : null;
@@ -112,6 +122,22 @@ export const AskView = ({ notices, thread, settings, onSettingsChange, clientFac
           ) : (
             <AskThread messages={thread.messages} status={thread.status} dashboard={dashboard} now={now} apiBaseUrl={settings.apiBaseUrl} canOpen={canOpen} onOpen={onOpen} onRetry={thread.retryLast} onSettings={() => setEditing(true)} live={live} onAsk={thread.send} proposalContext={proposalContext} onProposal={onProposal} />
           )
+        ) : null}
+        {settings.enabled && !editing && consent?.pending ? (
+          <section className="ask-proposal ask-consent" data-state="pending" aria-label="Permission to read a file">
+            <p className="ask-proposal-kicker">Nova asks</p>
+            <p className="ask-proposal-text">
+              May Nova read <strong>{consent.pending.fileName}</strong> ({formatBytes(consent.pending.size)}) from "{consent.pending.itemTitle}"? It is downloaded through your Brightspace session and opened on this device. The part your question needs goes to the Nova server with it.
+            </p>
+            <div className="card-actions">
+              <button type="button" className="button button-primary button-sm" onClick={consent.onAllow} disabled={streaming}>
+                Allow for this session
+              </button>
+              <button type="button" className="button button-ghost button-sm" onClick={consent.onDecline}>
+                Not now
+              </button>
+            </div>
+          </section>
         ) : null}
         <p className="sr-only" aria-live="polite" aria-atomic="true">
           {thread.announcement ?? ""}

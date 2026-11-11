@@ -17,6 +17,22 @@ export type Importance = "low" | "normal" | "high";
 /** How an assignment is handed in. D2L SUBMISSIONTYPE_T: 0 file, 1 text, 2 on paper, 3 observed in person. */
 export type SubmissionType = "online" | "on-paper" | "observed" | "unknown";
 
+/**
+ * A file attached to an assignment: one the instructor attached to the
+ * folder, or one the student handed in. Only the name and size are kept from
+ * a refresh; the bytes are fetched when the student asks for them.
+ */
+export type ItemAttachment = {
+  /** Brightspace file id, unique within its folder or submission. */
+  id: string;
+  name: string;
+  /** Size in bytes, when Brightspace says. */
+  size: number | null;
+  source: "instructor" | "submission";
+  /** The submission the file belongs to; present for `submission` files. */
+  submissionId?: string;
+};
+
 /** A score Brightspace reported for the student on this item. `earned` is null when feedback exists without a number. */
 export type ItemScore = { earned: number | null; graded: boolean };
 
@@ -68,6 +84,8 @@ export type AcademicItem = {
   lateAllowed?: boolean | null;
   /** The score Brightspace reported; null when nothing has been graded. */
   score?: ItemScore | null;
+  /** Files on the assignment. Absent on quizzes and on snapshots stored before attachments were read. */
+  attachments?: ItemAttachment[];
 };
 
 export type Announcement = {

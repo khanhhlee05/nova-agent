@@ -5,6 +5,7 @@ import {
   type AcademicItem,
   type Announcement,
   type Course,
+  type ItemAttachment,
   type ItemScore,
   type ItemStatus,
   type SubmissionType,
@@ -106,12 +107,34 @@ const submissionTypeOf = (code: number | null | undefined): SubmissionType => {
   }
 };
 
+/** At most this many files are kept per assignment: enough for any real handout set, bounded against a hostile response. */
+export const MAX_ATTACHMENTS_PER_ITEM = 20;
+
+/**
+ * The files on an assignment: the instructor's first, then the files of the
+ * student's own submissions. Names are trimmed and clipped; a file without a
+ * usable id or name is dropped.
+ */
+export const attachmentsOf = (folder: DropboxFolder, status: StatusSource): ItemAttachment[] => {
+  const usable = (file: { FileId: string; FileName: string }): boolean => /^\d{1,12}$/.test(file.FileId) && file.FileName.trim() !== "";
+  const size = (value: number | null | undefined): number | null => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null);
+  const instructor: ItemAttachment[] = (folder.Attachments ?? []).filter(usable).map((file) => ({ id: file.FileId, name: file.FileName.trim().slice(0, 200), size: size(file.Size), source: "instructor" }));
+  const submitted: ItemAttachment[] =
+    status.kind === "known" && status.submission
+      ? status.submission.Submissions.flatMap((submission) =>
+          submission.Id && /^\d{1,12}$/.test(submission.Id) ? (submission.Files ?? []).filter(usable).map((file): ItemAttachment => ({ id: file.FileId, name: file.FileName.trim().slice(0, 200), size: size(file.Size), source: "submission", submissionId: submission.Id })) : [],
+        )
+      : [];
+  return [...instructor, ...submitted].slice(0, MAX_ATTACHMENTS_PER_ITEM);
+};
+
 export type NormalizeContext = { tenantOrigin: string; userId: string; observedAt: string; now: Date };
 
 export const toAssignment = (folder: DropboxFolder, courseId: string, status: StatusSource, ctx: NormalizeContext): AcademicItem => {
   const origin = normalizeOrigin(ctx.tenantOrigin);
   const startAt = normalizeIso(folder.Availability?.StartDate ?? null);
   const endAt = normalizeIso(folder.Availability?.EndDate ?? null);
+  const attachments = attachmentsOf(folder, status);
   return {
     key: buildStableKey({ tenantOrigin: origin, userId: ctx.userId, kind: "assignment", courseId, sourceId: folder.Id }),
     sourceId: folder.Id,
@@ -134,6 +157,7 @@ export const toAssignment = (folder: DropboxFolder, courseId: string, status: St
     hasRubric: (folder.Assessment?.Rubrics?.length ?? 0) > 0,
     submissionType: submissionTypeOf(folder.SubmissionType),
     score: scoreFromSubmission(status),
+    ...(attachments.length > 0 ? { attachments } : {}),
   };
 };
 

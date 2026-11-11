@@ -1,5 +1,5 @@
-import { BrightspaceFailure, isApprovedBrightspacePath, isSafeTenantLink, type RawFetch } from "@nova-agent/brightspace";
-import { fetchBridgeResultSchema, pingResultSchema } from "../messaging/bridgeSchemas";
+import { BrightspaceFailure, HARD_FILE_CAP_BYTES, isApprovedBrightspacePath, isApprovedFilePath, isSafeTenantLink, type RawFetch, type RawFileFetch } from "@nova-agent/brightspace";
+import { fetchBridgeResultSchema, fileBridgeResultSchema, pingResultSchema } from "../messaging/bridgeSchemas";
 import { BADGE_STORAGE_KEY, type NovaMessage, type SyncPhase } from "../messaging/protocol";
 import type { ExtensionHost } from "./host";
 
@@ -43,6 +43,20 @@ export const createChromeHost = (tenantOrigin: string): ExtensionHost => {
     return parsed.data.response;
   };
 
+  const rawFetchFile: RawFileFetch = async (path, { maxBytes, headOnly = false }) => {
+    if (!isApprovedFilePath(path, origin)) throw new BrightspaceFailure({ kind: "unsafe-path", path: String(path) });
+    const tabId = await findBridgeTab();
+    if (tabId === null) throw new BrightspaceFailure({ kind: "network", retryable: true, operation: "no-brightspace-tab" });
+    const raw = await sendToTab<unknown>(tabId, { type: "BRIGHTSPACE_FETCH_FILE", path, maxBytes: Math.max(1, Math.min(Math.floor(maxBytes), HARD_FILE_CAP_BYTES)), headOnly });
+    const parsed = fileBridgeResultSchema.safeParse(raw);
+    if (!parsed.success) throw new BrightspaceFailure({ kind: "network", retryable: true, operation: "bridge" });
+    if (!parsed.data.ok) {
+      if (parsed.data.reason === "unsafe-path") throw new BrightspaceFailure({ kind: "unsafe-path", path: String(path) });
+      throw new BrightspaceFailure({ kind: "network", retryable: true, operation: parsed.data.reason });
+    }
+    return parsed.data.response;
+  };
+
   const broadcast = async (message: NovaMessage): Promise<void> => {
     for (const tab of await findBrightspaceTabs(origin)) await sendToTab(tab.id as number, message);
   };
@@ -50,6 +64,7 @@ export const createChromeHost = (tenantOrigin: string): ExtensionHost => {
   return {
     tenantOrigin: origin,
     rawFetch,
+    rawFetchFile,
     hasBrightspaceTab: async () => (await findBridgeTab()) !== null,
     openTenantUrl: (url) => {
       if (!isSafeTenantLink(url, origin)) return;

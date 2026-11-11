@@ -1,8 +1,8 @@
 import type { ChatRequest } from "@nova-agent/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AskClient } from "./askClient";
+import type { AskClient, AskHandlers } from "./askClient";
 import type { AskProposal } from "./proposals";
-import { historyOf, settleTools, type AskMessage, type AskRequestContext, type AskSendOptions } from "./thread";
+import { historyOf, mergeRows, settleTools, type AskMessage, type AskRequestContext, type AskSendOptions } from "./thread";
 
 export * from "./thread";
 
@@ -32,6 +32,9 @@ const nextConversationId = (): string => `conversation-${Date.now().toString(36)
 
 const noSummary = (): null => null;
 
+/** What a failed lookup reads as: the line written for the student when there is one, otherwise the reason the model was given. */
+const failureLine = (summary: string, error: string | undefined): string => (summary !== "" && summary !== "Lookup failed" ? summary : (error ?? "Lookup failed"));
+
 /**
  * Conversation state for the Ask tab. The hook itself persists nothing: by
  * default closing the panel forgets the thread, the same rule as session
@@ -45,6 +48,7 @@ export const useAskThread = (
   client: AskClient | null,
   buildRequest: (message: string, context: AskRequestContext) => ChatRequest | null,
   summarize: (messages: readonly AskMessage[]) => string | null = noSummary,
+  handlers?: AskHandlers,
 ): AskThread => {
   const [conversationId, setConversationId] = useState(nextConversationId);
   const [messages, setMessages] = useState<AskMessage[]>([]);
@@ -55,6 +59,9 @@ export const useAskThread = (
   latest.current = messages;
   // What the last question was sent with, so Retry asks the same thing about the same item.
   const lastOptions = useRef<AskSendOptions>({});
+  // Read at the moment a lookup arrives, so a turn always uses the handlers of the current render.
+  const liveHandlers = useRef(handlers);
+  liveHandlers.current = handlers;
 
   useEffect(() => () => controller.current?.abort(), []);
 
@@ -83,7 +90,7 @@ export const useAskThread = (
         let failure: string | null = null;
         let answer = "";
         try {
-          for await (const event of client.ask(request, abort.signal)) {
+          for await (const event of client.ask(request, abort.signal, { clientTool: (name, input, signal) => liveHandlers.current?.clientTool?.(name, input, signal) ?? Promise.resolve({ ok: false, summary: "", data: null, rows: [], error: "This panel cannot make that lookup." }) })) {
             switch (event.type) {
               case "text":
                 answer += event.delta;
@@ -95,14 +102,16 @@ export const useAskThread = (
               case "tool_result":
                 patch(answerId, (message) => ({
                   ...message,
-                  tools: message.tools.map((tool) => (tool.id === event.id ? { ...tool, status: event.ok ? "ok" : "error", summary: event.ok ? event.summary : (event.error ?? "Lookup failed"), rows: event.rows.length } : tool)),
-                  rows: [...message.rows, ...event.rows.filter((row, index, list) => list.findIndex((other) => other.kind === row.kind && other.id === row.id) === index && !message.rows.some((existing) => existing.kind === row.kind && existing.id === row.id))],
+                  tools: message.tools.map((tool) => (tool.id === event.id ? { ...tool, status: event.ok ? "ok" : "error", summary: event.ok ? event.summary : failureLine(event.summary, event.error), rows: event.rows.length } : tool)),
+                  rows: mergeRows(message.rows, event.rows),
                 }));
                 break;
               case "proposal":
                 patch(answerId, (message) =>
                   (message.proposals ?? []).some((proposal) => proposal.id === event.id) ? message : { ...message, proposals: [...(message.proposals ?? []), { id: event.id, label: event.label, payload: event.payload, state: "pending" }] },
                 );
+                break;
+              case "client_tool":
                 break;
               case "done":
                 patch(answerId, (message) => ({ ...message, usage: event.usage, grounded: event.grounded }));

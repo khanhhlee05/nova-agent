@@ -1,8 +1,8 @@
-import { PROPOSAL_LIMITS, type AskEvent, type ChatFocus, type ChatMessage, type CompactSnapshot, type ModelUsage, type ToolName } from "@nova-agent/protocol";
+import { PROPOSAL_LIMITS, type AskEvent, type ChatFocus, type ChatMessage, type ClientToolName, type ClientToolResult, type CompactSnapshot, type ModelUsage, type ToolName } from "@nova-agent/protocol";
 import { checkHonesty } from "./honesty";
 import { ModelError, addUsage, isAbortError, type ChatModel, type ModelMessage, type ToolCall } from "./model";
 import { briefTitles, buildSystemPrompt, quote } from "./prompt";
-import { TOOLS, executeTool, isToolName, rowTitles, toolSchemasForModel, type ToolSpec } from "./tools";
+import { TOOLS, executeTool, isClientToolName, isToolName, rowTitles, toolSchemasForModel, toolsFor, type ToolResult, type ToolSpec } from "./tools";
 
 export type TurnLog = { rounds: number; toolNames: ToolName[]; usage: ModelUsage | null; model: string | null; outcome: "ok" | "error" | "aborted"; errorCode?: string; grounded: boolean; corrected: boolean };
 
@@ -15,11 +15,24 @@ export type RunTurnInput = {
   /** Summary of the conversation before `history`. Placed inside the data section of the prompt. */
   summary?: string;
   model: ChatModel;
+  /**
+   * How to reach the panel for the lookups only it can make. Without it no client tool is offered.
+   * `call` must settle, never hang or reject: on a timeout or a stop it resolves with `ok: false`.
+   */
+  clientTools?: ClientToolChannel;
   tools?: readonly ToolSpec[];
   /** Tool rounds before the model is forced to answer. Default 4. */
   maxRounds?: number;
   maxTokens: number;
   signal: AbortSignal;
+};
+
+export type ClientToolChannel = {
+  /** Identifies this turn to the panel, so its answer finds its way back. */
+  turnId: string;
+  /** The client tools this panel can answer. */
+  names: readonly ClientToolName[];
+  call: (request: { id: string; name: ClientToolName; input: unknown }, signal: AbortSignal) => Promise<ClientToolResult>;
 };
 
 export type TurnResult = {
@@ -36,6 +49,15 @@ export type TurnResult = {
   outcome: "ok" | "error" | "aborted";
   errorCode?: string;
 };
+
+const abortError = (): Error => {
+  const error = new Error("The operation was aborted");
+  error.name = "AbortError";
+  return error;
+};
+
+/** The summary of a failed lookup that has nothing better to say. */
+export const LOOKUP_FAILED = "Lookup failed";
 
 const FALLBACK = "I could not finish looking that up. Try asking again, or press Refresh if the data looks old.";
 
@@ -61,7 +83,7 @@ const nudge = (title: string, canLookUp: boolean): string =>
  * calls never exceed `maxRounds`.
  */
 export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, TurnResult> {
-  const tools = input.tools ?? TOOLS;
+  const tools = input.tools ?? (input.clientTools ? toolsFor(input.clientTools.names) : TOOLS);
   const maxRounds = Math.max(1, input.maxRounds ?? 4);
   const definitions = toolSchemasForModel(tools);
   const messages: ModelMessage[] = [
@@ -120,7 +142,26 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
           const args = parseArgs(call.arguments);
           const name = isToolName(call.name, tools) ? call.name : null;
           yield { type: "tool_call", id: call.id, name: name ?? "get_brief", input: args };
-          let result = executeTool(call.name, args, { snapshot: input.snapshot }, tools);
+          const spec = tools.find((candidate) => candidate.name === call.name);
+          let result: ToolResult;
+          if (spec?.client && isClientToolName(spec.name) && input.clientTools) {
+            // The arguments are checked here; only a well-formed request is ever sent to the panel.
+            const parsed = spec.input.safeParse(args ?? {});
+            if (!parsed.success) {
+              result = { ok: false, error: `Invalid arguments for ${spec.name}: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "input"}: ${issue.message}`).join("; ")}` };
+            } else {
+              // Start listening for the answer before the request goes out: a panel with the text already at hand
+              // can answer faster than this generator is resumed, and its answer must find someone waiting.
+              const pending = input.clientTools.call({ id: call.id, name: spec.name, input: parsed.data }, input.signal);
+              yield { type: "client_tool", turnId: input.clientTools.turnId, id: call.id, name: spec.name, input: parsed.data };
+              const answer = await pending;
+              if (input.signal.aborted) throw abortError();
+              // A failed lookup may carry a line for the student in `summary`; the model reads `error`.
+              result = answer.ok ? { ok: true, summary: answer.summary, data: answer.data, rows: answer.rows } : { ok: false, error: answer.error ?? "The panel could not do that.", ...(answer.summary ? { note: answer.summary } : {}) };
+            }
+          } else {
+            result = executeTool(call.name, args, { snapshot: input.snapshot }, tools);
+          }
           // A turn may suggest a few actions, not a wall of cards; past the limit the model is told and nothing is shown.
           if (result.ok && result.proposal && proposals >= PROPOSAL_LIMITS.perTurn) {
             result = { ok: false, error: `Only ${PROPOSAL_LIMITS.perTurn} suggestions fit in one answer. This one was not shown; tell the student what else you would suggest.` };
@@ -133,9 +174,11 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
               proposals += 1;
               yield { type: "proposal", id: `proposal-${rounds}-${call.id}`.slice(0, 120), label: result.proposal.label.slice(0, 300), payload: result.proposal.payload };
             }
-            messages.push({ role: "tool", toolCallId: call.id, content: JSON.stringify({ summary: result.summary, ...(result.data as object) }) });
+            // A client tool's data may be anything JSON; only a plain object is spread beside the summary.
+            const data = typeof result.data === "object" && result.data !== null && !Array.isArray(result.data) ? (result.data as object) : { result: result.data ?? null };
+            messages.push({ role: "tool", toolCallId: call.id, content: JSON.stringify({ summary: result.summary, ...data }) });
           } else {
-            yield { type: "tool_result", id: call.id, name: name ?? "get_brief", ok: false, summary: "Lookup failed", rows: [], error: result.error };
+            yield { type: "tool_result", id: call.id, name: name ?? "get_brief", ok: false, summary: result.note ?? LOOKUP_FAILED, rows: [], error: result.error };
             messages.push({ role: "tool", toolCallId: call.id, content: JSON.stringify({ error: result.error }) });
           }
         }

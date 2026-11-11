@@ -6,7 +6,8 @@ export type ToolContext = { snapshot: CompactSnapshot };
 /** An action a tool suggests. The loop turns it into a `proposal` event; nothing here carries it out. */
 export type ToolProposal = { label: string; payload: ProposalPayload };
 
-export type ToolResult = { ok: true; summary: string; data: unknown; rows: ToolRow[]; proposal?: ToolProposal } | { ok: false; error: string };
+/** `error` is what the model reads. `note`, when present, is a short line for the student, shown instead of it. */
+export type ToolResult = { ok: true; summary: string; data: unknown; rows: ToolRow[]; proposal?: ToolProposal } | { ok: false; error: string; note?: string };
 
 export type ToolSpec<I = unknown> = {
   name: ToolName;
@@ -14,6 +15,8 @@ export type ToolSpec<I = unknown> = {
   input: z.ZodType<I, unknown>;
   /** OpenAI-style JSON schema for `input`, derived from the zod schema. */
   jsonSchema: Record<string, unknown>;
+  /** True for a tool the panel runs. The loop validates its arguments, then asks the panel instead of calling `run`. */
+  client?: true;
   run(input: I, context: ToolContext): ToolResult;
 };
 
@@ -154,6 +157,7 @@ export const itemData = (snapshot: CompactSnapshot, item: CompactItem) => ({
   earnedScore: item.earnedScore ?? null,
   priority: item.priority,
   ...(item.doneLocally ? { markedDoneByStudent: true } : {}),
+  ...(item.attachments && item.attachments.length > 0 ? { files: item.attachments.map((file) => ({ fileId: file.id, name: file.name, from: file.source === "instructor" ? "the instructor" : "the student's submission" })) } : {}),
 });
 
 /** A deadline the student typed in. `source` keeps it from being read as a Brightspace item. */

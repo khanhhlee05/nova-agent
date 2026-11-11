@@ -1,5 +1,5 @@
 import { runTurn, type TurnResult } from "@nova-agent/agent";
-import { chatRequestSchema, type AskEvent } from "@nova-agent/protocol";
+import { chatRequestSchema, clientToolResultSchema, type AskEvent } from "@nova-agent/protocol";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { AppContext } from "../app";
@@ -8,8 +8,30 @@ import { errorBody } from "../errors";
 
 const INTERNAL: AskEvent = { type: "error", code: "internal", message: "Nova hit an unexpected problem.", retryable: true };
 
+const TURN_ID = /^[0-9a-f-]{8,64}$/i;
+
 export const chatRoute = (context: AppContext): Hono =>
-  new Hono().post("/v1/chat", async (c) => {
+  new Hono()
+    // The panel's answer to a `client_tool` event. Accepted once, and only for a lookup a turn is waiting on.
+    .post("/v1/chat/:turnId/tool-result", async (c) => {
+      const turnId = c.req.param("turnId");
+      if (!TURN_ID.test(turnId)) return c.json(errorBody("bad_request", "Unknown turn."), 404);
+      let raw: unknown;
+      try {
+        raw = await c.req.json();
+      } catch {
+        return c.json(errorBody("bad_request", "Body must be JSON."), 400);
+      }
+      const parsed = clientToolResultSchema.safeParse(raw);
+      if (!parsed.success) {
+        // Paths only: the body carries file text, which must not reach the logs or the error text.
+        const paths = [...new Set(parsed.error.issues.map((issue) => issue.path.join(".") || "(root)"))].slice(0, 10);
+        return c.json({ ...errorBody("bad_request", `Invalid result at: ${paths.join(", ")}.`), issues: paths }, 400);
+      }
+      if (!context.pending.deliver(turnId, parsed.data)) return c.json(errorBody("bad_request", "No lookup is waiting for this result."), 404);
+      return c.json({ ok: true });
+    })
+    .post("/v1/chat", async (c) => {
     let raw: unknown;
     try {
       raw = await c.req.json();
@@ -57,6 +79,10 @@ export const chatRoute = (context: AppContext): Hono =>
           maxRounds: context.config.MAX_ROUNDS,
           maxTokens: context.config.MAX_TOKENS,
           signal: controller.signal,
+          // Offered only when this panel said it can answer; the wait always ends, by answer, timeout, or abort.
+          ...(request.clientTools && request.clientTools.length > 0
+            ? { clientTools: { turnId: requestId, names: request.clientTools, call: ({ id }: { id: string }, signal: AbortSignal) => context.pending.wait(requestId, id, context.config.CLIENT_TOOL_TIMEOUT_MS, signal) } }
+            : {}),
         });
         try {
           for (;;) {

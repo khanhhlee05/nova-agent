@@ -14,11 +14,16 @@ export type AskSettings = {
    * Optional so settings saved before it existed still read as off.
    */
   persistConversations?: boolean;
+  /**
+   * On by default: Nova may read a file on an assignment when a question needs it, after asking once per session.
+   * Off: files are never read for an answer, and their names are not sent.
+   */
+  readAttachments?: boolean;
 };
 
 export const ASK_SETTINGS_PREFERENCE = "ai.settings";
 
-export const DEFAULT_ASK_SETTINGS: AskSettings = { enabled: false, apiBaseUrl: "http://localhost:8787", token: null, persistConversations: false };
+export const DEFAULT_ASK_SETTINGS: AskSettings = { enabled: false, apiBaseUrl: "http://localhost:8787", token: null, persistConversations: false, readAttachments: true };
 
 export type ApiBaseUrlReason = "invalid" | "insecure";
 export type ApiBaseUrlCheck = { url: string; reason: null } | { url: null; reason: ApiBaseUrlReason };

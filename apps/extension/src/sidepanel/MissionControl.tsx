@@ -1,12 +1,12 @@
-import type { FeasibilityReport } from "@nova-agent/brightspace";
+import type { FeasibilityReport, FileAccessReport } from "@nova-agent/brightspace";
 import { isSafeTenantLink } from "@nova-agent/brightspace";
 import { compactSnapshot, shortId } from "@nova-agent/agent";
 import type { AcademicItem, ChangeEvent, DeadlineBucket } from "@nova-agent/core";
-import type { ChatRequest } from "@nova-agent/protocol";
+import type { ChatRequest, ClientToolName } from "@nova-agent/protocol";
 import { CheckCheck, EyeOff, Plus } from "lucide-react";
 import { Tabs, Tooltip } from "radix-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AskChips, AskView, canUndo, resolveProposal, summaryOf, useAskThread, type AskAbout, type AskProposal, type ProposalAction, type ProposalApplied, type ProposalContext, type AskClient, type AskClientFactory, type AskDraft, type AskLive, type AskMessage, type AskRequestContext, type AskSettings, type ConversationStore, type PlanDraft } from "./ask";
+import { AskChips, AskView, canUndo, resolveProposal, summaryOf, useAskThread, type AskAbout, type AskProposal, type ProposalAction, type ProposalApplied, type ProposalContext, type AskClient, type AskClientFactory, type AskConsent, type AskDraft, type AskHandlers, type AskLive, type AskMessage, type AskRequestContext, type AskSettings, type ConversationStore, type PlanDraft } from "./ask";
 import type { SyncStatusRecord } from "../storage/novaDb";
 import { PHASE_LABELS, isRunningPhase, isStale, type SyncRuntimeState } from "../sync/syncState";
 import { StateBanners, SyncProgress } from "./components/Banners";
@@ -15,6 +15,7 @@ import { ChangesFeed } from "./components/ChangesFeed";
 import { CountsStrip } from "./components/CountsStrip";
 import { CourseFilter } from "./components/CourseFilter";
 import { DeadlineDialog, type DeadlineDraft } from "./components/DeadlineDialog";
+import type { AttachmentControls } from "./components/ItemFiles";
 import { FieldHeader, Hero, freshness } from "./components/FieldHeader";
 import { FirstRun } from "./components/FirstRun";
 import { FocusCategories } from "./components/FocusCategories";
@@ -84,6 +85,8 @@ export type MissionControlActions = {
   restoreDismissed: () => void;
   /** Brings back a change deleted within the last few seconds. Optional so callers without Undo still work. */
   undoDelete?: () => void;
+  /** Asks Brightspace whether it serves assignment files to this session and adds the answer to the connection report. */
+  checkFileAccess?: () => void;
 };
 
 /** Everything the Ask tab needs. Optional so existing callers and tests are untouched. */
@@ -100,6 +103,10 @@ export type AskProps = {
   personal?: readonly PersonalDeadline[];
   /** Where saved conversations live. Used only while the student has saving turned on. */
   conversations?: ConversationStore;
+  /** The lookups this panel can make on the device for a turn, and the function that makes them. */
+  clientTools?: { names: readonly ClientToolName[]; run: NonNullable<AskHandlers["clientTool"]> };
+  /** The permission card for reading a file. */
+  consent?: AskConsent;
 };
 
 export type MissionControlProps = {
@@ -115,14 +122,20 @@ export type MissionControlProps = {
   dismissals: SessionDismissals;
   actions: MissionControlActions;
   ask?: AskProps;
+  /** Reading assignment files from an item's details. Present while Ask Nova may read them. */
+  attachments?: AttachmentControls;
   /** A change deleted moments ago that can still be restored. */
   pendingDelete?: { id: string; title: string } | null;
+  /** True while the file access check runs. */
+  checkingFiles?: boolean;
+  /** The last file access check, shown in the connection report. */
+  fileAccess?: FileAccessReport | null;
 };
 
 const CLIENT_VERSION = "0.1.0";
 
 /** Presentational root. Everything it needs arrives through props so tests and the preview harness can drive every state. */
-export const MissionControl = ({ dashboard, status, runtime, feasibility, preferences, hasEverSynced, announcement, now, tenantOrigin, dismissals, actions, ask, pendingDelete = null }: MissionControlProps) => {
+export const MissionControl = ({ dashboard, status, runtime, feasibility, preferences, hasEverSynced, announcement, now, tenantOrigin, dismissals, actions, ask, attachments, pendingDelete = null, checkingFiles = false, fileAccess = null }: MissionControlProps) => {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   // Session-only: which seven days the Week tab shows. Paging drops any selected day, since it belongs to the page it was picked on.
@@ -178,14 +191,18 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
               localDone: ask.localMarks,
               dismissedItemKeys: dismissals.items,
               personal: ask.personal,
+              includeAttachments: ask.clientTools?.names.includes("read_attachment") === true,
             }),
             focus: { courseId: preferences.courseFilter, tab: lastTab.current, ...(context.focusItemId ? { itemId: context.focusItemId } : {}) },
+            ...(ask.clientTools && ask.clientTools.names.length > 0 ? { clientTools: [...ask.clientTools.names] } : {}),
             client: { name: "nova-extension", version: CLIENT_VERSION },
           }
         : null,
     [ask, dashboard, dismissals.items, now, preferences.courseFilter, status.mode],
   );
-  const thread = useAskThread(ask?.client ?? null, buildRequest, summaryOf);
+  const runClientTool = ask?.clientTools?.run;
+  const askHandlers = useMemo<AskHandlers | undefined>(() => (runClientTool ? { clientTool: runClientTool } : undefined), [runClientTool]);
+  const thread = useAskThread(ask?.client ?? null, buildRequest, summaryOf, askHandlers);
 
   // Saving is opt-in. While it is on, the thread is written after every finished answer; the array a save or a
   // restore last saw is remembered so opening a conversation does not count as changing it.
@@ -509,7 +526,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
             onRefresh={actions.refresh}
             refreshing={running}
             refreshDisabled={showFirstRun}
-            menu={<Menu mode={status.mode} feasibility={feasibility} busy={running} onConnectLive={actions.connectLive} onUseDemo={actions.useDemoData} onClearData={actions.clearData} />}
+            menu={<Menu mode={status.mode} feasibility={feasibility} busy={running} onConnectLive={actions.connectLive} onUseDemo={actions.useDemoData} onClearData={actions.clearData} onCheckFiles={actions.checkFileAccess} checkingFiles={checkingFiles} fileAccess={fileAccess} />}
             hero={hero}
             counts={tab === "focus" && dashboard ? <CountsStrip counts={dashboard.counts} onSelect={jumpTo} /> : undefined}
             tabs={tabs}
@@ -562,7 +579,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                         <span>{preferences.courseFilter ? "This course has nothing visible. Try All courses." : "Nova found no visible assignments or quizzes in your active courses."}</span>
                       </div>
                     ) : (
-                      <FocusList dashboard={dashboard} category={category} sort={preferences.sort} now={now} courseFiltered={preferences.courseFilter !== null} expandedKey={expandedKey} onExpand={setExpandedKey} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} onSetDone={actions.setLocalDone} showLongOverdue={showLongOverdue} onToggleLongOverdue={() => setShowLongOverdue((value) => !value)} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup} onToggleAllGroups={toggleAllGroups} onAsk={canAsk ? askAboutItem : undefined} />
+                      <FocusList dashboard={dashboard} category={category} sort={preferences.sort} now={now} courseFiltered={preferences.courseFilter !== null} expandedKey={expandedKey} onExpand={setExpandedKey} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} onSetDone={actions.setLocalDone} showLongOverdue={showLongOverdue} onToggleLongOverdue={() => setShowLongOverdue((value) => !value)} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup} onToggleAllGroups={toggleAllGroups} onAsk={canAsk ? askAboutItem : undefined} files={attachments} />
                     )
                   ) : (
                     <div className="empty">
@@ -574,7 +591,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
               </Tabs.Content>
               <Tabs.Content className="tab-content" value="week">
                 {stateBanners}
-                {dashboard && page ? <WeekView dashboard={dashboard} days={page.days} now={now} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} selectedDay={selectedDay} personal={personalActions} onAsk={canAsk ? askAboutItem : undefined} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
+                {dashboard && page ? <WeekView dashboard={dashboard} days={page.days} now={now} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} selectedDay={selectedDay} personal={personalActions} onAsk={canAsk ? askAboutItem : undefined} files={attachments} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
               </Tabs.Content>
               <Tabs.Content className="tab-content" value="changes">
                 {stateBanners}
@@ -584,7 +601,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                 // Force-mounted and hidden so the conversation survives a switch to another tab.
                 <Tabs.Content className="tab-content tab-content-ask" value="ask" forceMount hidden={tab !== "ask"}>
                   {dashboard ? (
-                    <AskView notices={tab === "ask" ? stateBanners : null} thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} live={askLive} draft={askDraft} about={askAbout} onClearAbout={() => setAskAbout(null)} onSend={sendFromComposer} conversations={store ? { list: store.list, onOpen: openConversation, onDelete: deleteConversation } : undefined} proposalContext={proposalContext} onProposal={onProposal} />
+                    <AskView notices={tab === "ask" ? stateBanners : null} thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} live={askLive} draft={askDraft} about={askAbout} onClearAbout={() => setAskAbout(null)} onSend={sendFromComposer} conversations={store ? { list: store.list, onOpen: openConversation, onDelete: deleteConversation } : undefined} proposalContext={proposalContext} onProposal={onProposal} consent={ask.consent ? { pending: ask.consent.pending, onDecline: ask.consent.onDecline, onAllow: () => { ask.consent?.onAllow(); thread.retryLast(); } } : undefined} />
                   ) : showSkeleton ? (
                     <FocusSkeleton />
                   ) : (

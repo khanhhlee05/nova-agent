@@ -45,6 +45,20 @@ export const historyOf = (messages: readonly AskMessage[]): ChatMessage[] =>
     .map((message): ChatMessage => ({ role: message.role, content: message.text.slice(0, 4000) }))
     .slice(-HISTORY_LIMIT);
 
+const rowKey = (row: ToolRow): string => `${row.kind}\n${row.id}`;
+
+/**
+ * Adds the rows of one more lookup to an answer. A row seen before keeps its
+ * place and takes the newer contents (a file listed, then read, shows as
+ * read); new rows follow in the order they came, each once.
+ */
+export const mergeRows = (existing: readonly ToolRow[], incoming: readonly ToolRow[]): ToolRow[] => {
+  // A Map keeps the first position of a key and the last value set for it.
+  const merged = new Map<string, ToolRow>(existing.map((row) => [rowKey(row), row]));
+  for (const row of incoming) merged.set(rowKey(row), row);
+  return [...merged.values()];
+};
+
 /** A lookup that never reported back must not read "Looking up…" forever once the answer has ended. */
 export const settleTools = (message: AskMessage): AskMessage =>
   message.tools.some((tool) => tool.status === "running") ? { ...message, tools: message.tools.map((tool) => (tool.status === "running" ? { ...tool, status: "error" as const, summary: "stopped before it finished" } : tool)) } : message;

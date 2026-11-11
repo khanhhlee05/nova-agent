@@ -1,12 +1,40 @@
 import { runTurn, type ChatModel } from "@nova-agent/agent";
-import { apiErrorBodySchema, askEventSchema, healthResponseSchema, parseSseStream, type AskErrorCode, type AskEvent, type ChatRequest } from "@nova-agent/protocol";
+import { CLIENT_TOOL_LIMITS, apiErrorBodySchema, askEventSchema, healthResponseSchema, parseSseStream, type AskErrorCode, type AskEvent, type ChatRequest, type ClientToolName, type ClientToolResult } from "@nova-agent/protocol";
 import type { AskSettings } from "./askSettings";
+import type { ClientToolAnswer } from "./clientTools";
 
 export type AskHealth = { ok: boolean; configured: boolean; model: string | null; message: string | null };
 
+/** What the panel can do for a turn while it runs. */
+export type AskHandlers = {
+  /** Answers a lookup only this device can make. Must settle; a rejection is reported to the model as a failure. */
+  clientTool?: (name: ClientToolName, input: unknown, signal: AbortSignal) => Promise<ClientToolAnswer>;
+};
+
+const NO_HANDLER: ClientToolAnswer = { ok: false, summary: "", data: null, rows: [], error: "This panel cannot make that lookup." };
+
+/** Runs the panel's handler and always comes back with something the server will accept. */
+export const answerClientTool = async (handlers: AskHandlers | undefined, id: string, name: ClientToolName, input: unknown, signal: AbortSignal): Promise<ClientToolResult> => {
+  let answer: ClientToolAnswer;
+  try {
+    answer = handlers?.clientTool ? await handlers.clientTool(name, input, signal) : NO_HANDLER;
+  } catch {
+    answer = { ok: false, summary: "", data: null, rows: [], error: "The panel hit a problem making that lookup." };
+  }
+  const tooBig = JSON.stringify(answer.data ?? null).length > CLIENT_TOOL_LIMITS.dataBytes;
+  return {
+    id,
+    ok: answer.ok && !tooBig,
+    summary: answer.summary.slice(0, CLIENT_TOOL_LIMITS.summary),
+    data: tooBig ? null : answer.data,
+    rows: answer.rows.slice(0, CLIENT_TOOL_LIMITS.rows),
+    ...(tooBig ? { error: "The result was too large to send." } : answer.error ? { error: answer.error.slice(0, CLIENT_TOOL_LIMITS.error) } : {}),
+  };
+};
+
 /** One seam between the Ask tab and wherever the answer comes from. */
 export interface AskClient {
-  ask(request: ChatRequest, signal: AbortSignal): AsyncIterable<AskEvent>;
+  ask(request: ChatRequest, signal: AbortSignal, handlers?: AskHandlers): AsyncIterable<AskEvent>;
   health(signal?: AbortSignal): Promise<AskHealth>;
 }
 
@@ -34,7 +62,7 @@ export class HttpAskClient implements AskClient {
     return { ...(json ? { "Content-Type": "application/json" } : {}), ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}) };
   }
 
-  async *ask(request: ChatRequest, signal: AbortSignal): AsyncIterable<AskEvent> {
+  async *ask(request: ChatRequest, signal: AbortSignal, handlers?: AskHandlers): AsyncIterable<AskEvent> {
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.baseUrl}/v1/chat`, { method: "POST", headers: this.headers(true), body: JSON.stringify(request), signal });
@@ -67,6 +95,11 @@ export class HttpAskClient implements AskClient {
         }
         const parsed = askEventSchema.safeParse(data);
         if (!parsed.success) continue;
+        if (parsed.data.type === "client_tool") {
+          // Answered out of band; the server's own tool_result event tells the thread how it went.
+          void this.answerTool(parsed.data.turnId, parsed.data.id, parsed.data.name, parsed.data.input, handlers, signal);
+          continue;
+        }
         if (parsed.data.type === "done" || parsed.data.type === "error") terminal = true;
         yield parsed.data;
       }
@@ -76,6 +109,17 @@ export class HttpAskClient implements AskClient {
     }
     if (signal.aborted && !terminal) yield errorEvent("aborted", "Stopped.", true);
     else if (!terminal) yield errorEvent("upstream_error", "The connection closed before Nova finished.", true);
+  }
+
+  /** Makes the lookup and posts the result. A failed post is left alone: the server stops waiting on its own. */
+  private async answerTool(turnId: string, id: string, name: ClientToolName, input: unknown, handlers: AskHandlers | undefined, signal: AbortSignal): Promise<void> {
+    const result = await answerClientTool(handlers, id, name, input, signal);
+    if (signal.aborted) return;
+    try {
+      await this.fetchImpl(`${this.baseUrl}/v1/chat/${encodeURIComponent(turnId)}/tool-result`, { method: "POST", headers: this.headers(true), body: JSON.stringify(result), signal });
+    } catch {
+      // Nothing to do: the turn fails the lookup after its own timeout and says so.
+    }
   }
 
   async health(signal?: AbortSignal): Promise<AskHealth> {
@@ -98,7 +142,7 @@ export class LocalAskClient implements AskClient {
     private readonly options: { maxTokens?: number; maxRounds?: number } = {},
   ) {}
 
-  async *ask(request: ChatRequest, signal: AbortSignal): AsyncIterable<AskEvent> {
+  async *ask(request: ChatRequest, signal: AbortSignal, handlers?: AskHandlers): AsyncIterable<AskEvent> {
     const generator = runTurn({
       snapshot: request.snapshot,
       history: request.history,
@@ -109,10 +153,15 @@ export class LocalAskClient implements AskClient {
       maxTokens: this.options.maxTokens ?? 400,
       maxRounds: this.options.maxRounds,
       signal,
+      ...(request.clientTools && request.clientTools.length > 0
+        ? { clientTools: { turnId: "in-process", names: request.clientTools, call: ({ id, name, input }: { id: string; name: ClientToolName; input: unknown }, inner: AbortSignal) => answerClientTool(handlers, id, name, input, inner) } }
+        : {}),
     });
     for (;;) {
       const next = await generator.next();
       if (next.done) return;
+      // The lookup was already made in place; the thread only needs the result that follows.
+      if (next.value.type === "client_tool") continue;
       yield next.value;
     }
   }

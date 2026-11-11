@@ -16,7 +16,12 @@ export type BrightspaceOperation =
   | "dropboxFolders"
   | "mySubmissions"
   | "quizzes"
-  | "news";
+  | "news"
+  | "dropboxAttachment"
+  | "submissionFile";
+
+/** Operations that answer with a file, not JSON. Only the file bridge may request them, and it may request nothing else. */
+export const FILE_OPERATIONS: ReadonlySet<BrightspaceOperation> = new Set<BrightspaceOperation>(["dropboxAttachment", "submissionFile"]);
 
 type RouteRule = { operation: BrightspaceOperation; pattern: RegExp; params: readonly string[] };
 
@@ -39,6 +44,9 @@ const ROUTE_RULES: readonly RouteRule[] = [
   },
   { operation: "quizzes", pattern: new RegExp(String.raw`^/d2l/api/le/${VERSION}/${ID}/quizzes/$`), params: ["bookmark"] },
   { operation: "news", pattern: new RegExp(String.raw`^/d2l/api/le/${VERSION}/${ID}/news/$`), params: ["since"] },
+  // Read-only file downloads, by exact ids. No listing, no wildcard, no query string.
+  { operation: "dropboxAttachment", pattern: new RegExp(String.raw`^/d2l/api/le/${VERSION}/${ID}/dropbox/folders/${ID}/attachments/${ID}$`), params: [] },
+  { operation: "submissionFile", pattern: new RegExp(String.raw`^/d2l/api/le/${VERSION}/${ID}/dropbox/folders/${ID}/submissions/${ID}/files/${ID}$`), params: [] },
 ];
 
 const SAFE_PARAM_VALUE = /^[A-Za-z0-9._~%+:-]*$/;
@@ -134,6 +142,20 @@ export const routes = {
     approve(withQuery(`/d2l/api/le/${assertVersion(le)}/${assertId(orgUnitId, "orgUnitId")}/quizzes/`, { bookmark: options.bookmark })),
   news: (le: string, orgUnitId: string, options: { since?: string } = {}): ApprovedBrightspacePath =>
     approve(withQuery(`/d2l/api/le/${assertVersion(le)}/${assertId(orgUnitId, "orgUnitId")}/news/`, { since: options.since })),
+  /** A file the instructor attached to an assignment. */
+  dropboxAttachment: (le: string, orgUnitId: string, folderId: string, fileId: string): ApprovedBrightspacePath =>
+    approve(`/d2l/api/le/${assertVersion(le)}/${assertId(orgUnitId, "orgUnitId")}/dropbox/folders/${assertId(folderId, "folderId")}/attachments/${assertId(fileId, "fileId")}`),
+  /** A file from one of the student's own submissions. */
+  submissionFile: (le: string, orgUnitId: string, folderId: string, submissionId: string, fileId: string): ApprovedBrightspacePath =>
+    approve(
+      `/d2l/api/le/${assertVersion(le)}/${assertId(orgUnitId, "orgUnitId")}/dropbox/folders/${assertId(folderId, "folderId")}/submissions/${assertId(submissionId, "submissionId")}/files/${assertId(fileId, "fileId")}`,
+    ),
+};
+
+/** True when `path` is on the allowlist and answers with a file. */
+export const isApprovedFilePath = (path: string, tenantOrigin?: string): path is ApprovedBrightspacePath => {
+  const approved = validateApprovedPath(path, tenantOrigin);
+  return approved !== null && approved.path === path && FILE_OPERATIONS.has(approved.operation);
 };
 
 /** Well-known learner-facing Brightspace page paths (not API routes). */

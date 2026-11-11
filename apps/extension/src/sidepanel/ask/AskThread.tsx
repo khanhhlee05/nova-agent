@@ -10,7 +10,7 @@ import { AskRowsDisclosure, type AskLive } from "./AskRows";
 import { hostOf } from "./askSettings";
 import type { AskMessage, AskStatus } from "./useAskThread";
 
-/** A suggestion's own summary already starts with "Suggested", so nothing is put in front of it. */
+/** A suggestion's own summary already starts with "Suggested", so nothing is put in front of it. The same holds for any lookup whose `done` is empty. */
 const SUGGESTION_COPY = { running: "Preparing a suggestion", done: "", failed: "Could not suggest that" };
 
 /** What each lookup reads as while it runs, once it is done, and when it fails. */
@@ -22,6 +22,7 @@ const TOOL_COPY: Record<ToolName, { running: string; done: string; failed: strin
   get_changes: { running: "Looking up changes", done: "Looked up changes", failed: "Could not look up changes" },
   build_study_plan: { running: "Building a study plan", done: "Built a study plan", failed: "Could not build a study plan" },
   get_course_load: { running: "Comparing your courses", done: "Compared your courses", failed: "Could not compare your courses" },
+  read_attachment: { running: "Reading a file", done: "", failed: "Could not read the file" },
   propose_mark_done: SUGGESTION_COPY,
   propose_hide: SUGGESTION_COPY,
   propose_mark_read: SUGGESTION_COPY,
@@ -31,7 +32,7 @@ const TOOL_COPY: Record<ToolName, { running: string; done: string; failed: strin
 const toolLine = (tool: AskMessage["tools"][number]): string => {
   const copy = TOOL_COPY[tool.name];
   if (tool.status === "running") return `${copy.running}…`;
-  if (tool.status === "ok" && copy.done === "") return tool.summary ? tool.summary.replace(/\.$/, "") : "Made a suggestion";
+  if (tool.status === "ok" && copy.done === "") return tool.summary ? tool.summary.replace(/\.$/, "") : "Done";
   if (tool.status === "ok") return tool.summary ? `${copy.done}: ${tool.summary.replace(/\.$/, "")}` : `${copy.done} · ${tool.rows} ${tool.rows === 1 ? "row" : "rows"}`;
   return `${copy.failed}: ${tool.summary ?? ""}`;
 };

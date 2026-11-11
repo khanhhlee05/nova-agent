@@ -1,13 +1,17 @@
-import type { FeasibilityReport } from "@nova-agent/brightspace";
+import { DEMO_LE_VERSION, buildDemoTenant, demoFileFetch, isSafeTenantLink, type FeasibilityReport, type FileAccessReport, type RawFileFetch } from "@nova-agent/brightspace";
+import type { AcademicItem, ItemAttachment } from "@nova-agent/core";
+import { ATTACHMENT_FAILURE_COPY, readAttachment, type AttachmentOutcome } from "../files/attachments";
+import type { PdfReader } from "../files/extract";
+import { readPdf as defaultReadPdf } from "../files/pdf";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExtensionHost } from "../platform/host";
-import type { NovaDb } from "../storage/novaDb";
-import { clearAllData, clearConversations, deleteChangeEvent, deleteConversation, deletePersonalItem, deletePlanItems, getConversation, getPreference, getSyncStatus, listChangeEvents, listConversations, listLocalMarks, listPersonalItems, latestSnapshot, markAllRead, putPersonalItem, replacePlanItems, saveConversation, setEventRead, setLocalMark, setPreference, unreadCount } from "../storage/repositories";
+import type { DataMode, NovaDb } from "../storage/novaDb";
+import { attachmentTextId, clearAllData, clearConversations, createDexieVersionCache, deleteChangeEvent, deleteConversation, deletePersonalItem, deletePlanItems, getConversation, getPreference, getSyncStatus, listAttachmentTexts, listChangeEvents, listConversations, listLocalMarks, listPersonalItems, latestSnapshot, markAllRead, putPersonalItem, replacePlanItems, saveConversation, setEventRead, setLocalMark, setPreference, unreadCount } from "../storage/repositories";
 import { DATA_MODE_PREFERENCE, DEMO_SCENARIO_PREFERENCE, SyncCoordinator, type TransportFactory } from "../sync/syncCoordinator";
 import { IDLE_STATE, isRunningPhase, type SyncRuntimeState } from "../sync/syncState";
-import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, defaultAskClientFactory, effectiveAskSettings, summarize, type AskClientFactory, type AskSettings, type ConversationStore } from "./ask";
-import { connectLive as runConnectLive } from "./connect";
+import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, availableClientTools, defaultAskClientFactory, effectiveAskSettings, runReadAttachment, summarize, type AskClientFactory, type AskSettings, type ClientToolAnswer, type ConsentRequest, type ConversationStore } from "./ask";
+import { FILE_ACCESS_PREFERENCE, checkFileAccess as runCheckFileAccess, connectLive as runConnectLive } from "./connect";
 import { useSessionDismissals } from "./dismissals";
 import { DEFAULT_PREFERENCES, MissionControl, withPreferenceDefaults, type UiPreferences } from "./MissionControl";
 import { buildDashboard } from "./model";
@@ -24,13 +28,25 @@ export type AppDeps = {
   askClientFactory?: AskClientFactory;
   /** How long a deleted change can be restored before it is removed for good. */
   undoMs?: number;
+  /** Where file bytes come from. Null means files cannot be read right now. The preview harness and tests inject one. */
+  fileFetchFactory?: FileFetchFactory;
+  /** Reads PDF text. Tests inject a stand-in so they never load pdf.js. */
+  readPdf?: PdfReader;
 };
+
+export type FileFetchFactory = (mode: DataMode, context: { now: Date }) => RawFileFetch | null;
+
+/** Demo files come from the demo tenant; live files come through the content-script bridge, when the host has one. */
+export const defaultFileFetchFactory =
+  (host: ExtensionHost): FileFetchFactory =>
+  (mode, { now }) =>
+    mode === "fixture" ? demoFileFetch(buildDemoTenant(now)) : (host.rawFetchFile ?? null);
 
 type PendingDelete = { id: string; title: string; kind: "event" | "personal" };
 
 const PREFERENCES_KEY = "ui.preferences";
 
-export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, askClientFactory = defaultAskClientFactory, undoMs = 5000 }: AppDeps) => {
+export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, askClientFactory = defaultAskClientFactory, undoMs = 5000, fileFetchFactory, readPdf = defaultReadPdf }: AppDeps) => {
   const now = useNow(60_000, nowFn);
   // Every timestamp the panel writes comes from the same injected clock as the one it reads with.
   const clock = useCallback(() => (nowFn ? nowFn() : new Date()), [nowFn]);
@@ -62,6 +78,83 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
     [askSettings, db],
   );
   const savedConversations = useLiveQuery(async () => (scope ? listConversations(db, scope) : []), [db, scope]);
+
+  // Assignment files: read on request, text kept in the extension's own storage, never the bytes.
+  const mode = status?.mode ?? "fixture";
+  const fileFetch = useMemo(() => (fileFetchFactory ?? defaultFileFetchFactory(host))(mode, { now: clock() }), [clock, fileFetchFactory, host, mode]);
+  const readTexts = useLiveQuery(async () => (scope ? listAttachmentTexts(db, scope) : []), [db, scope]);
+  const attachmentTexts = useMemo(() => new Map((readTexts ?? []).map((record) => [record.id, record])), [readTexts]);
+  const [readingFiles, setReadingFiles] = useState<ReadonlySet<string>>(() => new Set());
+  const [fileErrors, setFileErrors] = useState<ReadonlyMap<string, string>>(() => new Map());
+  // The Brightspace API version the last refresh used; file routes are built with it.
+  const leVersion = useCallback(async () => (mode === "fixture" ? DEMO_LE_VERSION : ((await createDexieVersionCache(db, host.tenantOrigin).get())?.le ?? null)), [db, host.tenantOrigin, mode]);
+  const readFile = useCallback(
+    async (item: AcademicItem, attachment: ItemAttachment): Promise<AttachmentOutcome> => {
+      if (!scope) return { ok: false, reason: "no-version", message: ATTACHMENT_FAILURE_COPY["no-version"] };
+      const id = attachmentTextId(item.key, attachment.id);
+      setReadingFiles((prev) => new Set(prev).add(id));
+      setFileErrors((prev) => new Map([...prev].filter(([key]) => key !== id)));
+      try {
+        const outcome = await readAttachment(
+          {
+            db,
+            scope,
+            tenantOrigin: host.tenantOrigin,
+            fetchFile: fileFetch,
+            leVersion,
+            readPdf,
+            now: clock,
+          },
+          item,
+          attachment,
+        );
+        if (!outcome.ok) setFileErrors((prev) => new Map(prev).set(id, outcome.message));
+        return outcome;
+      } finally {
+        setReadingFiles((prev) => new Set([...prev].filter((key) => key !== id)));
+      }
+    },
+    [clock, db, fileFetch, host.tenantOrigin, leVersion, readPdf, scope],
+  );
+  const [checkingFiles, setCheckingFiles] = useState(false);
+  const fileAccess = useLiveQuery(() => getPreference<FileAccessReport | null>(db, FILE_ACCESS_PREFERENCE, null), [db]);
+  const checkFiles = useCallback(() => {
+    if (!snapshot) return;
+    setCheckingFiles(true);
+    void (async () => {
+      try {
+        const report = await runCheckFileAccess(db, fileFetch, await leVersion(), snapshot.items, clock);
+        const served = report.steps.filter((step) => step.outcome === "ok").length;
+        const tested = report.steps.filter((step) => step.outcome !== "not-tested").length;
+        setAnnouncement(tested === 0 ? "No assignment files in your courses to try yet." : `File access checked: Brightspace served ${served} of ${tested} kinds of file.`);
+      } finally {
+        setCheckingFiles(false);
+      }
+    })();
+  }, [clock, db, fileFetch, leVersion, snapshot]);
+  // Permission to read a file for an answer is asked once per panel session and never stored.
+  const fileConsent = useRef(false);
+  const [pendingConsent, setPendingConsent] = useState<ConsentRequest | null>(null);
+  const clientToolNames = useMemo(() => availableClientTools({ readAttachments: askSettings?.readAttachments !== false, canFetchFiles: fileFetch !== null }), [askSettings, fileFetch]);
+  const runClientTool = useCallback(
+    async (name: string, input: unknown): Promise<ClientToolAnswer> => {
+      if (name !== "read_attachment" || !snapshot) return { ok: false, summary: "", data: null, rows: [], error: "This panel cannot make that lookup." };
+      return runReadAttachment(input, {
+        items: snapshot.items,
+        courseById: new Map(snapshot.courses.map((course) => [course.id, course])),
+        texts: attachmentTexts,
+        allowed: () => fileConsent.current,
+        askPermission: setPendingConsent,
+        read: readFile,
+        canOpen: (url) => isSafeTenantLink(url, host.tenantOrigin),
+      });
+    },
+    [attachmentTexts, host.tenantOrigin, readFile, snapshot],
+  );
+  const attachmentControls = useMemo(
+    () => (clientToolNames.includes("read_attachment") && askSettings?.enabled ? { texts: attachmentTexts, busy: readingFiles, errors: fileErrors, onRead: (item: AcademicItem, attachment: ItemAttachment) => void readFile(item, attachment) } : undefined),
+    [askSettings, attachmentTexts, clientToolNames, fileErrors, readFile, readingFiles],
+  );
 
   // Session-only dismissals: forgotten when the panel closes, restored whenever fresh data arrives.
   const { dismissals, dismissItem, dismissBanner, restoreAll } = useSessionDismissals(snapshot?.capturedAt ?? null);
@@ -277,6 +370,8 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
           await coordinator.sync("manual");
         })();
       },
+      // Demo files are always "served"; the check only says something about a real tenant.
+      ...(mode === "live" ? { checkFileAccess: checkFiles } : {}),
       clearData: async () => {
         await clearAllData(db);
         await host.publishBadge(0);
@@ -284,10 +379,19 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
         setAnnouncement("Local Nova data cleared.");
       },
     }),
-    [clock, commitDelete, coordinator, db, dismissBanner, dismissItem, host, nowFn, personalItems, publishBadge, restoreAll, scope, setPreferences, undoMs],
+    [checkFiles, clock, commitDelete, coordinator, db, dismissBanner, dismissItem, host, mode, nowFn, personalItems, publishBadge, restoreAll, scope, setPreferences, undoMs],
   );
 
   if (!status || !preferences || feasibility === undefined || !askSettings || !personalItems) return null;
+
+  const consent = {
+    pending: pendingConsent,
+    onAllow: () => {
+      fileConsent.current = true;
+      setPendingConsent(null);
+    },
+    onDecline: () => setPendingConsent(null),
+  };
 
   return (
     <MissionControl
@@ -303,7 +407,10 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
       dismissals={dismissals}
       actions={actions}
       pendingDelete={pendingDelete}
-      ask={{ client: askClient, settings: askSettings, setSettings: setAskSettings, clientFactory: askClientFactory, events: visibleEvents ?? [], localMarks, personal: visiblePersonal ?? [], conversations: conversationStore }}
+      ask={{ client: askClient, settings: askSettings, setSettings: setAskSettings, clientFactory: askClientFactory, events: visibleEvents ?? [], localMarks, personal: visiblePersonal ?? [], conversations: conversationStore, clientTools: { names: clientToolNames, run: runClientTool }, consent }}
+      attachments={attachmentControls}
+      checkingFiles={checkingFiles}
+      fileAccess={fileAccess ?? null}
     />
   );
 };

@@ -13,8 +13,20 @@ export const toolNameSchema = z.enum([
   "propose_hide",
   "propose_mark_read",
   "propose_personal_deadline",
+  "read_attachment",
 ]);
 export type ToolName = z.infer<typeof toolNameSchema>;
+
+/**
+ * Tools the panel runs, not the server: they need something only the device
+ * has (a file behind the student's Brightspace session, text kept in the
+ * extension's own storage). The server offers one to the model only when the
+ * request says this panel can answer it.
+ */
+export const clientToolNameSchema = z.enum(["read_attachment"]);
+export type ClientToolName = z.infer<typeof clientToolNameSchema>;
+
+export const CLIENT_TOOL_LIMITS = { dataBytes: 24_000, summary: 300, error: 600, rows: 25, text: 12_000 } as const;
 
 const url = z.url({ protocol: /^https?$/ }).nullable();
 
@@ -63,6 +75,24 @@ export const toolRowSchema = z.discriminatedUnion("kind", [
     bucket: compactBucketSchema,
     done: z.boolean(),
     fromPlan: z.boolean().optional(),
+  }),
+  z.object({
+    kind: z.literal("attachment"),
+    /** `${itemId}:${fileId}`. */
+    id: z.string(),
+    /** The file name. */
+    title: z.string(),
+    itemId: z.string(),
+    itemTitle: z.string(),
+    courseId: z.string(),
+    courseName: z.string(),
+    fileId: z.string(),
+    size: z.number().int().min(0).nullable(),
+    source: z.enum(["instructor", "submission"]),
+    /** Whether its text has been read on this device. */
+    read: z.boolean(),
+    /** The assignment's own page; a file is opened from there. */
+    url,
   }),
   z.object({
     kind: z.literal("plan-day"),
@@ -183,6 +213,11 @@ export const askEventSchema = z.discriminatedUnion("type", [
     error: z.string().optional(),
   }),
   /**
+   * A lookup only the panel can make. The server sends it and waits; the panel answers with a POST to
+   * `/v1/chat/{turnId}/tool-result`, and the ordinary `tool_result` event follows.
+   */
+  z.object({ type: z.literal("client_tool"), turnId: z.string().min(8).max(64), id: z.string().min(1).max(120), name: clientToolNameSchema, input: z.unknown() }),
+  /**
    * An action the model suggests. It only shows a card: the student confirms or dismisses it, and the
    * extension carries it out. `label` is the server's wording for logs and screen readers; the card
    * writes its own sentence from `payload` and the data on the device, so what is confirmed is what runs.
@@ -208,6 +243,19 @@ export type AskEvent = z.infer<typeof askEventSchema>;
 export type AskErrorEvent = Extract<AskEvent, { type: "error" }>;
 export type AskDoneEvent = Extract<AskEvent, { type: "done" }>;
 export type AskProposalEvent = Extract<AskEvent, { type: "proposal" }>;
+
+/** What the panel sends back for a `client_tool` event. `data` is what the model reads; it is capped so one file cannot flood a turn. */
+export const clientToolResultSchema = z
+  .object({
+    id: z.string().min(1).max(120),
+    ok: z.boolean(),
+    summary: z.string().max(CLIENT_TOOL_LIMITS.summary),
+    data: z.unknown(),
+    rows: z.array(toolRowSchema).max(CLIENT_TOOL_LIMITS.rows),
+    error: z.string().max(CLIENT_TOOL_LIMITS.error).optional(),
+  })
+  .refine((result) => JSON.stringify(result.data ?? null).length <= CLIENT_TOOL_LIMITS.dataBytes, { message: "data is too large", path: ["data"] });
+export type ClientToolResult = z.infer<typeof clientToolResultSchema>;
 
 export const apiErrorBodySchema = z.object({
   error: z.object({ code: askErrorCodeSchema, message: z.string(), retryable: z.boolean().optional(), retryAfterSeconds: z.number().optional() }),

@@ -60,9 +60,11 @@ const lastUserText = (input: ModelInput): string => {
   return "";
 };
 
-const parseTool = (content: string): { summary?: string; proposed?: string; error?: string; items?: { id?: string }[] } => {
+type ToolEcho = { summary?: string; proposed?: string; error?: string; items?: { id?: string }[]; text?: string; file?: string };
+
+const parseTool = (content: string): ToolEcho => {
   try {
-    return JSON.parse(content) as { summary?: string; proposed?: string; error?: string; items?: { id?: string }[] };
+    return JSON.parse(content) as ToolEcho;
   } catch {
     return {};
   }
@@ -70,6 +72,12 @@ const parseTool = (content: string): { summary?: string; proposed?: string; erro
 
 /** The local calendar day the system prompt states, so the router never reads a clock. */
 const todayOf = (input: ModelInput): string | null => /Today is \w{3} (\d{4}-\d{2}-\d{2})/.exec(input.messages[0]?.content ?? "")?.[1] ?? null;
+
+/** The files the system prompt lists, as the model would read them. */
+const filesOf = (input: ModelInput): { name: string; item: string; itemId: string; fileId: string }[] =>
+  [...(input.messages[0]?.content ?? "").matchAll(/"([^"]+)" on "([^"]+)" \[item ([a-z]\d+), file (\d+)\]/g)].map((match) => ({ name: match[1] ?? "", item: match[2] ?? "", itemId: match[3] ?? "", fileId: match[4] ?? "" }));
+
+const WANTS_FILE = /\b(handout|rubric|attachment|attached|file|instructions|submitted|report)\b/;
 
 const WANTS_DONE = /\bmark\b.*\bdone\b|\bcheck(ed)? off\b|\btick(ed)? off\b/;
 
@@ -90,13 +98,25 @@ export const demoRouter: ScriptedRouter = (input) => {
   if (lastTool) {
     const result = parseTool(lastTool.content);
     if (result.proposed) return { text: [result.summary ?? "I made a suggestion", ". ", "It waits for you to confirm below; nothing has changed yet."], usage: { promptTokens: 140, completionTokens: 20, totalTokens: 160 } };
+    // Waiting on the student: say so plainly, the way a model following its instructions would.
+    if (result.error && /has not allowed Nova to read attachments/.test(result.error)) return { text: ["I need your permission before I can read that file. Press Allow below and I will answer."] };
     if (result.error) return { text: ["I could not do that: ", result.error] };
+    // A file was read: quote its opening lines, so the answer visibly comes from the file.
+    if (typeof result.text === "string" && result.file) return { text: [`${result.file} says: `, result.text.replace(/\[(?:Page|Slide) \d+\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 260)], usage: { promptTokens: 400, completionTokens: 60, totalTokens: 460 } };
     return { text: [result.summary ?? "Here is what I found.", " ", "The rows below come straight from your Brightspace data."], usage: { promptTokens: 120, completionTokens: 24, totalTokens: 144 } };
   }
   if (input.toolChoice === "none") return { text: ["I could not look that up. Try asking about deadlines, changes, or what to start first."] };
   if (WANTS_DONE.test(question)) {
     const range = /overdue|late/.test(question) ? "overdue" : /today|tonight/.test(question) ? "today" : "week";
     return { toolCalls: [{ name: "list_deadlines", args: { range, includePersonal: false } }] };
+  }
+  const files = filesOf(input);
+  if (WANTS_FILE.test(question) && files.length > 0 && input.tools.some((tool) => tool.function.name === "read_attachment")) {
+    // The file whose name or assignment shares the most words with the question; the first one listed otherwise.
+    const words = question.split(/[^a-z0-9]+/).filter((word) => word.length > 2);
+    const score = (file: (typeof files)[number]): number => words.filter((word) => `${file.name} ${file.item}`.toLowerCase().includes(word)).length;
+    const best = [...files].sort((a, b) => score(b) - score(a))[0] as (typeof files)[number];
+    return { toolCalls: [{ name: "read_attachment", args: { itemId: best.itemId, fileId: best.fileId } }] };
   }
   if (/\bmark\b.*\bread\b/.test(question)) return { toolCalls: [{ name: "propose_mark_read", args: { all: true } }] };
   const remind = /\b(?:remind me to|add a deadline to|add a reminder to)\s+(.+?)(?:\s+(today|tonight|tomorrow))?(?:\s+at\s+(\d{1,2}(?::\d{2})?\s?(?:am|pm)))?[.?!]*$/.exec(question);

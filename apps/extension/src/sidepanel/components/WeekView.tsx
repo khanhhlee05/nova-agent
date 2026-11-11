@@ -6,6 +6,7 @@ import type { AcademicItem } from "@nova-agent/core";
 import type { Dashboard, PersonalDeadline, WeekDay, WeekEntry } from "../model";
 import { courseSwatch } from "../theme";
 import { ItemDetails } from "./ItemDetails";
+import type { AttachmentControls } from "./ItemFiles";
 import { PersonalDetails } from "./PersonalDetails";
 import { dayKey } from "./WeekStrip";
 import { KindIcon } from "./icons";
@@ -40,10 +41,12 @@ export type WeekViewProps = {
   personal?: PersonalActions;
   /** Starts an Ask Nova question about one item. Absent when Ask is off. */
   onAsk?: (item: AcademicItem) => void;
+  /** Lets the student read assignment files from an item's details. */
+  files?: AttachmentControls;
 };
 
 /** Time-led agenda. The seven-day strip lives in the field above; this is the list under it. */
-export const WeekView = ({ dashboard, days: page = dashboard.week, now, canOpen, onOpen, onDismiss, selectedDay, personal, onAsk }: WeekViewProps) => {
+export const WeekView = ({ dashboard, days: page = dashboard.week, now, canOpen, onOpen, onDismiss, selectedDay, personal, onAsk, files }: WeekViewProps) => {
   const nextBusy = page.find((day) => !day.isToday && (day.entries.some((entry) => entry.bucket !== "completed") || day.custom.some((deadline) => deadline.completedAt === null)));
   const days = selectedDay ? page.filter((day) => dayKey(day.date) === selectedDay) : page;
   return (
@@ -124,7 +127,7 @@ export const WeekView = ({ dashboard, days: page = dashboard.week, now, canOpen,
                         <Popover.Close className="icon-button icon-button-sm popover-close" aria-label="Close details">
                           <X size={14} aria-hidden="true" />
                         </Popover.Close>
-                        <ItemDetails item={item} course={course} ranked={dashboard.ranked.get(item.key)} now={now} canOpen={canOpen(item.url)} onOpen={onOpen} headingLevel="h3" onDismiss={() => onDismiss(item.key, item.title)} markedAt={dashboard.localDone.get(item.key) ?? null} onAsk={onAsk ? () => onAsk(item) : undefined} />
+                        <ItemDetails item={item} course={course} ranked={dashboard.ranked.get(item.key)} now={now} canOpen={canOpen(item.url)} onOpen={onOpen} headingLevel="h3" onDismiss={() => onDismiss(item.key, item.title)} markedAt={dashboard.localDone.get(item.key) ?? null} onAsk={onAsk ? () => onAsk(item) : undefined} files={files} />
                       </Popover.Content>
                     </Popover.Portal>
                   </Popover.Root>

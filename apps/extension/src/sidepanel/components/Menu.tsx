@@ -1,4 +1,4 @@
-import type { FeasibilityReport } from "@nova-agent/brightspace";
+import type { FeasibilityReport, FileAccessReport } from "@nova-agent/brightspace";
 import { ClipboardList, FlaskConical, KeyRound, MoreVertical, Trash2 } from "lucide-react";
 import { AlertDialog, Popover } from "radix-ui";
 import { useState } from "react";
@@ -11,6 +11,11 @@ export type MenuProps = {
   onConnectLive: () => void;
   onUseDemo: () => void;
   onClearData: () => Promise<void> | void;
+  /** Asks Brightspace whether it serves assignment files to this session. Absent when there is no way to ask. */
+  onCheckFiles?: () => void;
+  checkingFiles?: boolean;
+  /** The last file access check, if one has run. */
+  fileAccess?: FileAccessReport | null;
 };
 
 const verdictText: Record<FeasibilityReport["verdict"], string> = {
@@ -21,7 +26,21 @@ const verdictText: Record<FeasibilityReport["verdict"], string> = {
   unsupported: "Brightspace answered with an unexpected shape or API version.",
 };
 
-export const Menu = ({ mode, feasibility, busy, onConnectLive, onUseDemo, onClearData }: MenuProps) => {
+const fileOutcomeText: Record<string, string> = {
+  ok: "served",
+  "not-tested": "not tested: no such file in your courses yet",
+  "session-expired": "sign-in required",
+  "permission-denied": "denied (403)",
+  "not-found": "not found (404)",
+  "too-large": "too large",
+  "rate-limited": "rate limited",
+  network: "no answer",
+  "unsafe-path": "refused: off the allowlist",
+};
+
+const FILE_ROUTE_LABELS = { dropboxAttachment: "Instructor attachments", submissionFile: "Your submitted files" } as const;
+
+export const Menu = ({ mode, feasibility, busy, onConnectLive, onUseDemo, onClearData, onCheckFiles, checkingFiles = false, fileAccess = null }: MenuProps) => {
   const [reportOpen, setReportOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   return (
@@ -118,7 +137,29 @@ export const Menu = ({ mode, feasibility, busy, onConnectLive, onUseDemo, onClea
                 )}
               </pre>
             ) : null}
+            {onCheckFiles || fileAccess ? (
+              <section className="report-files" aria-label="File access">
+                <h3>File access</h3>
+                {fileAccess ? (
+                  <ul>
+                    {fileAccess.steps.map((step) => (
+                      <li key={step.operation}>
+                        {FILE_ROUTE_LABELS[step.operation]}: <strong>{fileOutcomeText[step.outcome] ?? step.outcome}</strong>
+                        {step.status !== null ? ` (${step.status}${step.contentType ? `, ${step.contentType.split(";")[0]}` : ""})` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>Not checked yet. Ask Nova reads assignment files only if Brightspace serves them to your session.</p>
+                )}
+              </section>
+            ) : null}
             <div className="card-actions">
+              {onCheckFiles ? (
+                <button type="button" className="button" onClick={onCheckFiles} disabled={checkingFiles}>
+                  {checkingFiles ? "Checking…" : "Check file access"}
+                </button>
+              ) : null}
               <AlertDialog.Cancel asChild>
                 <button type="button" className="button">
                   Close

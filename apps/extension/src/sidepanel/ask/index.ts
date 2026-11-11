@@ -3,6 +3,7 @@ export * from "./askClient";
 export * from "./useAskThread";
 export * from "./conversations";
 export * from "./proposals";
+export * from "./clientTools";
 export * from "./AskProposals";
 export * from "./AskView";
 export * from "./AskChips";
