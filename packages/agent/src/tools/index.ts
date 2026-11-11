@@ -2,15 +2,19 @@ import type { ToolName } from "@nova-agent/protocol";
 import { getRecentAnnouncements } from "./announcements";
 import { getBrief } from "./brief";
 import { getChanges } from "./changes";
+import { getCourseLoad } from "./courseLoad";
 import { listDeadlines } from "./deadlines";
 import { getItemDetails } from "./itemDetails";
 import type { ToolContext, ToolResult, ToolSpec } from "./shared";
+import { buildStudyPlan } from "./studyPlan";
 
 export * from "./shared";
-export { getBrief, listDeadlines, getItemDetails, getRecentAnnouncements, getChanges };
+export * from "./period";
+export { ESTIMATE_NOTE, PLAN_DEFAULTS, formatMinutes, type PlanLeftOut } from "./studyPlan";
+export { getBrief, listDeadlines, getItemDetails, getRecentAnnouncements, getChanges, buildStudyPlan, getCourseLoad };
 
 /** Every tool is read-only over the compact snapshot. There is no tool that fetches, writes, or opens anything. */
-export const TOOLS: readonly ToolSpec[] = [getBrief, listDeadlines, getItemDetails, getRecentAnnouncements, getChanges] as readonly ToolSpec[];
+export const TOOLS: readonly ToolSpec[] = [getBrief, listDeadlines, getItemDetails, getRecentAnnouncements, getChanges, buildStudyPlan, getCourseLoad] as readonly ToolSpec[];
 
 export type ToolDefinition = { type: "function"; function: { name: string; description: string; parameters: Record<string, unknown> } };
 

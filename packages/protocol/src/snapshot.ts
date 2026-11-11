@@ -58,6 +58,11 @@ export const compactItemSchema = z.object({
   /** Earned score Brightspace reported, when graded. Optional for older clients. */
   earnedScore: z.number().nullable().optional(),
   url: safeUrl.nullable(),
+  /**
+   * Minutes the planner estimates the work takes, for study plans. An estimate from kind, points, and time limit:
+   * Brightspace does not report effort. Only on open items; optional for older clients.
+   */
+  estimateMinutes: z.number().int().min(15).max(1440).optional(),
   /** Priority score 0..100 from the planner, null when the item is not rankable. */
   priority: z.number().int().min(0).max(100).nullable(),
   reasons: z.array(z.string().max(160)).max(COMPACT_LIMITS.reasons),
@@ -78,6 +83,8 @@ export const compactPersonalSchema = z.object({
   dueDate: calendarDateSchema,
   bucket: compactBucketSchema,
   done: z.boolean(),
+  /** True for a slot of a study plan the student added to the Week tab, so it is not read as a separate task. */
+  fromPlan: z.boolean().optional(),
 });
 export type CompactPersonal = z.infer<typeof compactPersonalSchema>;
 

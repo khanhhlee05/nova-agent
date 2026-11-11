@@ -437,6 +437,21 @@ h1, h2, h3, h4, p { margin: 0; }
 .ask-rows-toggle:hover { color: var(--nova-accent); background: var(--nova-accent-soft); }
 .ask-rows { display: flex; flex-direction: column; margin-top: 2px; border-top: 1px solid var(--nova-rule); }
 .ask-note { font-size: 12.5px; color: var(--nova-muted); }
+.ask-plan { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--nova-rule); border-radius: var(--nova-radius-md); background: var(--nova-bg); }
+.ask-plan-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--nova-muted); }
+.ask-plan-head strong { font-size: 14px; font-weight: 700; color: var(--nova-ink); }
+.ask-plan-days { display: flex; flex-direction: column; gap: 10px; }
+.ask-plan-day { display: flex; flex-direction: column; gap: 2px; padding-top: 8px; border-top: 1px solid var(--nova-rule); }
+.ask-plan-day-label { display: flex; align-items: baseline; gap: 6px; font-size: 13px; font-weight: 700; color: var(--nova-ink); }
+.ask-plan-day-label[data-today="true"] { color: var(--nova-today); }
+.ask-plan-day-label span { font-weight: 500; color: var(--nova-muted); }
+.ask-plan-load { margin-left: auto; font-size: 12px; }
+.ask-plan-slots { display: flex; flex-direction: column; }
+.ask-plan-slot { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; padding: 6px 0; }
+.ask-plan-slot .task-title { font-size: 14px; }
+.ask-plan-reason { font-size: 12.5px; line-height: 1.35; color: var(--nova-muted); }
+.ask-plan .card-actions { align-items: center; }
+.ask-plan-added { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--nova-done); }
 .ask-followups { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .ask-chip { min-height: 30px; padding: 0 10px; border: 1px solid var(--nova-rule-strong); border-radius: var(--nova-radius-sm); background: var(--nova-bg); color: var(--nova-accent); font-size: 12.5px; font-weight: 600; text-align: left; }
 .ask-chip:hover { background: var(--nova-accent-soft); border-color: var(--nova-accent); }

@@ -69,17 +69,18 @@ export const WeekView = ({ dashboard, days: page = dashboard.week, now, canOpen,
                   const { deadline } = row;
                   const course = deadline.courseId ? dashboard.courseById.get(deadline.courseId) : undefined;
                   const done = deadline.completedAt !== null;
+                  const fromPlan = (deadline.planId ?? null) !== null;
                   return (
                     <Popover.Root key={`personal-${deadline.id}`}>
                       <Popover.Trigger asChild>
-                        <button type="button" className="event-chip" data-personal="true" data-done={done} aria-label={`${deadline.title}, added by you, ${course?.name ?? "no course"}, ${formatTime(deadline.dueAt)}${done ? ", done" : ""}`}>
+                        <button type="button" className="event-chip" data-personal="true" data-done={done} aria-label={`${deadline.title}, ${fromPlan ? "from your study plan" : "added by you"}, ${course?.name ?? "no course"}, ${formatTime(deadline.dueAt)}${done ? ", done" : ""}`}>
                           <span className="time mono">{formatTime(deadline.dueAt)}</span>
                           <span className="event-main">
                             <span className="title">{deadline.title}</span>
                             <span className="event-sub">
                               <span className="course-dot" data-hollow={!course} style={course ? { background: courseSwatch(course.color) } : undefined} aria-hidden="true" />
                               <span className="course-name">{course?.name ?? "No course"}</span>
-                              <span className="own-tag">Added by you</span>
+                              <span className="own-tag">{fromPlan ? "Study plan" : "Added by you"}</span>
                               {done ? <span className="done-label">· Done</span> : null}
                             </span>
                           </span>

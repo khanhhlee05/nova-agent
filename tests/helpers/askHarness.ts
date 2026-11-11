@@ -34,6 +34,8 @@ export const trackedActions = (): TrackedActions => {
     updatePersonal: track("updatePersonal"),
     deletePersonal: track("deletePersonal"),
     setPersonalDone: track("setPersonalDone"),
+    addPlanToWeek: track("addPlanToWeek"),
+    removePlanFromWeek: track("removePlanFromWeek"),
     deleteEvent: track("deleteEvent"),
     dismissBanner: track("dismissBanner"),
     restoreDismissed: track("restoreDismissed"),

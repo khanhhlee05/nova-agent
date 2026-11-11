@@ -3,7 +3,7 @@ import { changeData, changeRow, defineTool, findItems, itemData, itemRow } from 
 
 export const getItemDetails = defineTool({
   name: "get_item_details",
-  description: "Details for one assignment or quiz: due date, status, points, priority with reasons, and any recent changes to it. Look it up by id (from an earlier result) or by part of its title.",
+  description: "Details for one assignment or quiz: due date, status, points, priority with reasons, and any recent changes to it. Prefer the id (from the course data or an earlier result): it is exact. Use part of the title only when no id is known.",
   input: z
     .object({
       id: z.string().max(40).optional().describe("Item id such as 'a4101' or 'q5101'."),

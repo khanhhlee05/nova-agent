@@ -20,7 +20,9 @@ export const PersonalDetails = ({ deadline, course, now, onSetDone, onEdit, onDe
       <h3>{deadline.title}</h3>
       <dl>
         <dt>Source</dt>
-        <dd>Added by you on {formatExact(deadline.createdAt).replace(/ at .*$/, "")}. Not in Brightspace.</dd>
+        <dd>
+          {(deadline.planId ?? null) !== null ? "From a study plan you added from Ask Nova" : "Added by you"} on {formatExact(deadline.createdAt).replace(/ at .*$/, "")}. Not in Brightspace.
+        </dd>
         <dt>Due</dt>
         <dd>
           {formatExact(deadline.dueAt)}

@@ -1,10 +1,26 @@
 import { z } from "zod";
-import { compactBucketSchema, compactChangeFieldsSchema, compactChangeKindSchema, compactItemKindSchema, compactItemStatusSchema } from "./snapshot";
+import { calendarDateSchema, compactBucketSchema, compactChangeFieldsSchema, compactChangeKindSchema, compactItemKindSchema, compactItemStatusSchema } from "./snapshot";
 
-export const toolNameSchema = z.enum(["get_brief", "list_deadlines", "get_item_details", "get_recent_announcements", "get_changes"]);
+export const toolNameSchema = z.enum(["get_brief", "list_deadlines", "get_item_details", "get_recent_announcements", "get_changes", "build_study_plan", "get_course_load"]);
 export type ToolName = z.infer<typeof toolNameSchema>;
 
 const url = z.url({ protocol: /^https?$/ }).nullable();
+
+/** One block of work on one day of a study plan. */
+export const planSlotSchema = z.object({
+  itemId: z.string(),
+  title: z.string(),
+  courseId: z.string(),
+  courseName: z.string(),
+  minutes: z.number().int().min(1).max(1440),
+  /** Why the slot sits where it does, in the planner's own words. */
+  reason: z.string().max(240),
+  dueAt: z.string().nullable(),
+  url,
+});
+export type PlanSlot = z.infer<typeof planSlotSchema>;
+
+export const PLAN_LIMITS = { days: 14, slotsPerDay: 8 } as const;
 
 /** Rows are what the UI renders under an answer; the model never retypes them. */
 export const toolRowSchema = z.discriminatedUnion("kind", [
@@ -34,6 +50,40 @@ export const toolRowSchema = z.discriminatedUnion("kind", [
     dueLocal: z.string(),
     bucket: compactBucketSchema,
     done: z.boolean(),
+    fromPlan: z.boolean().optional(),
+  }),
+  z.object({
+    kind: z.literal("plan-day"),
+    /** `${planId}:${date}`. */
+    id: z.string(),
+    /** The same for every day of one plan, and the same again for the same request, so adding it to the Week tab twice replaces instead of doubling. */
+    planId: z.string().min(1).max(120),
+    /** The day as a short label, for example "Tue, Sep 8". */
+    title: z.string(),
+    date: calendarDateSchema,
+    totalMinutes: z.number().int().min(0),
+    capacityMinutes: z.number().int().min(0),
+    slots: z.array(planSlotSchema).max(PLAN_LIMITS.slotsPerDay),
+  }),
+  z.object({
+    kind: z.literal("course"),
+    /** The course id. */
+    id: z.string(),
+    /** The course name. */
+    title: z.string(),
+    courseId: z.string(),
+    courseName: z.string(),
+    open: z.number().int().min(0),
+    overdue: z.number().int().min(0),
+    /** Open items due in the period asked about. */
+    dueInPeriod: z.number().int().min(0),
+    /** Points possible across those items, where Brightspace says. */
+    pointsAtStake: z.number().min(0),
+    nextDueAt: z.string().nullable(),
+    nextDueLocal: z.string().nullable(),
+    /** Changes detected in the last two weeks. */
+    changes: z.number().int().min(0),
+    url,
   }),
   z.object({
     kind: z.literal("announcement"),

@@ -147,6 +147,32 @@ export const deletePersonalItem = async (db: NovaDb, id: string): Promise<void> 
   await db.personalItems.delete(id);
 };
 
+/**
+ * Puts one study plan on the Week tab. Only one plan lives there at a time:
+ * every slot of an earlier plan is removed first, whichever plan it came
+ * from, so asking for a new plan replaces the old one instead of stacking.
+ * All or nothing: over the cap, nothing changes.
+ */
+export const replacePlanItems = async (db: NovaDb, scope: string, items: readonly PersonalItemRecord[]): Promise<void> => {
+  await db.transaction("rw", db.personalItems, async () => {
+    const existing = await db.personalItems.where("scope").equals(scope).toArray();
+    const fromPlans = existing.filter((item) => (item.planId ?? null) !== null);
+    if (existing.length - fromPlans.length + items.length > MAX_PERSONAL_ITEMS) {
+      throw new Error(`Nova keeps at most ${MAX_PERSONAL_ITEMS} deadlines you add yourself. Delete a few on the Week tab, then add the plan again.`);
+    }
+    if (fromPlans.length > 0) await db.personalItems.bulkDelete(fromPlans.map((item) => item.id));
+    if (items.length > 0) await db.personalItems.bulkPut([...items]);
+  });
+};
+
+/** Removes every slot of one plan from the Week tab. Returns how many were removed. */
+export const deletePlanItems = async (db: NovaDb, scope: string, planId: string): Promise<number> =>
+  db.personalItems
+    .where("scope")
+    .equals(scope)
+    .filter((item) => item.planId === planId)
+    .delete();
+
 const toStored = (record: ConversationRecord): StoredConversation => ({ id: record.id, title: record.title, createdAt: record.createdAt, updatedAt: record.updatedAt, messages: reviveMessages(record.messages) });
 
 /** Saved conversations for one account, most recently used first. */

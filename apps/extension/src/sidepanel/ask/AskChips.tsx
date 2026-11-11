@@ -58,6 +58,12 @@ export const followUpQuestions = (tools: readonly AskTool[]): string[] => {
       case "get_changes":
         if (tool.rows > 0) out.push("Which of these moved later?");
         break;
+      case "build_study_plan":
+        out.push(typeof (input as { days?: unknown }).days === "number" && ((input as { days: number }).days >= 7) ? "What should I start first?" : "Plan the next 7 days");
+        break;
+      case "get_course_load":
+        out.push("What should I start first?");
+        break;
       case "get_item_details":
         out.push("What else is due in that course?");
         break;

@@ -3,16 +3,27 @@ import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { Dashboard } from "../model";
 import { AskFollowUps } from "./AskChips";
+import { AskPlans } from "./AskPlan";
 import { AskRowsDisclosure, type AskLive } from "./AskRows";
 import { hostOf } from "./askSettings";
 import type { AskMessage, AskStatus } from "./useAskThread";
 
-const TOOL_LABELS: Record<ToolName, string> = {
-  get_brief: "your workload",
-  list_deadlines: "deadlines",
-  get_item_details: "item details",
-  get_recent_announcements: "announcements",
-  get_changes: "changes",
+/** What each lookup reads as while it runs, once it is done, and when it fails. */
+const TOOL_COPY: Record<ToolName, { running: string; done: string; failed: string }> = {
+  get_brief: { running: "Looking up your workload", done: "Looked up your workload", failed: "Could not look up your workload" },
+  list_deadlines: { running: "Looking up deadlines", done: "Looked up deadlines", failed: "Could not look up deadlines" },
+  get_item_details: { running: "Looking up item details", done: "Looked up item details", failed: "Could not look up item details" },
+  get_recent_announcements: { running: "Looking up announcements", done: "Looked up announcements", failed: "Could not look up announcements" },
+  get_changes: { running: "Looking up changes", done: "Looked up changes", failed: "Could not look up changes" },
+  build_study_plan: { running: "Building a study plan", done: "Built a study plan", failed: "Could not build a study plan" },
+  get_course_load: { running: "Comparing your courses", done: "Compared your courses", failed: "Could not compare your courses" },
+};
+
+const toolLine = (tool: AskMessage["tools"][number]): string => {
+  const copy = TOOL_COPY[tool.name];
+  if (tool.status === "running") return `${copy.running}…`;
+  if (tool.status === "ok") return tool.summary ? `${copy.done}: ${tool.summary.replace(/\.$/, "")}` : `${copy.done} · ${tool.rows} ${tool.rows === 1 ? "row" : "rows"}`;
+  return `${copy.failed}: ${tool.summary ?? ""}`;
 };
 
 export const errorCopy = (error: AskErrorEvent, apiBaseUrl: string): { title: string; text: string; retry: boolean; settings: boolean } => {
@@ -81,7 +92,7 @@ export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpe
               <ul className="ask-tools" aria-label="Lookups">
                 {message.tools.map((tool) => (
                   <li key={tool.id} className="ask-tool" data-state={tool.status}>
-                    {tool.status === "running" ? `Looking up ${TOOL_LABELS[tool.name]}…` : tool.status === "ok" ? (tool.summary ? `Looked up ${TOOL_LABELS[tool.name]}: ${tool.summary.replace(/\.$/, "")}` : `Looked up ${TOOL_LABELS[tool.name]} · ${tool.rows} ${tool.rows === 1 ? "row" : "rows"}`) : `Could not look up ${TOOL_LABELS[tool.name]}: ${tool.summary ?? ""}`}
+                    {toolLine(tool)}
                   </li>
                 ))}
               </ul>
@@ -97,6 +108,7 @@ export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpe
                 <span className="ask-caret" aria-hidden="true" />
               </p>
             ) : null}
+            <AskPlans rows={message.rows} dashboard={dashboard} now={now} canOpen={canOpen} onOpen={onOpen} live={live} />
             <AskRowsDisclosure rows={message.rows} dashboard={dashboard} now={now} canOpen={canOpen} onOpen={onOpen} live={live} />
             {message.stopped ? <p className="ask-note">Stopped before Nova finished.</p> : null}
             {message.grounded === false ? <p className="ask-note">Nova could not verify every item named above against your data.</p> : null}

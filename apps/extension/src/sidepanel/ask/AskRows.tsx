@@ -1,13 +1,14 @@
 import { shortId } from "@nova-agent/agent";
 import { isDone, type AcademicItem, type ChangeEvent } from "@nova-agent/core";
 import type { ToolRow } from "@nova-agent/protocol";
-import { CalendarDays, Check, ChevronDown, ExternalLink, EyeOff, Megaphone, PenLine, Pin } from "lucide-react";
+import { BookOpen, CalendarDays, Check, ChevronDown, ExternalLink, EyeOff, ListFilter, Megaphone, PenLine, Pin } from "lucide-react";
 import { useId, useMemo, useState, type ReactNode } from "react";
 import { KindIcon, StatusIcon, changeIcon } from "../components/icons";
 import { Tip } from "../components/Tip";
-import { formatDeadline, formatRelative } from "../format";
+import { formatDeadline, formatRelative, pluralize } from "../format";
 import { STATUS_LABELS, changeVerb, type Dashboard, type PersonalDeadline } from "../model";
 import { courseSwatch } from "../theme";
+import type { PlanDraft } from "./AskPlan";
 
 /** What a row can do besides opening Brightspace. Each one is the same handler the Focus, Week, or Changes tab calls. */
 export type AskRowActions = {
@@ -16,6 +17,11 @@ export type AskRowActions = {
   onSetRead: (id: string, read: boolean) => void;
   onSetPersonalDone?: (id: string, title: string, done: boolean) => void;
   onShowPersonal?: (deadline: PersonalDeadline) => void;
+  /** Filters the Focus tab to one course and opens it. */
+  onShowCourse?: (courseId: string) => void;
+  /** Puts a study plan on the Week tab as the student's own deadlines, replacing a plan added earlier. */
+  onAddPlan?: (planId: string, drafts: PlanDraft[]) => void;
+  onRemovePlan?: (planId: string) => void;
 };
 
 /**
@@ -45,11 +51,12 @@ type ItemRow = Extract<ToolRow, { kind: "item" }>;
 type AnnouncementRow = Extract<ToolRow, { kind: "announcement" }>;
 type ChangeRow = Extract<ToolRow, { kind: "change" }>;
 type PersonalRow = Extract<ToolRow, { kind: "personal" }>;
+type CourseRow = Extract<ToolRow, { kind: "course" }>;
 
 /** Rows the list under an answer knows how to draw. Other kinds have their own cards. */
-export type ListRow = ItemRow | AnnouncementRow | ChangeRow | PersonalRow;
+export type ListRow = ItemRow | AnnouncementRow | ChangeRow | PersonalRow | CourseRow;
 
-export const isListRow = (row: ToolRow): row is ListRow => row.kind === "item" || row.kind === "announcement" || row.kind === "change" || row.kind === "personal";
+export const isListRow = (row: ToolRow): row is ListRow => row.kind === "item" || row.kind === "announcement" || row.kind === "change" || row.kind === "personal" || row.kind === "course";
 
 const asEvent = (row: ChangeRow): ChangeEvent => ({
   id: row.id,
@@ -147,6 +154,46 @@ export const AskRows = ({ rows, dashboard, now, canOpen, onOpen, live }: AskRows
                   <span className="kind-chip" role="img" aria-label="Announcement">
                     <Megaphone size={15} aria-hidden="true" />
                   </span>
+                  {openButton(row.title, row.url, row.courseId)}
+                </div>
+              </div>
+            </li>
+          );
+        }
+        if (row.kind === "course") {
+          const next = row.nextDueAt ? `Next due ${formatDeadline(row.nextDueAt, now)}` : "Nothing coming up";
+          const show = live?.actions.onShowCourse;
+          return (
+            <li key={`course-${row.id}`} className="task">
+              <div className="task-row">
+                <div className="task-main">
+                  <span className="task-title" title={row.title}>
+                    {row.title}
+                  </span>
+                  <span className="task-sub">
+                    <span className="task-course">
+                      {dotFor(row.courseId)}
+                      {pluralize(row.open, "open item")}
+                    </span>
+                    {row.overdue > 0 ? (
+                      <span className="due" data-tone="overdue">
+                        {row.overdue} overdue
+                      </span>
+                    ) : null}
+                    <span className="due">{next}</span>
+                  </span>
+                </div>
+                <div className="task-aside">
+                  <span className="kind-chip" role="img" aria-label="Course">
+                    <BookOpen size={15} aria-hidden="true" />
+                  </span>
+                  {show && dashboard.courseById.has(row.courseId) ? (
+                    <Tip label="Show on Focus">
+                      <button type="button" className="icon-button icon-button-sm" aria-label={`Show ${row.title} on the Focus tab`} onClick={() => show(row.courseId)}>
+                        <ListFilter size={15} aria-hidden="true" />
+                      </button>
+                    </Tip>
+                  ) : null}
                   {openButton(row.title, row.url, row.courseId)}
                 </div>
               </div>
@@ -252,7 +299,7 @@ const PersonalRowView = ({ row, deadline, now, live, dot }: PersonalRowViewProps
             <span className="due" data-tone={overdue ? "overdue" : undefined}>
               {overdue ? `Overdue · ${formatRelative(dueAt, now)}` : formatDeadline(dueAt, now)}
             </span>
-            <span className="own-tag">Added by you</span>
+            <span className="own-tag">{(deadline?.planId ?? null) !== null || row.fromPlan ? "Study plan" : "Added by you"}</span>
           </span>
         </div>
         <div className="task-aside">

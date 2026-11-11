@@ -26,7 +26,7 @@ const titles = (rows: ToolRow[]) => rows.map((row) => row.title);
 describe("tool schemas", () => {
   it("expose OpenAI-style function definitions without $schema and with optional fields not required", () => {
     const defs = toolSchemasForModel();
-    expect(defs.map((def) => def.function.name)).toEqual(["get_brief", "list_deadlines", "get_item_details", "get_recent_announcements", "get_changes"]);
+    expect(defs.map((def) => def.function.name)).toEqual(["get_brief", "list_deadlines", "get_item_details", "get_recent_announcements", "get_changes", "build_study_plan", "get_course_load"]);
     for (const def of defs) {
       expect(def.type).toBe("function");
       expect(def.function.description.length).toBeGreaterThan(20);
@@ -48,7 +48,7 @@ describe("tool schemas", () => {
     if (!bad.ok) expect(bad.error).toContain("range");
     expect(run("get_item_details", {}, baseline).ok).toBe(false);
     expect(run("list_deadlines", { course: "Underwater Basket Weaving" }, baseline)).toMatchObject({ ok: false, error: expect.stringContaining("No course matches") });
-    expect(TOOLS).toHaveLength(5);
+    expect(TOOLS).toHaveLength(7);
   });
 });
 
@@ -96,7 +96,7 @@ describe("list_deadlines", () => {
     const micro = ok(run("list_deadlines", { range: "all", course: "micro" }, baseline));
     expect(titles(micro.rows)).toEqual(expect.arrayContaining(["Lab 3: Timer Interrupts", "Lab 2: GPIO and Debouncing", "Project Proposal", "Quiz 2: Interrupt Latency"]));
     expect(titles(micro.rows)).not.toContain("Lab 1: Toolchain Setup");
-    expect(micro.rows.every((row) => row.courseName === "Microcontrollers")).toBe(true);
+    expect(micro.rows.every((row) => row.kind === "item" && row.courseName === "Microcontrollers")).toBe(true);
     const withDone = ok(run("list_deadlines", { range: "all", course: "ECE-2042-001", includeDone: true }, baseline));
     expect(titles(withDone.rows)).toContain("Lab 1: Toolchain Setup");
     const quizzes = ok(run("list_deadlines", { range: "all", kind: "quiz" }, baseline));
@@ -123,7 +123,7 @@ describe("list_deadlines periods", () => {
     expect(titles(now.rows)).toEqual(["Quiz 3: Serial Protocols", "Project Proposal"]);
     expect(now.summary).toBe("2 items due next week (Sep 14 to Sep 20).");
     const micro = ok(run("list_deadlines", { range: "next-week", course: "micro" }, changed));
-    expect(micro.rows.every((row) => row.courseName === "Microcontrollers")).toBe(true);
+    expect(micro.rows.every((row) => row.kind === "item" && row.courseName === "Microcontrollers")).toBe(true);
     expect(micro.summary).toContain("in Microcontrollers");
   });
 
@@ -193,7 +193,7 @@ describe("get_changes", () => {
     const row = moved.rows[0];
     expect(row?.kind === "change" && row.before?.dueLocal && row.after?.dueLocal).toBeTruthy();
     const micro = ok(run("get_changes", { course: "31001", since: "today" }, changed));
-    expect(micro.rows.every((change) => change.courseName === "Microcontrollers")).toBe(true);
+    expect(micro.rows.every((change) => change.kind === "change" && change.courseName === "Microcontrollers")).toBe(true);
     expect(titles(micro.rows)).toEqual(expect.arrayContaining(["Lab 3: Timer Interrupts", "Quiz 3: Serial Protocols", "Lab 3 deadline extended"]));
     const read = { ...changed, changes: changed.changes.map((change, index) => ({ ...change, read: index === 0 })) };
     expect(ok(run("get_changes", { unreadOnly: true }, read)).rows).toHaveLength(changed.changes.length - 1);

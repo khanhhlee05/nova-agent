@@ -2,7 +2,7 @@ import type { AskEvent, ChatFocus, ChatMessage, CompactSnapshot, ModelUsage, Too
 import { checkHonesty } from "./honesty";
 import { ModelError, addUsage, isAbortError, type ChatModel, type ModelMessage, type ToolCall } from "./model";
 import { briefTitles, buildSystemPrompt, quote } from "./prompt";
-import { TOOLS, executeTool, isToolName, toolSchemasForModel, type ToolSpec } from "./tools";
+import { TOOLS, executeTool, isToolName, rowTitles, toolSchemasForModel, type ToolSpec } from "./tools";
 
 export type TurnLog = { rounds: number; toolNames: ToolName[]; usage: ModelUsage | null; model: string | null; outcome: "ok" | "error" | "aborted"; errorCode?: string; grounded: boolean; corrected: boolean };
 
@@ -119,7 +119,7 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
           const result = executeTool(call.name, args, { snapshot: input.snapshot }, tools);
           if (name) toolNames.push(name);
           if (result.ok) {
-            for (const row of result.rows) returnedTitles.add(row.title);
+            for (const row of result.rows) for (const title of rowTitles(row)) returnedTitles.add(title);
             yield { type: "tool_result", id: call.id, name: name ?? "get_brief", ok: true, summary: result.summary, rows: result.rows };
             messages.push({ role: "tool", toolCallId: call.id, content: JSON.stringify({ summary: result.summary, ...(result.data as object) }) });
           } else {

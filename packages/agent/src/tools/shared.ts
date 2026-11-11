@@ -156,7 +156,7 @@ export const itemData = (snapshot: CompactSnapshot, item: CompactItem) => ({
 /** A deadline the student typed in. `source` keeps it from being read as a Brightspace item. */
 export const personalData = (snapshot: CompactSnapshot, deadline: CompactPersonal) => ({
   id: deadline.id,
-  source: "added by the student, not in Brightspace",
+  source: deadline.fromPlan ? "a slot from a study plan the student added to the Week tab, not a separate task" : "added by the student, not in Brightspace",
   title: deadline.title,
   course: deadline.courseId ? courseName(snapshot, deadline.courseId) : null,
   due: deadline.dueLocal,
@@ -176,6 +176,9 @@ export const changeData = (snapshot: CompactSnapshot, change: CompactChange) => 
   after: change.after ? { due: change.after.dueLocal ?? change.after.dueAt, status: change.after.status, visibility: change.after.visibility, score: change.after.score, pointsPossible: change.after.pointsPossible } : null,
   read: change.read,
 });
+
+/** Every item title a row shows, so an answer that names one counts as looked up. A plan day shows the titles in its slots. */
+export const rowTitles = (row: ToolRow): string[] => (row.kind === "plan-day" ? row.slots.map((slot) => slot.title) : [row.title]);
 
 export const plural = (count: number, one: string, many = `${one}s`): string => `${count} ${count === 1 ? one : many}`;
 

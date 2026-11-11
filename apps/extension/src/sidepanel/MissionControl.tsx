@@ -6,7 +6,7 @@ import type { ChatRequest } from "@nova-agent/protocol";
 import { CheckCheck, EyeOff, Plus } from "lucide-react";
 import { Tabs, Tooltip } from "radix-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AskChips, AskView, summaryOf, useAskThread, type AskAbout, type AskClient, type AskClientFactory, type AskDraft, type AskLive, type AskMessage, type AskRequestContext, type AskSettings, type ConversationStore } from "./ask";
+import { AskChips, AskView, summaryOf, useAskThread, type AskAbout, type AskClient, type AskClientFactory, type AskDraft, type AskLive, type AskMessage, type AskRequestContext, type AskSettings, type ConversationStore, type PlanDraft } from "./ask";
 import type { SyncStatusRecord } from "../storage/novaDb";
 import { PHASE_LABELS, isRunningPhase, isStale, type SyncRuntimeState } from "../sync/syncState";
 import { StateBanners, SyncProgress } from "./components/Banners";
@@ -74,6 +74,9 @@ export type MissionControlActions = {
   /** Permanent after the Undo window, like deleting a change. */
   deletePersonal?: (id: string, title: string) => void;
   setPersonalDone?: (id: string, title: string, done: boolean) => void;
+  /** Puts a study plan from Ask Nova on the Week tab, replacing any plan added before. */
+  addPlanToWeek?: (planId: string, drafts: PlanDraft[]) => void;
+  removePlanFromWeek?: (planId: string) => void;
   /** Permanently deletes a change event; it will not return on the next refresh. */
   deleteEvent: (id: string, title: string) => void;
   dismissBanner: (id: string) => void;
@@ -277,6 +280,9 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
           onSetRead: actions.setEventRead,
           onSetPersonalDone: actions.setPersonalDone,
           onShowPersonal: showPersonal,
+          onShowCourse: (courseId: string) => actions.setPreferences({ activeTab: "focus", courseFilter: courseId }),
+          onAddPlan: actions.addPlanToWeek,
+          onRemovePlan: actions.removePlanFromWeek,
         },
       }
     : undefined;

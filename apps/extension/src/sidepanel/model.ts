@@ -22,7 +22,17 @@ export type NextMove = { item: AcademicItem; ranked: RankedItem; reasons: Priori
 export type WeekEntry = { item: AcademicItem; bucket: DeadlineBucket };
 
 /** A deadline the student added by hand. Only the Week tab shows these. */
-export type PersonalDeadline = { id: string; title: string; dueAt: string; courseId: string | null; completedAt: string | null; createdAt: string; updatedAt: string };
+export type PersonalDeadline = {
+  id: string;
+  title: string;
+  dueAt: string;
+  courseId: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Set when the deadline is a slot of a study plan the student added from Ask Nova. Null or absent for ones typed in by hand. */
+  planId?: string | null;
+};
 
 /** `entries` come from Brightspace; `custom` are the student's own, kept apart so no view can confuse the two. */
 export type WeekDay = { date: Date; isToday: boolean; entries: WeekEntry[]; custom: PersonalDeadline[] };

@@ -53,6 +53,8 @@ export type PersonalItemRecord = {
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** The study plan this deadline is a slot of, when it came from Ask Nova's "Add to Week". */
+  planId?: string | null;
 };
 
 /**

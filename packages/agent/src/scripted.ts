@@ -80,6 +80,11 @@ export const demoRouter: ScriptedRouter = (input) => {
   // "What is left in <course>?", the chip the Ask hero draws from the course with the most open work.
   const leftIn = /\bleft in (.+?)\??$/.exec(question);
   if (leftIn?.[1]) return { toolCalls: [{ name: "list_deadlines", args: { range: "all", course: leftIn[1].trim() } }] };
+  if (/\bplan\b|\bschedule\b/.test(question)) {
+    const days = /\bweek\b|\b7 days\b|\bseven days\b/.test(question) ? 7 : /\btwo days\b|\b2 days\b/.test(question) ? 2 : 3;
+    return { toolCalls: [{ name: "build_study_plan", args: { days } }] };
+  }
+  if (/\bwhich course\b|\bcourses?\b.*\b(most|attention|workload|busiest)\b|\bworkload\b/.test(question)) return { toolCalls: [{ name: "get_course_load", args: {} }] };
   if (/\b(announce|announcements?|posted|news)\b/.test(question)) return { toolCalls: [{ name: "get_recent_announcements", args: {} }] };
   if (/\b(change|changed|changes|new|moved|since)\b/.test(question)) return { toolCalls: [{ name: "get_changes", args: { since: "week" } }] };
   if (/\b(due|deadline|week|tomorrow|today|overdue)\b/.test(question)) {

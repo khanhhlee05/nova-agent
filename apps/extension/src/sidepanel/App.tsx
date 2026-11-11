@@ -3,7 +3,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExtensionHost } from "../platform/host";
 import type { NovaDb } from "../storage/novaDb";
-import { clearAllData, clearConversations, deleteChangeEvent, deleteConversation, deletePersonalItem, getConversation, getPreference, getSyncStatus, listChangeEvents, listConversations, listLocalMarks, listPersonalItems, latestSnapshot, markAllRead, putPersonalItem, saveConversation, setEventRead, setLocalMark, setPreference, unreadCount } from "../storage/repositories";
+import { clearAllData, clearConversations, deleteChangeEvent, deleteConversation, deletePersonalItem, deletePlanItems, getConversation, getPreference, getSyncStatus, listChangeEvents, listConversations, listLocalMarks, listPersonalItems, latestSnapshot, markAllRead, putPersonalItem, replacePlanItems, saveConversation, setEventRead, setLocalMark, setPreference, unreadCount } from "../storage/repositories";
 import { DATA_MODE_PREFERENCE, DEMO_SCENARIO_PREFERENCE, SyncCoordinator, type TransportFactory } from "../sync/syncCoordinator";
 import { IDLE_STATE, isRunningPhase, type SyncRuntimeState } from "../sync/syncState";
 import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, defaultAskClientFactory, effectiveAskSettings, summarize, type AskClientFactory, type AskSettings, type ConversationStore } from "./ask";
@@ -209,6 +209,21 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
         if (!current) return;
         const at = clock().toISOString();
         void putPersonalItem(db, { ...current, completedAt: done ? at : null, updatedAt: at }).then(() => setAnnouncement(done ? `Marked "${title}" done.` : `"${title}" is back on your list.`));
+      },
+      addPlanToWeek: (planId: string, drafts: { id: string; title: string; dueAt: string; courseId: string | null }[]) => {
+        if (!scope || drafts.length === 0) return;
+        const at = clock().toISOString();
+        void replacePlanItems(
+          db,
+          scope,
+          drafts.map((draft) => ({ ...draft, scope, completedAt: null, createdAt: at, updatedAt: at, planId })),
+        )
+          .then(() => setAnnouncement(`Added the plan to your Week tab: ${drafts.length} ${drafts.length === 1 ? "entry" : "entries"}. They stay on this device.`))
+          .catch((error: unknown) => setAnnouncement(error instanceof Error ? error.message : "Nova could not add the plan."));
+      },
+      removePlanFromWeek: (planId: string) => {
+        if (!scope) return;
+        void deletePlanItems(db, scope, planId).then((count) => setAnnouncement(count > 0 ? "Removed the plan from your Week tab." : "That plan was not on your Week tab."));
       },
       undoDelete: () => {
         const current = pending.current;

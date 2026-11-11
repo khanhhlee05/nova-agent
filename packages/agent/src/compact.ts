@@ -12,7 +12,7 @@ import {
   type Announcement,
   type ChangeEvent,
 } from "@nova-agent/core";
-import { explainPriority, rankItems } from "@nova-agent/planner";
+import { estimateStudyMinutes, explainPriority, rankItems } from "@nova-agent/planner";
 import { COMPACT_LIMITS, type CompactChange, type CompactItem, type CompactPersonal, type CompactSnapshot } from "@nova-agent/protocol";
 import { addDays, addWeeks, differenceInCalendarDays, endOfWeek, format, startOfDay, startOfWeek } from "date-fns";
 
@@ -33,7 +33,7 @@ export type CompactOptions = {
 };
 
 /** The fields of a student-added deadline the compact snapshot needs. */
-export type PersonalInput = { id: string; title: string; dueAt: string; courseId: string | null; completedAt: string | null };
+export type PersonalInput = { id: string; title: string; dueAt: string; courseId: string | null; completedAt: string | null; planId?: string | null };
 
 const LOCAL_FORMAT = "EEE, MMM d, h:mm a";
 
@@ -160,6 +160,7 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
         longOverdue: !doneLocally && isLongOverdue(item, now),
         status: item.status,
         ...(doneLocally ? { doneLocally: true } : {}),
+        ...(isActive(item) && !doneLocally ? { estimateMinutes: estimateStudyMinutes(item) } : {}),
         visibility: compactVisibility(item),
         pointsPossible: item.pointsPossible,
         earnedScore: item.score?.graded ? item.score.earned : null,
@@ -223,6 +224,7 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
         dueDate: dateOf(deadline.dueAt) ?? format(now, DATE_FORMAT),
         bucket: classifyDeadline({ dueAt: deadline.dueAt, status: done ? "completed" : "not-started" }, window),
         done,
+        ...(deadline.planId ? { fromPlan: true } : {}),
       };
     });
 
