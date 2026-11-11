@@ -2,8 +2,8 @@ import type { Sql } from "./sql";
 
 /**
  * The schema, as ordered steps that are never edited once released: a change
- * is a new step. Nothing academic has a table. A saved conversation holds
- * what the student chose to save, and only while they have saving turned on.
+ * is a new step. Course data has no table. A saved conversation holds what a
+ * student chose to keep on the server, and only while they have that turned on.
  */
 export const MIGRATIONS: readonly string[] = [
   `

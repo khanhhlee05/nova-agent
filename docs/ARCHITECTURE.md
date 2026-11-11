@@ -71,7 +71,7 @@ Ask tab ──compactSnapshot()──▶ POST /v1/chat (question, history, snaps
 ```
 
 - The compact snapshot is built in the browser so buckets and local dates follow the student's time zone; the server never does date math.
-- By default the server is stateless: history travels with the request, usage is an in-memory daily counter, logs carry counts only. In hosted mode (`AUTH_MODE=google`) it also has a Postgres database with accounts, sessions, and per-student token counts, and still nothing about courses.
+- By default the server is stateless: history travels with the request, usage is an in-memory daily counter, logs carry counts only. In hosted mode (`AUTH_MODE=google`) it also has a Postgres database with accounts, sessions, per-student token counts, and, only for a student who turned that on, a copy of their saved conversations.
 - Rows under an answer come from tool results, never from the model's text. The tab is force-mounted so the session-only thread survives switching tabs.
 - Some lookups are made by the panel, not the server, because only the panel can reach Brightspace and the student's storage: reading an assignment's file, and searching or reading a course's materials. The server sends a `client_tool` event, waits for `POST /v1/chat/{turnId}/tool-result`, and treats the answer as tool data.
 - Course materials are indexed on the device: text is cut into passages in `materialText`, and a BM25 keyword search (`src/files/search.ts`) picks the few passages a question needs. No embeddings and no index on the server.

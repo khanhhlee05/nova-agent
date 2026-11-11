@@ -6,6 +6,7 @@ export * from "./feedback";
 export * from "./useServerUsage";
 export * from "./useAskThread";
 export * from "./conversations";
+export * from "./conversationSync";
 export * from "./proposals";
 export * from "./clientTools";
 export * from "./AskMaterials";

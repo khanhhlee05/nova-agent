@@ -146,7 +146,7 @@ describe("Ask tab", () => {
     expect((screen.getByRole("checkbox", { name: /save conversations on this device/i }) as HTMLInputElement).checked).toBe(false);
     // Reading assignment files is on unless unticked; it still asks once per session before the first file.
     expect((screen.getByRole("checkbox", { name: /let nova read assignment files/i }) as HTMLInputElement).checked).toBe(true);
-    expect(ask.settingsCalls).toEqual([{ enabled: true, apiBaseUrl: "http://localhost:8787", token: null, persistConversations: false, readAttachments: true }]);
+    expect(ask.settingsCalls).toEqual([{ enabled: true, apiBaseUrl: "http://localhost:8787", token: null, persistConversations: false, readAttachments: true, syncConversations: false }]);
   });
 
   it("tests the connection from the setup card", async () => {

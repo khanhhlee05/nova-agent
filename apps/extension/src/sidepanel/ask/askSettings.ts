@@ -20,6 +20,8 @@ export type AskSettings = {
    */
   readAttachments?: boolean;
   /** Courses whose Content area the student lets Nova read. Empty by default: each course is turned on by itself. */
+  /** Also keep saved conversations on the Nova server the student is signed in to. Off unless turned on. */
+  syncConversations?: boolean;
   materialsCourses?: string[];
   /** Per course, the Content topics the student unticked. */
   materialsExcluded?: Record<string, string[]>;

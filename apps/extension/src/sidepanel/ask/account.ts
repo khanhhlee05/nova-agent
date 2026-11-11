@@ -1,4 +1,4 @@
-import { apiErrorBodySchema, meResponseSchema, sessionResponseSchema, type AccountUsage, type SessionResponse } from "@nova-agent/protocol";
+import { apiErrorBodySchema, conversationListResponseSchema, conversationResponseSchema, meResponseSchema, sessionResponseSchema, type AccountUsage, type ConversationBody, type RemoteConversation, type RemoteConversationSummary, type SessionResponse } from "@nova-agent/protocol";
 
 /** A sign-in to one hosted Nova server, kept on this device. The refresh token renews it; signing out deletes both. */
 export type AskSession = { apiBaseUrl: string; email: string; accessToken: string; refreshToken: string; /** When the access token stops working, in milliseconds since 1970. */ expiresAt: number };
@@ -112,10 +112,10 @@ export class AccountClient implements AskAuth {
     await this.deps.save(null);
   }
 
-  private async authed(path: string, method: "GET" | "DELETE"): Promise<Response | null> {
+  private async authed(path: string, method: "GET" | "DELETE" | "PUT", body?: unknown): Promise<Response | null> {
     const send = async (token: string): Promise<Response | null> => {
       try {
-        return await this.fetchImpl(`${this.baseUrl}${path}`, { method, headers: { Authorization: `Bearer ${token}` } });
+        return await this.fetchImpl(`${this.baseUrl}${path}`, { method, headers: { Authorization: `Bearer ${token}`, ...(body !== undefined ? { "Content-Type": "application/json" } : {}) }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
       } catch {
         return null;
       }
@@ -141,5 +141,33 @@ export class AccountClient implements AskAuth {
     if (!response?.ok) return false;
     await this.deps.save(null);
     return true;
+  }
+
+  /** The conversations this student keeps on the server, newest first. Null when not signed in or the server did not answer. */
+  async listConversations(): Promise<RemoteConversationSummary[] | null> {
+    const response = await this.authed("/v1/conversations", "GET");
+    const parsed = response?.ok ? conversationListResponseSchema.safeParse(await response.json().catch(() => null)) : null;
+    return parsed?.success ? parsed.data.conversations : null;
+  }
+
+  async getConversation(id: string): Promise<RemoteConversation | null> {
+    const response = await this.authed(`/v1/conversations/${encodeURIComponent(id)}`, "GET");
+    const parsed = response?.ok ? conversationResponseSchema.safeParse(await response.json().catch(() => null)) : null;
+    return parsed?.success ? parsed.data : null;
+  }
+
+  /** True when the server stored it. */
+  async putConversation(id: string, body: ConversationBody): Promise<boolean> {
+    return (await this.authed(`/v1/conversations/${encodeURIComponent(id)}`, "PUT", body))?.ok === true;
+  }
+
+  /** True when the server confirmed it is gone. */
+  async deleteConversation(id: string): Promise<boolean> {
+    return (await this.authed(`/v1/conversations/${encodeURIComponent(id)}`, "DELETE"))?.ok === true;
+  }
+
+  /** Deletes every conversation the server keeps for this student. True when the server confirmed. */
+  async deleteConversations(): Promise<boolean> {
+    return (await this.authed("/v1/conversations", "DELETE"))?.ok === true;
   }
 }

@@ -13,7 +13,7 @@ import type { DataMode, NovaDb } from "../storage/novaDb";
 import { attachmentTextId, askFeedbackId, clearAllData, clearConversations, deleteAskFeedback, listAskFeedback, putAskFeedback, createDexieVersionCache, deleteChangeEvent, deleteConversation, deletePersonalItem, deletePlanItems, forgetCourseMaterials, listMaterialTexts, listMaterialTocs, materialTextId, getConversation, getPreference, getSyncStatus, listAttachmentTexts, listChangeEvents, listConversations, listLocalMarks, listPersonalItems, latestSnapshot, markAllRead, putPersonalItem, replacePlanItems, saveConversation, setEventRead, setLocalMark, setPreference, unreadCount } from "../storage/repositories";
 import { DATA_MODE_PREFERENCE, DEMO_SCENARIO_PREFERENCE, SyncCoordinator, defaultTransportFactory, type TransportFactory } from "../sync/syncCoordinator";
 import { IDLE_STATE, isRunningPhase, type SyncRuntimeState } from "../sync/syncState";
-import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, availableClientTools, defaultAskClientFactory, effectiveAskSettings, runReadAttachment, runReadMaterial, runSearchMaterials, summarize, ASK_SESSION_PREFERENCE, AccountClient, FEEDBACK_FILE_NAME, feedbackExport, type AskAccountControls, type AskFeedbackControls, type AskMaterialsControls, type AskSession, type MaterialsToolDeps, type AskClientFactory, type AskSettings, type ClientToolAnswer, type ConsentRequest, type ConversationStore } from "./ask";
+import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, availableClientTools, defaultAskClientFactory, effectiveAskSettings, runReadAttachment, runReadMaterial, runSearchMaterials, summarize, pushConversation, removeAllRemoteConversations, removeRemoteConversation, retryPurge, syncConversations, ASK_SESSION_PREFERENCE, AccountClient, FEEDBACK_FILE_NAME, feedbackExport, type AskAccountControls, type AskFeedbackControls, type AskMaterialsControls, type AskSession, type MaterialsToolDeps, type AskClientFactory, type AskSettings, type ClientToolAnswer, type ConsentRequest, type ConversationStore } from "./ask";
 import { browserSaveFile, type SaveFile } from "../platform/saveFile";
 import { FILE_ACCESS_PREFERENCE, checkFileAccess as runCheckFileAccess, connectLive as runConnectLive } from "./connect";
 import { useSessionDismissals } from "./dismissals";
@@ -76,6 +76,8 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
   const personalItems = useLiveQuery(async () => (scope ? listPersonalItems(db, scope) : []), [db, scope]);
   // A saved address that no longer passes the https rule turns Ask off rather than producing a client.
   const askSettings = useLiveQuery(async () => effectiveAskSettings(await getPreference<AskSettings>(db, ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS)), [db]);
+  // A settings change that has to reach the server reads the account client that is current when it runs.
+  const accountRef = useRef<AccountClient | null>(null);
   // A sign-in to a hosted Nova server, kept on this device and only ever sent to the server it was made with.
   const session = useLiveQuery(async () => getPreference<AskSession | null>(db, ASK_SESSION_PREFERENCE, null), [db]);
   const apiBaseUrl = askSettings?.apiBaseUrl ?? null;
@@ -83,6 +85,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
     () => (apiBaseUrl ? new AccountClient({ baseUrl: apiBaseUrl, load: () => getPreference<AskSession | null>(db, ASK_SESSION_PREFERENCE, null), save: (next) => setPreference(db, ASK_SESSION_PREFERENCE, next), ...(accountFetch ? { fetch: accountFetch } : {}) }) : null),
     [accountFetch, apiBaseUrl, db],
   );
+  accountRef.current = accountClient;
   const askClient = useMemo(() => (askSettings?.enabled ? askClientFactory(askSettings, accountClient) : null), [accountClient, askClientFactory, askSettings]);
   const signedInAs = session && apiBaseUrl && session.apiBaseUrl === apiBaseUrl.replace(/\/+$/, "") ? session.email : null;
   const [accountBusy, setAccountBusy] = useState(false);
@@ -109,9 +112,12 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
       settingsWrite.current = settingsWrite.current
         .then(async () => {
           const current = effectiveAskSettings(await getPreference<AskSettings>(db, ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS));
-          // Turning saving off is a promise that nothing stays behind, so the saved conversations go with it.
-          if (current.persistConversations === true && patch.persistConversations === false) await clearConversations(db);
-          await setPreference(db, ASK_SETTINGS_PREFERENCE, { ...current, ...patch });
+          // Turning saving off is a promise that nothing stays behind, so the saved conversations go with it, here and on the server.
+          const savingOff = current.persistConversations === true && patch.persistConversations === false;
+          const serverCopyOff = current.syncConversations === true && (patch.syncConversations === false || savingOff);
+          if (savingOff) await clearConversations(db);
+          if (serverCopyOff && accountRef.current) await removeAllRemoteConversations(accountRef.current, db);
+          await setPreference(db, ASK_SETTINGS_PREFERENCE, { ...current, ...patch, ...(savingOff ? { syncConversations: false } : {}) });
         })
         .catch(() => undefined);
       return settingsWrite.current;
@@ -368,17 +374,30 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
     [snapshot, visibleEvents, now, preferences, dismissals, localMarks, visiblePersonal],
   );
 
+  // Saved conversations are also kept on the server only when the student is signed in and turned that on.
+  const serverCopy = signedInAs !== null && accountClient !== null && askSettings?.persistConversations === true && askSettings.syncConversations === true ? accountClient : null;
+  useEffect(() => {
+    if (!accountClient || !signedInAs) return;
+    // A deletion the server could not be told about is finished first; then both sides are brought level.
+    void retryPurge(accountClient, db).then((done) => (done && serverCopy && scope ? syncConversations(serverCopy, db, scope) : null));
+  }, [accountClient, db, scope, serverCopy, signedInAs]);
   const conversationStore = useMemo<ConversationStore | undefined>(
     () =>
       scope
         ? {
             list: (savedConversations ?? []).map(summarize),
-            save: (conversation) => void saveConversation(db, scope, conversation, clock()),
+            save: (conversation) =>
+              void saveConversation(db, scope, conversation, clock()).then(async () => {
+                if (!serverCopy) return;
+                const stored = await getConversation(db, conversation.id);
+                // An emptied thread is deleted by the save, and then it is deleted on the server too.
+                await (stored ? pushConversation(serverCopy, stored) : removeRemoteConversation(serverCopy, db, conversation.id));
+              }),
             load: (id) => getConversation(db, id),
-            remove: (id) => void deleteConversation(db, id),
+            remove: (id) => void deleteConversation(db, id).then(() => (serverCopy ? removeRemoteConversation(serverCopy, db, id) : undefined)),
           }
         : undefined,
-    [clock, db, savedConversations, scope],
+    [clock, db, savedConversations, scope, serverCopy],
   );
 
   const setPreferences = useCallback(

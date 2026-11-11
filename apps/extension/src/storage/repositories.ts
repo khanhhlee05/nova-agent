@@ -204,6 +204,21 @@ export const saveConversation = async (db: NovaDb, scope: string, conversation: 
   });
 };
 
+/**
+ * Stores a conversation that came from the server as it was saved there: its
+ * own title and times are kept, so the newer of two copies can be told apart
+ * later. The newest `MAX_CONVERSATIONS` for the account are kept, as for any save.
+ */
+export const putSyncedConversation = async (db: NovaDb, scope: string, conversation: { id: string; title: string; createdAt: string; updatedAt: string; messages: AskMessage[] }): Promise<void> => {
+  if (conversation.messages.length === 0) return;
+  await db.transaction("rw", db.conversations, async () => {
+    await db.conversations.put({ ...conversation, scope });
+    const all = await db.conversations.where("scope").equals(scope).toArray();
+    const stale = all.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)).slice(MAX_CONVERSATIONS);
+    if (stale.length > 0) await db.conversations.bulkDelete(stale.map((record) => record.id));
+  });
+};
+
 export const deleteConversation = async (db: NovaDb, id: string): Promise<void> => {
   await db.conversations.delete(id);
 };

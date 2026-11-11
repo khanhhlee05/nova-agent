@@ -234,7 +234,7 @@ describe("signing in from the panel: end to end", () => {
 
     fireEvent.click(within(alert).getByRole("button", { name: "Settings" }));
     const account = await screen.findByRole("group", { name: "Nova account" }, LONG);
-    expect(account.textContent).toContain("This Nova server asks you to sign in with Google, so it can count use per student. It keeps your email address and how much you use, and nothing about your courses.");
+    expect(account.textContent).toContain("This Nova server asks you to sign in with Google, so it can count use per student. It keeps your email address and how much you use. Nothing about your courses is kept there unless you choose to keep saved conversations on it.");
     // Closing Google's window is not an error on the server and changes nothing.
     setCloseWindow(true);
     fireEvent.click(within(account).getByRole("button", { name: "Sign in with Google" }));

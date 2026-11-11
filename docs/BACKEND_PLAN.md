@@ -8,7 +8,7 @@ Status: partly built. See **Hosted mode** in `ASK_NOVA.md` for what runs today.
 | Google sign-in, access and refresh tokens, `GET` and `DELETE /v1/me` | Built, behind `AUTH_MODE=google`. Tested against the real schema with a stand-in for Google; not yet run against Google itself. |
 | Per-student daily allowance, pace limit, kill switch, `GET /v1/usage` | Built. |
 | Postgres schema and migrations | Built, as plain SQL through a three-method query interface instead of Drizzle: one less dependency, and the same SQL runs in tests on an embedded Postgres. Checked against Postgres 16 with concurrent connections. |
-| Conversation routes on the server | Built. The extension does not call them yet. |
+| Saved conversations across devices | Built, as an opt-in copy of what the panel saves: newer copy wins, deletions survive an unreachable server. Conversations are stored whole as the panel sends them (one `conversations` table), not as separate `messages` rows, and the server keeps no history of its own for a chat turn. |
 | Dockerfile | Written; its steps were replayed in a clean directory, the image itself was not built. |
 | Deploy pipeline, hosting, a live deployment | Not built: needs the accounts in step 0. |
 | Google Calendar (OAuth, token storage, sync, proposals) | Not built. |

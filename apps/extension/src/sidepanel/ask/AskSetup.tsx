@@ -42,6 +42,7 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose, 
   const [token, setToken] = useState(settings.token ?? "");
   const [persist, setPersist] = useState(settings.persistConversations === true);
   const [readFiles, setReadFiles] = useState(settings.readAttachments !== false);
+  const [serverCopy, setServerCopy] = useState(settings.syncConversations === true);
   // The default server is prefilled, so the address and access code stay folded away until someone needs them.
   const [showServer, setShowServer] = useState(editing || apiBaseUrl !== DEFAULT_ASK_SETTINGS.apiBaseUrl || token !== "");
   const [check, setCheck] = useState<{ state: "idle" | "checking" | "ok" | "fail"; text: string }>({ state: "idle", text: "" });
@@ -81,7 +82,9 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose, 
 
   const save = (enabled: boolean) => {
     if (!normalized) return;
-    onChange({ enabled, apiBaseUrl: normalized, token: token.trim() || null, persistConversations: persist, readAttachments: readFiles });
+    // The server copy can only be chosen while signed in; signed out, the stored choice is left as it is.
+    const syncConversations = persist && (account?.email ? serverCopy : settings.syncConversations === true);
+    onChange({ enabled, apiBaseUrl: normalized, token: token.trim() || null, persistConversations: persist, readAttachments: readFiles, syncConversations });
     onClose?.();
   };
 
@@ -135,6 +138,21 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose, 
           </span>
         </span>
       </label>
+      {persist && account?.email ? (
+        <label className="ask-toggle">
+          <input type="checkbox" className="checkbox" checked={serverCopy} onChange={(event) => setServerCopy(event.target.checked)} />
+          <span>
+            <strong>Also keep them on the Nova server</strong>
+            <span className="ask-toggle-note">
+              {serverCopy
+                ? "Saved conversations are copied to the Nova server you are signed in to, so they follow you to another device. They include the course titles and dates in the answers."
+                : settings.syncConversations
+                  ? "Saving this turns it off and deletes the copies on the server."
+                  : "Off: saved conversations stay on this device only."}
+            </span>
+          </span>
+        </label>
+      ) : null}
       <label className="ask-toggle">
         <input type="checkbox" className="checkbox" checked={readFiles} onChange={(event) => setReadFiles(event.target.checked)} />
         <span>
@@ -152,7 +170,7 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose, 
             <>
               <p className="ask-setup-text">
                 Signed in as <strong>{account.email}</strong>.
-                {account.usage && account.usage.dailyCap > 0 ? ` Used today: ${account.usage.usedToday.toLocaleString("en-US")} of ${account.usage.dailyCap.toLocaleString("en-US")} tokens.` : ""} The server keeps your email address and how much you use, and nothing about your courses.
+                {account.usage && account.usage.dailyCap > 0 ? ` Used today: ${account.usage.usedToday.toLocaleString("en-US")} of ${account.usage.dailyCap.toLocaleString("en-US")} tokens.` : ""} The server keeps your email address and how much you use. Nothing about your courses is kept there unless you choose to keep saved conversations on it.
               </p>
               <div className="card-actions">
                 <button type="button" className="button button-sm" onClick={account.onSignOut} disabled={account.busy}>
@@ -171,7 +189,7 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose, 
             </>
           ) : (
             <>
-              <p className="ask-setup-text">This Nova server asks you to sign in with Google, so it can count use per student. It keeps your email address and how much you use, and nothing about your courses.</p>
+              <p className="ask-setup-text">This Nova server asks you to sign in with Google, so it can count use per student. It keeps your email address and how much you use. Nothing about your courses is kept there unless you choose to keep saved conversations on it.</p>
               <div className="card-actions">
                 <button type="button" className="button button-sm" onClick={() => (server?.googleClientId ? account.onSignIn(server.googleClientId) : undefined)} disabled={account.busy || !account.canSignIn || !server?.googleClientId}>
                   {account.busy ? "Signing in…" : "Sign in with Google"}

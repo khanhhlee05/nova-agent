@@ -11,7 +11,7 @@ Status: built, slices 2 to 7 in full and slice 8 in part. `ASK_NOVA.md` describe
 | 6a Assignment files | Built. Not yet run against the Villanova tenant: **Check file access** in the Connection report does that from a signed-in browser. |
 | 6b Course materials | Built. Same caveat for the Content routes. |
 | 7 Quality and resilience | Built. The free-model table in `ASK_NOVA.md` is still empty: `npm run probe:api -- --try` fills it and needs an OpenRouter key. |
-| 8 Hosted backend | Sign-in, per-student limits, usage, account deletion, schema, and the server's conversation routes are built and tested. Not built: Google Calendar, conversation sync in the panel, a deploy pipeline. See the table at the top of `BACKEND_PLAN.md`. |
+| 8 Hosted backend | Sign-in, per-student limits, usage, account deletion, the schema, and saved conversations that follow a signed-in student to another device are built and tested. Not built: Google Calendar and a deploy pipeline. See the table at the top of `BACKEND_PLAN.md`. |
 
 What was built differently from the text below, and why:
 
