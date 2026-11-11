@@ -1,4 +1,5 @@
 import { BrightspaceFailure, HARD_FILE_CAP_BYTES, isApprovedBrightspacePath, isApprovedFilePath, isSafeTenantLink, type RawFetch, type RawFileFetch } from "@nova-agent/brightspace";
+import { idTokenFromRedirect } from "./googleSignIn";
 import { fetchBridgeResultSchema, fileBridgeResultSchema, pingResultSchema } from "../messaging/bridgeSchemas";
 import { BADGE_STORAGE_KEY, type NovaMessage, type SyncPhase } from "../messaging/protocol";
 import type { ExtensionHost } from "./host";
@@ -78,5 +79,23 @@ export const createChromeHost = (tenantOrigin: string): ExtensionHost => {
       void broadcast({ type: "SYNC_PROGRESS", phase });
     },
     isOnline: () => (typeof navigator === "undefined" ? true : navigator.onLine),
+    getGoogleIdToken: async (clientId) => {
+      // Google's own window, opened by Chrome. The panel never sees a password, only the ID token Google hands back.
+      if (!chrome.identity?.launchWebAuthFlow) return null;
+      const nonce = crypto.randomUUID();
+      const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+      url.searchParams.set("client_id", clientId);
+      url.searchParams.set("response_type", "id_token");
+      url.searchParams.set("redirect_uri", chrome.identity.getRedirectURL());
+      url.searchParams.set("scope", "openid email");
+      url.searchParams.set("nonce", nonce);
+      url.searchParams.set("prompt", "select_account");
+      try {
+        const redirect = await chrome.identity.launchWebAuthFlow({ url: url.toString(), interactive: true });
+        return redirect ? idTokenFromRedirect(redirect, nonce) : null;
+      } catch {
+        return null;
+      }
+    },
   };
 };

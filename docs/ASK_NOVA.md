@@ -43,6 +43,8 @@ Sent with every question, whatever the question is about (nothing is filtered by
 | What the student was looking at | The course the panel is filtered to, the tab they came from, and the item id when the question was started from one item. A hint for the model, never a filter on the lookups |
 | The question and up to twelve prior messages of this session's thread | Text only |
 
+In hosted mode the server also learns the email address the student signs in with, and keeps it with a count of the tokens each question used. It still stores nothing from the rows above.
+
 Never sent: cookies, raw Brightspace responses, the tenant origin, the student id or name, announcement bodies, observation metadata, anything from a course the student is not enrolled in, and the contents of items hidden in Brightspace or hidden by the student for the session. The API stores nothing academic; its logs carry counts only (`LOG_PROMPTS=0`).
 
 Ask Nova is off until the student turns it on in the tab, after reading the same statement there.
@@ -86,6 +88,13 @@ npm run smoke:api -- --api http://127.0.0.1:8787 --token <NOVA_DEV_TOKEN>   # ex
 | `DAILY_TOKEN_CAP` | `200000` | Tokens per UTC day for the whole server, counted in memory per process: it resets on restart and is not shared between instances (best effort). Each request reserves `TURN_TOKEN_ESTIMATE` up front and answers 429 `budget_exhausted` at once if that would pass the cap, then settles to the real usage when the turn ends. A turn with no usage report is charged `MAX_TOKENS × rounds`. `0` disables the cap. |
 | `TURN_TOKEN_ESTIMATE` | `MAX_TOKENS × MAX_ROUNDS` (2800) | Worst-case tokens reserved per request. A cap below this refuses to start. |
 | `LOG_PROMPTS` | `0` | `1` adds question and answer text to the turn log. |
+| `ASK_DISABLED` | `0` | `1` refuses every question at once with `budget_exhausted` (the kill switch). The panel then answers what it can on the device. |
+| `AUTH_MODE` | `none` | `google` turns on hosted mode: students sign in and use is counted per student. See **Hosted mode**. |
+| `GOOGLE_CLIENT_ID`, `JWT_SECRET`, `DATABASE_URL` | | Required with `AUTH_MODE=google`: the OAuth client the extension signs in with, a secret of at least 32 characters that signs the server's access tokens, and a Postgres database. |
+| `ALLOWED_EMAIL_DOMAINS` | | Comma-separated domains allowed to sign in, such as `villanova.edu`. Empty allows any Google account. |
+| `USER_DAILY_TOKEN_CAP` | `40000` | Tokens one student may use per UTC day. 0 means no limit. |
+| `USER_TURNS_PER_10_MIN` | `20` | Questions one student may ask per ten minutes. 0 means no limit. |
+| `ACCESS_TOKEN_TTL_SECONDS`, `REFRESH_TOKEN_TTL_DAYS` | `900`, `30` | How long a sign-in lasts without use. |
 
 `apps/api/.env` is gitignored. The key must never be committed, logged, or built into the extension.
 
@@ -118,6 +127,22 @@ Course names, codes, item titles, file names, Content topic names, the text of a
 ## States the tab carries
 
 Off (setup card), API unreachable, API without a key, streaming (the answer appears as it is written; Stop replaces Send), stopped, corrected, not verified, answered on the device, typed errors (rate limited with retry-after, budget exhausted, unauthorized, timeout), demo banner, empty data. A lookup that never reported back before Stop reads as stopped, not as still running. Clearing the thread or opening another conversation mid-answer cancels that answer at once, and the cancelled turn cannot write into the thread that replaced it.
+
+## Hosted mode
+
+By default the API is one person's own server: it listens on the loopback address, needs no account, and stores nothing. With `AUTH_MODE=google` the same server can be shared by a class.
+
+**Signing in.** `/healthz` says `auth: "google"` and names the OAuth client. The Ask settings then show **Sign in with Google**. Chrome opens Google's own window (`chrome.identity.launchWebAuthFlow`, scope `openid email`); the panel receives an ID token and posts it to `POST /v1/auth/google`. The server checks the token's signature against Google's published keys, that it was issued to this project's client, that it has not expired, and that the address is verified and, when `ALLOWED_EMAIL_DOMAINS` is set, in an allowed domain. It answers with an access token (15 minutes) and a refresh token (30 days, single use: each refresh returns a new one, and only its hash is stored). The panel keeps both on the device, sends the access token with each question, and renews it by itself. **Sign out** ends the session on the server and forgets it on the device.
+
+**Limits.** Each question is counted against the student who asked: `USER_DAILY_TOKEN_CAP` tokens per UTC day and `USER_TURNS_PER_10_MIN` questions per ten minutes, checked and charged under a lock on the student's row so two questions sent at once cannot both pass. Past the daily allowance the server answers `budget_exhausted`; past the pace, `rate_limited` with the seconds to wait. Both are failures the panel can answer through on the device for its suggested questions. The server-wide `DAILY_TOKEN_CAP` still applies on top, and `ASK_DISABLED=1` pauses every question at once.
+
+**What the server stores.** In Postgres: the account (Google's subject id, the email address, when it was made), the hashes of live refresh tokens, and one row per question with its time, token counts, and model. Nothing about courses has a table. The schema is plain SQL in `apps/api/src/store/migrations.ts`, applied on start. `GET /v1/me` returns the student's use and limits, `GET /v1/usage` the totals per day, and `DELETE /v1/me` (**Delete my account** in the settings, after a second press) removes the account and every row that belongs to it.
+
+**Saved conversations.** The server has `GET`, `PUT`, and `DELETE /v1/conversations[/{id}]`, scoped to the signed-in student, newest twenty kept, 200 KB each, stored as the panel sends them. The panel does not use them yet: conversations are still saved on the device only.
+
+**Running it.** `apps/api/Dockerfile` builds an image with only the API and the packages it runs (`docker build -f apps/api/Dockerfile -t nova-api .` from the repository root). Configuration is environment only. Register the extension's redirect address, `https://<extension id>.chromiumapp.org/`, on a Google OAuth client of type Web application, and set `CORS_ORIGINS` to the exact `chrome-extension://<extension id>`. The server refuses to start on a public address unless `AUTH_MODE=google` or `NOVA_DEV_TOKEN` is set, and refuses hosted mode without its client id, secret, and database.
+
+**Not verified here.** Sign-in was tested end to end against the real server and schema with a stand-in for Google whose keys the tests hold. A sign-in through Google itself, in the installed extension, needs a Google Cloud OAuth client and has not been run. The Docker image's steps were replayed in a clean directory; the image itself was not built.
 
 ## When the server cannot answer
 
@@ -219,4 +244,4 @@ Run on a developer machine with Chrome and network access:
 
 ## Not built yet
 
-Sign-in, a server-side database, conversations across devices, per-user quotas, Google Calendar, hosting, an on-device language model, and meaning-based (embedding) search over course materials. See `ASK_NOVA_PLAN.md` for the next slices and `BACKEND_PLAN.md` for the hosted backend.
+Google Calendar, conversations synced across devices (the server routes exist; the panel still saves on the device only), a deploy pipeline and a live deployment, a dollar-denominated budget, an on-device language model, and meaning-based (embedding) search over course materials. See `ASK_NOVA_PLAN.md` for the next slices and `BACKEND_PLAN.md` for the hosted backend.

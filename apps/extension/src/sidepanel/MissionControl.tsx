@@ -6,7 +6,7 @@ import type { ChatRequest, ClientToolName } from "@nova-agent/protocol";
 import { CheckCheck, EyeOff, Plus } from "lucide-react";
 import { Tabs, Tooltip } from "radix-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AskChips, AskView, canUndo, resolveProposal, summaryOf, feedbackEntry, useAskThread, useServerUsage, type AskAbout, type AskProposal, type ProposalAction, type ProposalApplied, type ProposalContext, type AskClient, type AskClientFactory, type AskConsent, type AskDraft, type AskFeedbackControls, type AskFeedbackView, type AskHandlers, type AskMaterialsControls, type AskLive, type AskMessage, type AskRequestContext, type AskSettings, type ConversationStore, type PlanDraft } from "./ask";
+import { AskChips, AskView, canUndo, resolveProposal, summaryOf, feedbackEntry, useAskThread, useServerUsage, type AskAbout, type AskAccountControls, type AskProposal, type ProposalAction, type ProposalApplied, type ProposalContext, type AskClient, type AskClientFactory, type AskConsent, type AskDraft, type AskFeedbackControls, type AskFeedbackView, type AskHandlers, type AskMaterialsControls, type AskLive, type AskMessage, type AskRequestContext, type AskSettings, type ConversationStore, type PlanDraft } from "./ask";
 import type { SyncStatusRecord } from "../storage/novaDb";
 import { PHASE_LABELS, isRunningPhase, isStale, type SyncRuntimeState } from "../sync/syncState";
 import { StateBanners, SyncProgress } from "./components/Banners";
@@ -111,6 +111,8 @@ export type AskProps = {
   materials?: AskMaterialsControls;
   /** Ratings of answers, stored on this device. */
   feedback?: AskFeedbackControls;
+  /** The student's account on a hosted Nova server. */
+  account?: AskAccountControls;
 };
 
 export type MissionControlProps = {
@@ -674,7 +676,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                 // Force-mounted and hidden so the conversation survives a switch to another tab.
                 <Tabs.Content className="tab-content tab-content-ask" value="ask" forceMount hidden={tab !== "ask"}>
                   {dashboard ? (
-                    <AskView notices={tab === "ask" ? stateBanners : null} thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} live={askLive} draft={askDraft} about={askAbout} onClearAbout={() => setAskAbout(null)} onSend={sendFromComposer} conversations={store ? { list: store.list, onOpen: openConversation, onDelete: deleteConversation } : undefined} proposalContext={proposalContext} onProposal={onProposal} consent={ask.consent ? { pending: ask.consent.pending, working: ask.consent.working, onDecline: ask.consent.onDecline, onAllow: allowConsent } : undefined} materials={ask.materials} feedback={feedbackView} serverUsage={serverUsage} focusNonce={composerFocus} />
+                    <AskView notices={tab === "ask" ? stateBanners : null} thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} live={askLive} draft={askDraft} about={askAbout} onClearAbout={() => setAskAbout(null)} onSend={sendFromComposer} conversations={store ? { list: store.list, onOpen: openConversation, onDelete: deleteConversation } : undefined} proposalContext={proposalContext} onProposal={onProposal} consent={ask.consent ? { pending: ask.consent.pending, working: ask.consent.working, onDecline: ask.consent.onDecline, onAllow: allowConsent } : undefined} materials={ask.materials} feedback={feedbackView} serverUsage={serverUsage} focusNonce={composerFocus} account={ask.account} />
                   ) : showSkeleton ? (
                     <FocusSkeleton />
                   ) : (

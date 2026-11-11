@@ -516,6 +516,8 @@ h1, h2, h3, h4, p { margin: 0; }
 .ask-remaining { grid-column: 1; justify-self: end; font-size: 12px; color: var(--nova-muted); }
 .ask-remaining[data-full] { color: var(--nova-overdue); }
 .ask-setup { display: flex; flex-direction: column; gap: 12px; padding: 12px; border: 1px solid var(--nova-rule); border-radius: var(--nova-radius-md); background: var(--nova-bg); }
+.ask-account { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--nova-rule); }
+.ask-account .card-actions { justify-content: flex-start; flex-wrap: wrap; }
 .ask-setup-title { font-size: 15px; font-weight: 700; color: var(--nova-ink); }
 .ask-setup-text { font-size: 13.5px; line-height: 1.45; color: var(--nova-muted); }
 .ask-setup-server { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--nova-muted); }

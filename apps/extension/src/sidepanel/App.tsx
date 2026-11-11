@@ -1,5 +1,6 @@
 import { BrightspaceClient, DEMO_LE_VERSION, buildDemoTenant, demoFileFetch, isSafeTenantLink, type FeasibilityReport, type FileAccessReport, type RawFileFetch } from "@nova-agent/brightspace";
 import type { AcademicItem, CourseMaterial, ItemAttachment } from "@nova-agent/core";
+import type { AccountUsage } from "@nova-agent/protocol";
 import { ATTACHMENT_FAILURE_COPY, readAttachment, type AttachmentOutcome } from "../files/attachments";
 import type { PdfReader } from "../files/extract";
 import { firstMaterialPath, readMaterial, readCourse, refreshToc, type CourseReadProgress, type MaterialDeps } from "../files/materials";
@@ -12,7 +13,7 @@ import type { DataMode, NovaDb } from "../storage/novaDb";
 import { attachmentTextId, askFeedbackId, clearAllData, clearConversations, deleteAskFeedback, listAskFeedback, putAskFeedback, createDexieVersionCache, deleteChangeEvent, deleteConversation, deletePersonalItem, deletePlanItems, forgetCourseMaterials, listMaterialTexts, listMaterialTocs, materialTextId, getConversation, getPreference, getSyncStatus, listAttachmentTexts, listChangeEvents, listConversations, listLocalMarks, listPersonalItems, latestSnapshot, markAllRead, putPersonalItem, replacePlanItems, saveConversation, setEventRead, setLocalMark, setPreference, unreadCount } from "../storage/repositories";
 import { DATA_MODE_PREFERENCE, DEMO_SCENARIO_PREFERENCE, SyncCoordinator, defaultTransportFactory, type TransportFactory } from "../sync/syncCoordinator";
 import { IDLE_STATE, isRunningPhase, type SyncRuntimeState } from "../sync/syncState";
-import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, availableClientTools, defaultAskClientFactory, effectiveAskSettings, runReadAttachment, runReadMaterial, runSearchMaterials, summarize, FEEDBACK_FILE_NAME, feedbackExport, type AskFeedbackControls, type AskMaterialsControls, type MaterialsToolDeps, type AskClientFactory, type AskSettings, type ClientToolAnswer, type ConsentRequest, type ConversationStore } from "./ask";
+import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, availableClientTools, defaultAskClientFactory, effectiveAskSettings, runReadAttachment, runReadMaterial, runSearchMaterials, summarize, ASK_SESSION_PREFERENCE, AccountClient, FEEDBACK_FILE_NAME, feedbackExport, type AskAccountControls, type AskFeedbackControls, type AskMaterialsControls, type AskSession, type MaterialsToolDeps, type AskClientFactory, type AskSettings, type ClientToolAnswer, type ConsentRequest, type ConversationStore } from "./ask";
 import { browserSaveFile, type SaveFile } from "../platform/saveFile";
 import { FILE_ACCESS_PREFERENCE, checkFileAccess as runCheckFileAccess, connectLive as runConnectLive } from "./connect";
 import { useSessionDismissals } from "./dismissals";
@@ -37,6 +38,8 @@ export type AppDeps = {
   readPdf?: PdfReader;
   /** Hands the student a file to keep (the ratings export). Tests inject a recorder. */
   saveFile?: SaveFile;
+  /** How the panel reaches a hosted Nova server for sign-in and the account. Tests inject the server itself. */
+  accountFetch?: typeof fetch;
 };
 
 export type FileFetchFactory = (mode: DataMode, context: { now: Date }) => RawFileFetch | null;
@@ -51,7 +54,7 @@ type PendingDelete = { id: string; title: string; kind: "event" | "personal" };
 
 const PREFERENCES_KEY = "ui.preferences";
 
-export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, askClientFactory = defaultAskClientFactory, undoMs = 5000, fileFetchFactory, readPdf = defaultReadPdf, saveFile = browserSaveFile }: AppDeps) => {
+export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, askClientFactory = defaultAskClientFactory, undoMs = 5000, fileFetchFactory, readPdf = defaultReadPdf, saveFile = browserSaveFile, accountFetch }: AppDeps) => {
   const now = useNow(60_000, nowFn);
   // Every timestamp the panel writes comes from the same injected clock as the one it reads with.
   const clock = useCallback(() => (nowFn ? nowFn() : new Date()), [nowFn]);
@@ -73,7 +76,32 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
   const personalItems = useLiveQuery(async () => (scope ? listPersonalItems(db, scope) : []), [db, scope]);
   // A saved address that no longer passes the https rule turns Ask off rather than producing a client.
   const askSettings = useLiveQuery(async () => effectiveAskSettings(await getPreference<AskSettings>(db, ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS)), [db]);
-  const askClient = useMemo(() => (askSettings?.enabled ? askClientFactory(askSettings) : null), [askClientFactory, askSettings]);
+  // A sign-in to a hosted Nova server, kept on this device and only ever sent to the server it was made with.
+  const session = useLiveQuery(async () => getPreference<AskSession | null>(db, ASK_SESSION_PREFERENCE, null), [db]);
+  const apiBaseUrl = askSettings?.apiBaseUrl ?? null;
+  const accountClient = useMemo(
+    () => (apiBaseUrl ? new AccountClient({ baseUrl: apiBaseUrl, load: () => getPreference<AskSession | null>(db, ASK_SESSION_PREFERENCE, null), save: (next) => setPreference(db, ASK_SESSION_PREFERENCE, next), ...(accountFetch ? { fetch: accountFetch } : {}) }) : null),
+    [accountFetch, apiBaseUrl, db],
+  );
+  const askClient = useMemo(() => (askSettings?.enabled ? askClientFactory(askSettings, accountClient) : null), [accountClient, askClientFactory, askSettings]);
+  const signedInAs = session && apiBaseUrl && session.apiBaseUrl === apiBaseUrl.replace(/\/+$/, "") ? session.email : null;
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [accountUsage, setAccountUsage] = useState<AccountUsage | null>(null);
+  useEffect(() => {
+    // The student's own allowance, asked when they are signed in; forgotten when they are not.
+    if (!signedInAs || !accountClient) {
+      setAccountUsage(null);
+      return;
+    }
+    let current = true;
+    void accountClient.usage().then((usage) => {
+      if (current) setAccountUsage(usage);
+    });
+    return () => {
+      current = false;
+    };
+  }, [accountClient, signedInAs]);
   // Changes are written one after another, each on top of what is stored, so two quick changes never undo each other.
   const settingsWrite = useRef<Promise<void>>(Promise.resolve());
   const setAskSettings = useCallback(
@@ -480,6 +508,8 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
       // Demo files are always "served"; the check only says something about a real tenant.
       ...(mode === "live" ? { checkFileAccess: checkFiles } : {}),
       clearData: async () => {
+        // A sign-in is local data too: it is ended on the server, best effort, before everything here is wiped.
+        await accountClient?.signOut().catch(() => undefined);
         await clearAllData(db);
         // Permissions given in this session go with the data they were given for.
         fileConsent.current = false;
@@ -491,7 +521,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
         setAnnouncement("Local Nova data cleared.");
       },
     }),
-    [checkFiles, clock, commitDelete, coordinator, db, dismissBanner, dismissItem, host, mode, nowFn, personalItems, publishBadge, restoreAll, scope, setPreferences, undoMs],
+    [accountClient, checkFiles, clock, commitDelete, coordinator, db, dismissBanner, dismissItem, host, mode, nowFn, personalItems, publishBadge, restoreAll, scope, setPreferences, undoMs],
   );
 
   if (!status || !preferences || feasibility === undefined || !askSettings || !personalItems) return null;
@@ -545,6 +575,50 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
         }
       : undefined;
 
+  const withAccount = async (work: (client: AccountClient) => Promise<string | null>): Promise<void> => {
+    if (!accountClient || accountBusy) return;
+    setAccountBusy(true);
+    setAccountError(null);
+    try {
+      setAccountError(await work(accountClient));
+    } catch {
+      setAccountError("Something went wrong. Try again.");
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+  const getIdToken = host.getGoogleIdToken?.bind(host);
+  const account: AskAccountControls | undefined = accountClient
+    ? {
+        email: signedInAs,
+        canSignIn: getIdToken !== undefined,
+        busy: accountBusy,
+        error: accountError,
+        usage: accountUsage,
+        onSignIn: (googleClientId) =>
+          void withAccount(async (client) => {
+            const idToken = getIdToken ? await getIdToken(googleClientId) : null;
+            if (!idToken) return "Google's sign-in window was closed before it finished.";
+            const result = await client.signIn(idToken);
+            if (!result.ok) return result.message;
+            setAnnouncement(`Signed in as ${result.email}.`);
+            return null;
+          }),
+        onSignOut: () =>
+          void withAccount(async (client) => {
+            await client.signOut();
+            setAnnouncement("Signed out.");
+            return null;
+          }),
+        onDeleteAccount: () =>
+          void withAccount(async (client) => {
+            if (!(await client.deleteAccount())) return "The Nova server did not confirm the deletion. Try again.";
+            setAnnouncement("Your Nova account and everything the server stored for it are deleted.");
+            return null;
+          }),
+      }
+    : undefined;
+
   const consentCourse = pendingConsent?.kind === "materials" ? pendingConsent.courseId : null;
   const consentProgress = consentCourse ? materialProgress.get(consentCourse) : undefined;
   const consent = {
@@ -580,7 +654,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
       dismissals={dismissals}
       actions={actions}
       pendingDelete={pendingDelete}
-      ask={{ client: askClient, settings: askSettings, setSettings: setAskSettings, clientFactory: askClientFactory, events: visibleEvents ?? [], localMarks, personal: visiblePersonal ?? [], conversations: conversationStore, clientTools: { names: clientToolNames, run: runClientTool }, consent, materials, feedback }}
+      ask={{ client: askClient, settings: askSettings, setSettings: setAskSettings, clientFactory: askClientFactory, events: visibleEvents ?? [], localMarks, personal: visiblePersonal ?? [], conversations: conversationStore, clientTools: { names: clientToolNames, run: runClientTool }, consent, materials, feedback, account }}
       attachments={attachmentControls}
       checkingFiles={checkingFiles}
       fileAccess={fileAccess ?? null}

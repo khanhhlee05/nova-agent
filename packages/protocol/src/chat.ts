@@ -51,5 +51,9 @@ export const healthResponseSchema = z.object({
   usedToday: z.number().int().min(0),
   /** Tokens this server allows per UTC day across everyone who uses it. 0 means no limit. Absent on older servers. */
   dailyCap: z.number().int().min(0).optional(),
+  /** `google` when students must sign in before asking. Absent on older servers, which need no sign-in. */
+  auth: z.enum(["none", "google"]).optional(),
+  /** The Google OAuth client to sign in with, when `auth` is `google`. A client id is public by design. */
+  googleClientId: z.string().max(200).optional(),
 });
 export type HealthResponse = z.infer<typeof healthResponseSchema>;

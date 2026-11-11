@@ -22,6 +22,11 @@ export interface ExtensionHost {
   publishSyncPhase(phase: SyncPhase, unread: number): void;
   /** True when the browser reports network connectivity. */
   isOnline(): boolean;
+  /**
+   * Shows Google's own sign-in window and returns the ID token it issues to `clientId`, or null when the
+   * student closed it or it failed. Optional: a host without it cannot sign in to a hosted Nova server.
+   */
+  getGoogleIdToken?(clientId: string): Promise<string | null>;
 }
 
 export type StubHostOptions = Partial<ExtensionHost> & { tenantOrigin?: string };
@@ -44,5 +49,6 @@ export const createStubHost = (options: StubHostOptions = {}): ExtensionHost & {
     publishBadge: options.publishBadge ?? (async (unread) => void badges.push(unread)),
     publishSyncPhase: options.publishSyncPhase ?? (() => {}),
     isOnline: options.isOnline ?? (() => true),
+    ...(options.getGoogleIdToken ? { getGoogleIdToken: options.getGoogleIdToken } : {}),
   };
 };

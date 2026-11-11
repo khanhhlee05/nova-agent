@@ -11,6 +11,8 @@ export const healthRoute = (context: AppContext): Hono =>
       model: context.model ? context.config.OPENROUTER_MODEL : null,
       usedToday: context.usage.usedToday(context.now()),
       dailyCap: context.usage.dailyCap,
+      auth: context.hosted ? "google" : "none",
+      ...(context.hosted && context.config.GOOGLE_CLIENT_ID ? { googleClientId: context.config.GOOGLE_CLIENT_ID } : {}),
     };
     return c.json(body);
   });

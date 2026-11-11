@@ -46,7 +46,7 @@ describe("GET /healthz", () => {
     const { app } = harness();
     const response = await app.request("/healthz");
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ status: "ok", service: "nova-agent-api", configured: true, model: "meta-llama/llama-3.3-70b-instruct:free", usedToday: 0, dailyCap: 200_000 });
+    expect(await response.json()).toEqual({ status: "ok", service: "nova-agent-api", configured: true, model: "meta-llama/llama-3.3-70b-instruct:free", usedToday: 0, dailyCap: 200_000, auth: "none" });
     // The limit reported is the one the counter enforces; 0 means none.
     expect(await (await harness({ cap: 0 }).app.request("/healthz")).json()).toMatchObject({ dailyCap: 0 });
     const unconfigured = harness({ model: null });

@@ -1,6 +1,35 @@
 # Ask Nova: plan for slice 2 and beyond
 
-Status: proposal. Slice 1 (`ASK_NOVA.md`) ships a stateless question-and-answer loop: five read-only tools over a compact snapshot, a session-only thread, three suggestion chips, collapsed rows under each answer. This plan takes the tab from "it can query" to a tab a student opens on purpose. It supersedes the Ask-specific parts of `CHATBOT_PLAN.md`; the hosted-backend work in `BACKEND_PLAN.md` (sign-in, database, Google Calendar) stays where it is and is slice 8 here.
+Status: built, slices 2 to 7 in full and slice 8 in part. `ASK_NOVA.md` describes what runs; this document is kept as the plan it was, with the differences listed here.
+
+| Slice | State |
+|---|---|
+| 2 Answers match the panel, row actions, entry points, chips | Built |
+| 3 Saved conversations | Built |
+| 4 Planning tools | Built |
+| 5 Proposals | Built |
+| 6a Assignment files | Built. Not yet run against the Villanova tenant: **Check file access** in the Connection report does that from a signed-in browser. |
+| 6b Course materials | Built. Same caveat for the Content routes. |
+| 7 Quality and resilience | Built. The free-model table in `ASK_NOVA.md` is still empty: `npm run probe:api -- --try` fills it and needs an OpenRouter key. |
+| 8 Hosted backend | Sign-in, per-student limits, usage, account deletion, schema, and the server's conversation routes are built and tested. Not built: Google Calendar, conversation sync in the panel, a deploy pipeline. See the table at the top of `BACKEND_PLAN.md`. |
+
+What was built differently from the text below, and why:
+
+- **Personal deadlines** travel in their own list (`snapshot.personal`), never mixed into `items`, so no count or ranking can include them by accident.
+- **Focus** is a field of the request (`focus`), not of the snapshot: it describes one question, not the data.
+- **Undo for "mark done"** is the checkbox itself. A separate Undo exists only on a confirmed suggestion.
+- **The summary of a long thread** is written by the panel from its own messages, deterministically. There is no `done.summary` from the model.
+- **Turning saving off** deletes the saved conversations instead of leaving them behind.
+- **The permission card** for a file or a course does not hold the turn open. The model is told the student has not agreed yet, the turn ends, and Allow asks the same question again.
+- **Course materials** keep their table of contents in two tables of their own, not inside the academic snapshot, so a refresh and a diff are untouched by them. Topic names are sent only for courses that are turned on, and the presence of the list is what says a course is on (there is no `materialsAllowed`). The table of contents carries no file sizes, so none are sent.
+- **Streaming** uses a `text_reset` event (reason `lookup` or `correction`) and keeps `done.grounded` as the verdict. There is no separate `verdict` event.
+- **The stricter check** covers calendar dates, weekdays written next to a date, point values, and quotations. A weekday on its own and relative words are not checked, because they cannot be shown wrong.
+- **The fallback** also answers study-plan and course-load questions, since those tools need no model. It never reads a file and never suggests an action.
+- **Feedback** stores the question and how the answer was made, not the answer text.
+- **Usage** shows the last answer's tokens and the server's share of its daily limit; in hosted mode the settings also show the student's own allowance.
+- **The prompt budget** test was raised from 3,900 to 4,800 characters as tools were added.
+
+The original text follows. At the time of writing: Slice 1 (`ASK_NOVA.md`) ships a stateless question-and-answer loop: five read-only tools over a compact snapshot, a session-only thread, three suggestion chips, collapsed rows under each answer. This plan takes the tab from "it can query" to a tab a student opens on purpose. It supersedes the Ask-specific parts of `CHATBOT_PLAN.md`; the hosted-backend work in `BACKEND_PLAN.md` (sign-in, database, Google Calendar) stays where it is and is slice 8 here.
 
 ## Where slice 1 falls short
 

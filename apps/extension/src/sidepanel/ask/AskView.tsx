@@ -13,7 +13,7 @@ import type { AskProposal, ProposalContext } from "./proposals";
 import { formatBytes, type ConsentRequest } from "./clientTools";
 import type { AskLive } from "./AskRows";
 import { hostOf, type AskSettings } from "./askSettings";
-import { AskSetup } from "./AskSetup";
+import { AskSetup, type AskAccountControls } from "./AskSetup";
 import { AskThread } from "./AskThread";
 import type { AskVerdict } from "./feedback";
 import type { AskThread as AskThreadState } from "./useAskThread";
@@ -54,6 +54,8 @@ export type AskViewProps = {
   serverUsage?: ServerUsage | null;
   /** Changes when the composer should take focus. */
   focusNonce?: number;
+  /** The student's account on a hosted Nova server. */
+  account?: AskAccountControls;
 };
 
 export type AskFeedbackView = {
@@ -89,7 +91,7 @@ export type AskSavedConversations = {
 };
 
 /** The Ask tab body: setup card until enabled, then the thread and the composer. */
-export const AskView = ({ notices, thread, settings, onSettingsChange, clientFactory, dashboard, mode, now, canOpen, onOpen, live, draft = null, about = null, onClearAbout, onSend, conversations, proposalContext, onProposal, consent, materials, feedback, serverUsage = null, focusNonce = 0 }: AskViewProps) => {
+export const AskView = ({ notices, thread, settings, onSettingsChange, clientFactory, dashboard, mode, now, canOpen, onOpen, live, draft = null, about = null, onClearAbout, onSend, conversations, proposalContext, onProposal, consent, materials, feedback, serverUsage = null, focusNonce = 0, account }: AskViewProps) => {
   const [editing, setEditing] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const [choosing, setChoosing] = useState(false);
@@ -120,6 +122,7 @@ export const AskView = ({ notices, thread, settings, onSettingsChange, clientFac
             editing={settings.enabled}
             onClose={settings.enabled ? () => setEditing(false) : undefined}
             feedback={feedback ? { count: feedback.count, onExport: feedback.onExport } : undefined}
+            account={account}
           />
         ) : (
           <div className="ask-status">

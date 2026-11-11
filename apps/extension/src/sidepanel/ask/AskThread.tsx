@@ -49,6 +49,8 @@ export const errorCopy = (error: AskErrorEvent, apiBaseUrl: string): { title: st
     case "not_configured":
       return { title: "The Nova server can't answer yet", text: "It still needs a model key. Whoever set up the server can add one, then retry.", retry: true, settings: false };
     case "unauthorized":
+      // A hosted server says in its own words that a sign-in is missing or over; a private one only knows an access code.
+      if (/\bsign(ed)?[ -]in\b/i.test(error.message)) return { title: "Sign in to ask Nova", text: `${error.message} Open Settings to sign in with Google.`, retry: false, settings: true };
       return { title: "The Nova server didn't accept your access code", text: "Check the access code in Settings. It's missing or doesn't match the one the server expects.", retry: false, settings: true };
     case "rate_limited":
       return { title: "The AI model is busy", text: error.retryAfterSeconds ? `Try again in ${Math.ceil(error.retryAfterSeconds)} seconds.` : "Try again in a moment.", retry: true, settings: false };
