@@ -1,5 +1,6 @@
-import { CHAT_LIMITS, askEventSchema, modelUsageSchema, toolNameSchema, toolRowSchema, type AskErrorEvent, type ToolRow } from "@nova-agent/protocol";
+import { CHAT_LIMITS, askEventSchema, modelUsageSchema, proposalPayloadSchema, toolNameSchema, toolRowSchema, type AskErrorEvent, type ToolRow } from "@nova-agent/protocol";
 import { z } from "zod";
+import type { AskProposal } from "./proposals";
 import { HISTORY_LIMIT, sendable, type AskMessage, type AskTool } from "./thread";
 
 /** How many conversations are kept per account. The oldest goes first. */
@@ -74,6 +75,13 @@ const storedToolSchema = z.object({
   input: z.unknown().optional(),
 });
 
+const storedProposalSchema = z.object({
+  id: z.string().min(1),
+  label: z.string(),
+  payload: proposalPayloadSchema,
+  state: z.enum(["pending", "confirmed", "dismissed", "undone", "expired"]),
+});
+
 const errorEventSchema = askEventSchema.refine((event): event is AskErrorEvent => event.type === "error");
 
 const storedMessageSchema = z.object({
@@ -86,6 +94,7 @@ const storedMessageSchema = z.object({
   usage: modelUsageSchema.nullable().catch(null),
   grounded: z.boolean().nullable().catch(null),
   stopped: z.boolean().catch(false),
+  proposals: z.array(z.unknown()).optional().catch(undefined),
 });
 
 /**
@@ -109,7 +118,12 @@ export const reviveMessages = (raw: unknown): AskMessage[] => {
       return result.success ? [result.data] : [];
     });
     const error = errorEventSchema.safeParse(parsed.data.error);
-    out.push({ id: parsed.data.id, role: parsed.data.role, text: parsed.data.text, tools, rows, error: error.success ? (error.data as AskErrorEvent) : null, usage: parsed.data.usage, grounded: parsed.data.grounded, stopped: parsed.data.stopped });
+    // A suggestion made against older data is not offered again, and a restored "Done" cannot be undone: what it touched may have changed since.
+    const proposals: AskProposal[] = (parsed.data.proposals ?? []).flatMap((proposal) => {
+      const result = storedProposalSchema.safeParse(proposal);
+      return result.success ? [{ ...result.data, state: result.data.state === "pending" ? ("expired" as const) : result.data.state }] : [];
+    });
+    out.push({ id: parsed.data.id, role: parsed.data.role, text: parsed.data.text, tools, rows, error: error.success ? (error.data as AskErrorEvent) : null, usage: parsed.data.usage, grounded: parsed.data.grounded, stopped: parsed.data.stopped, ...(proposals.length > 0 ? { proposals } : {}) });
   }
   return out;
 };

@@ -4,9 +4,14 @@ import { useEffect, useRef } from "react";
 import type { Dashboard } from "../model";
 import { AskFollowUps } from "./AskChips";
 import { AskPlans } from "./AskPlan";
+import { AskProposals, type ProposalAction } from "./AskProposals";
+import type { AskProposal, ProposalContext } from "./proposals";
 import { AskRowsDisclosure, type AskLive } from "./AskRows";
 import { hostOf } from "./askSettings";
 import type { AskMessage, AskStatus } from "./useAskThread";
+
+/** A suggestion's own summary already starts with "Suggested", so nothing is put in front of it. */
+const SUGGESTION_COPY = { running: "Preparing a suggestion", done: "", failed: "Could not suggest that" };
 
 /** What each lookup reads as while it runs, once it is done, and when it fails. */
 const TOOL_COPY: Record<ToolName, { running: string; done: string; failed: string }> = {
@@ -17,11 +22,16 @@ const TOOL_COPY: Record<ToolName, { running: string; done: string; failed: strin
   get_changes: { running: "Looking up changes", done: "Looked up changes", failed: "Could not look up changes" },
   build_study_plan: { running: "Building a study plan", done: "Built a study plan", failed: "Could not build a study plan" },
   get_course_load: { running: "Comparing your courses", done: "Compared your courses", failed: "Could not compare your courses" },
+  propose_mark_done: SUGGESTION_COPY,
+  propose_hide: SUGGESTION_COPY,
+  propose_mark_read: SUGGESTION_COPY,
+  propose_personal_deadline: SUGGESTION_COPY,
 };
 
 const toolLine = (tool: AskMessage["tools"][number]): string => {
   const copy = TOOL_COPY[tool.name];
   if (tool.status === "running") return `${copy.running}…`;
+  if (tool.status === "ok" && copy.done === "") return tool.summary ? tool.summary.replace(/\.$/, "") : "Made a suggestion";
   if (tool.status === "ok") return tool.summary ? `${copy.done}: ${tool.summary.replace(/\.$/, "")}` : `${copy.done} · ${tool.rows} ${tool.rows === 1 ? "row" : "rows"}`;
   return `${copy.failed}: ${tool.summary ?? ""}`;
 };
@@ -61,9 +71,12 @@ export type AskThreadProps = {
   live?: AskLive;
   /** Sends a follow-up question. Follow-up chips are hidden without it. */
   onAsk?: (question: string) => void;
+  /** The data suggestions are checked against, and what the student decided about one. */
+  proposalContext?: ProposalContext;
+  onProposal?: (messageId: string, proposal: AskProposal, action: ProposalAction) => void;
 };
 
-export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpen, onOpen, onRetry, onSettings, live, onAsk }: AskThreadProps) => {
+export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpen, onOpen, onRetry, onSettings, live, onAsk, proposalContext, onProposal }: AskThreadProps) => {
   const list = useRef<HTMLOListElement>(null);
   const lastId = messages.at(-1)?.id;
   const lastText = messages.at(-1)?.text.length ?? 0;
@@ -109,6 +122,7 @@ export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpe
               </p>
             ) : null}
             <AskPlans rows={message.rows} dashboard={dashboard} now={now} canOpen={canOpen} onOpen={onOpen} live={live} />
+            <AskProposals proposals={message.proposals ?? []} context={proposalContext} onAction={onProposal ? (proposal, action) => onProposal(message.id, proposal, action) : undefined} />
             <AskRowsDisclosure rows={message.rows} dashboard={dashboard} now={now} canOpen={canOpen} onOpen={onOpen} live={live} />
             {message.stopped ? <p className="ask-note">Stopped before Nova finished.</p> : null}
             {message.grounded === false ? <p className="ask-note">Nova could not verify every item named above against your data.</p> : null}

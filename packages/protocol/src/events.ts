@@ -1,7 +1,19 @@
 import { z } from "zod";
 import { calendarDateSchema, compactBucketSchema, compactChangeFieldsSchema, compactChangeKindSchema, compactItemKindSchema, compactItemStatusSchema } from "./snapshot";
 
-export const toolNameSchema = z.enum(["get_brief", "list_deadlines", "get_item_details", "get_recent_announcements", "get_changes", "build_study_plan", "get_course_load"]);
+export const toolNameSchema = z.enum([
+  "get_brief",
+  "list_deadlines",
+  "get_item_details",
+  "get_recent_announcements",
+  "get_changes",
+  "build_study_plan",
+  "get_course_load",
+  "propose_mark_done",
+  "propose_hide",
+  "propose_mark_read",
+  "propose_personal_deadline",
+]);
 export type ToolName = z.infer<typeof toolNameSchema>;
 
 const url = z.url({ protocol: /^https?$/ }).nullable();
@@ -112,6 +124,29 @@ export const toolRowSchema = z.discriminatedUnion("kind", [
 ]);
 export type ToolRow = z.infer<typeof toolRowSchema>;
 
+export const PROPOSAL_LIMITS = { perTurn: 3, items: 20, changes: 60, title: 120 } as const;
+
+const itemRef = z.string().min(2).max(40);
+const clockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected a 24-hour time like 17:30.");
+
+/**
+ * What a proposal would do. Every kind changes something stored on the
+ * student's device and nothing else: none of them can reach Brightspace, and
+ * none runs on the server. Items, changes, and deadlines are named by the ids
+ * the snapshot sent; a date is a local calendar day and a local clock time,
+ * so the device, not the server, turns them into an instant.
+ */
+export const proposalPayloadSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("mark_done"), itemIds: z.array(itemRef).min(1).max(PROPOSAL_LIMITS.items) }),
+  z.object({ kind: z.literal("hide_item"), itemIds: z.array(itemRef).min(1).max(PROPOSAL_LIMITS.items) }),
+  z.object({ kind: z.literal("mark_changes_read"), changeIds: z.array(z.string().min(1).max(80)).min(1).max(PROPOSAL_LIMITS.changes) }),
+  z.object({ kind: z.literal("add_personal_deadline"), title: z.string().min(1).max(PROPOSAL_LIMITS.title), dueDate: calendarDateSchema, time: clockTime, courseId: z.string().min(1).max(64).nullable() }),
+  z.object({ kind: z.literal("move_personal_deadline"), personalId: z.string().min(1).max(80), dueDate: calendarDateSchema, time: clockTime }),
+  z.object({ kind: z.literal("complete_personal_deadline"), personalId: z.string().min(1).max(80) }),
+]);
+export type ProposalPayload = z.infer<typeof proposalPayloadSchema>;
+export type ProposalKind = ProposalPayload["kind"];
+
 export const askErrorCodeSchema = z.enum([
   /** Client-only: the Nova API could not be reached at all. The server never emits it. */
   "unreachable",
@@ -147,6 +182,12 @@ export const askEventSchema = z.discriminatedUnion("type", [
     rows: z.array(toolRowSchema),
     error: z.string().optional(),
   }),
+  /**
+   * An action the model suggests. It only shows a card: the student confirms or dismisses it, and the
+   * extension carries it out. `label` is the server's wording for logs and screen readers; the card
+   * writes its own sentence from `payload` and the data on the device, so what is confirmed is what runs.
+   */
+  z.object({ type: z.literal("proposal"), id: z.string().min(1).max(120), label: z.string().max(300), payload: proposalPayloadSchema }),
   z.object({
     type: z.literal("done"),
     model: z.string().nullable(),
@@ -166,6 +207,7 @@ export const askEventSchema = z.discriminatedUnion("type", [
 export type AskEvent = z.infer<typeof askEventSchema>;
 export type AskErrorEvent = Extract<AskEvent, { type: "error" }>;
 export type AskDoneEvent = Extract<AskEvent, { type: "done" }>;
+export type AskProposalEvent = Extract<AskEvent, { type: "proposal" }>;
 
 export const apiErrorBodySchema = z.object({
   error: z.object({ code: askErrorCodeSchema, message: z.string(), retryable: z.boolean().optional(), retryAfterSeconds: z.number().optional() }),

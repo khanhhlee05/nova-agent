@@ -1,4 +1,5 @@
 import type { AskErrorEvent, ChatMessage, ModelUsage, ToolName, ToolRow } from "@nova-agent/protocol";
+import type { AskProposal } from "./proposals";
 
 /**
  * The shape of a conversation and the pure rules over it. No React here, so
@@ -28,6 +29,8 @@ export type AskMessage = {
   grounded: boolean | null;
   /** True when the student pressed Stop before the answer finished. */
   stopped: boolean;
+  /** Actions the answer suggested, each waiting for the student or already decided. Absent on messages saved before suggestions existed. */
+  proposals?: AskProposal[];
 };
 
 export const HISTORY_LIMIT = 12;

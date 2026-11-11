@@ -6,7 +6,7 @@ import type { ChatRequest } from "@nova-agent/protocol";
 import { CheckCheck, EyeOff, Plus } from "lucide-react";
 import { Tabs, Tooltip } from "radix-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AskChips, AskView, summaryOf, useAskThread, type AskAbout, type AskClient, type AskClientFactory, type AskDraft, type AskLive, type AskMessage, type AskRequestContext, type AskSettings, type ConversationStore, type PlanDraft } from "./ask";
+import { AskChips, AskView, canUndo, resolveProposal, summaryOf, useAskThread, type AskAbout, type AskProposal, type ProposalAction, type ProposalApplied, type ProposalContext, type AskClient, type AskClientFactory, type AskDraft, type AskLive, type AskMessage, type AskRequestContext, type AskSettings, type ConversationStore, type PlanDraft } from "./ask";
 import type { SyncStatusRecord } from "../storage/novaDb";
 import { PHASE_LABELS, isRunningPhase, isStale, type SyncRuntimeState } from "../sync/syncState";
 import { StateBanners, SyncProgress } from "./components/Banners";
@@ -69,7 +69,8 @@ export type MissionControlActions = {
   /** Sets or clears the on-device done mark. Brightspace is never written to. */
   setLocalDone: (key: string, title: string, done: boolean) => void;
   /** The student's own deadlines, Week tab only. Optional so callers without them still work. */
-  addPersonal?: (draft: DeadlineDraft) => void;
+  /** `id` lets the caller name the new deadline so it can find it again; one is made up when absent. */
+  addPersonal?: (draft: DeadlineDraft & { id?: string }) => void;
   updatePersonal?: (id: string, draft: DeadlineDraft) => void;
   /** Permanent after the Undo window, like deleting a change. */
   deletePersonal?: (id: string, title: string) => void;
@@ -286,6 +287,82 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
         },
       }
     : undefined;
+
+  // Suggestions are read against the same live data the rows read, and carried out by the same handlers the tabs call.
+  const proposalContext: ProposalContext | undefined =
+    dashboard && askLive ? { items: dashboard.snapshot.items, courseById: dashboard.courseById, localMarks: askLive.localMarks, dismissed: askLive.dismissed, events: askLive.events, personal: askLive.personal } : undefined;
+  const onProposal = (messageId: string, proposal: AskProposal, action: ProposalAction) => {
+    if (!proposalContext || !dashboard) return;
+    if (action === "dismiss") {
+      if (proposal.state === "pending") thread.setProposal(messageId, proposal.id, { state: "dismissed" });
+      return;
+    }
+    if (action === "show") {
+      const added = proposalContext.personal.find((deadline) => deadline.id === proposal.applied?.personalId);
+      if (added) showPersonal(added);
+      return;
+    }
+    if (action === "undo") {
+      const applied = proposal.applied;
+      if (!canUndo(proposal) || !applied) return;
+      const own = proposalContext.personal.find((deadline) => deadline.id === applied.personalId);
+      switch (proposal.payload.kind) {
+        case "mark_done":
+          for (const key of applied.itemKeys ?? []) actions.setLocalDone(key, dashboard.itemByKey.get(key)?.title ?? "Item", false);
+          break;
+        case "mark_changes_read":
+          for (const id of applied.eventIds ?? []) actions.setEventRead(id, false);
+          break;
+        case "move_personal_deadline":
+          if (own && applied.previousDueAt) actions.updatePersonal?.(own.id, { title: own.title, dueAt: applied.previousDueAt, courseId: own.courseId });
+          break;
+        case "complete_personal_deadline":
+          if (own) actions.setPersonalDone?.(own.id, own.title, false);
+          break;
+        default:
+          return;
+      }
+      thread.setProposal(messageId, proposal.id, { state: "undone", applied: undefined });
+      return;
+    }
+    if (proposal.state !== "pending") return;
+    // Read again at the moment of confirming: only what is still true is carried out, and that is what the card records.
+    const resolved = resolveProposal(proposal.payload, proposalContext);
+    let applied: ProposalApplied = {};
+    switch (resolved.kind) {
+      case "unavailable":
+        return;
+      case "mark_done":
+        for (const item of resolved.items) actions.setLocalDone(item.key, item.title, true);
+        applied = { itemKeys: resolved.items.map((item) => item.key) };
+        break;
+      case "hide_item":
+        for (const item of resolved.items) actions.dismissItem(item.key, item.title);
+        break;
+      case "mark_changes_read":
+        for (const event of resolved.events) actions.setEventRead(event.id, true);
+        applied = { eventIds: resolved.events.map((event) => event.id) };
+        break;
+      case "add_personal_deadline": {
+        if (!actions.addPersonal) return;
+        const id = `personal-${crypto.randomUUID()}`;
+        actions.addPersonal({ ...resolved.draft, id });
+        applied = { personalId: id };
+        break;
+      }
+      case "move_personal_deadline":
+        if (!actions.updatePersonal) return;
+        actions.updatePersonal(resolved.deadline.id, { title: resolved.deadline.title, dueAt: resolved.dueAt, courseId: resolved.deadline.courseId });
+        applied = { personalId: resolved.deadline.id, previousDueAt: resolved.deadline.dueAt };
+        break;
+      case "complete_personal_deadline":
+        if (!actions.setPersonalDone) return;
+        actions.setPersonalDone(resolved.deadline.id, resolved.deadline.title, true);
+        applied = { personalId: resolved.deadline.id };
+        break;
+    }
+    thread.setProposal(messageId, proposal.id, { state: "confirmed", applied, label: resolved.text });
+  };
 
   const jumpTo = (target: "overdue" | "this-week" | "changes") => {
     if (target === "overdue") {
@@ -507,7 +584,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                 // Force-mounted and hidden so the conversation survives a switch to another tab.
                 <Tabs.Content className="tab-content tab-content-ask" value="ask" forceMount hidden={tab !== "ask"}>
                   {dashboard ? (
-                    <AskView notices={tab === "ask" ? stateBanners : null} thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} live={askLive} draft={askDraft} about={askAbout} onClearAbout={() => setAskAbout(null)} onSend={sendFromComposer} conversations={store ? { list: store.list, onOpen: openConversation, onDelete: deleteConversation } : undefined} />
+                    <AskView notices={tab === "ask" ? stateBanners : null} thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} live={askLive} draft={askDraft} about={askAbout} onClearAbout={() => setAskAbout(null)} onSend={sendFromComposer} conversations={store ? { list: store.list, onOpen: openConversation, onDelete: deleteConversation } : undefined} proposalContext={proposalContext} onProposal={onProposal} />
                   ) : showSkeleton ? (
                     <FocusSkeleton />
                   ) : (

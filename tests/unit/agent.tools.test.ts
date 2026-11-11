@@ -26,7 +26,7 @@ const titles = (rows: ToolRow[]) => rows.map((row) => row.title);
 describe("tool schemas", () => {
   it("expose OpenAI-style function definitions without $schema and with optional fields not required", () => {
     const defs = toolSchemasForModel();
-    expect(defs.map((def) => def.function.name)).toEqual(["get_brief", "list_deadlines", "get_item_details", "get_recent_announcements", "get_changes", "build_study_plan", "get_course_load"]);
+    expect(defs.map((def) => def.function.name)).toEqual(["get_brief", "list_deadlines", "get_item_details", "get_recent_announcements", "get_changes", "build_study_plan", "get_course_load", "propose_mark_done", "propose_hide", "propose_mark_read", "propose_personal_deadline"]);
     for (const def of defs) {
       expect(def.type).toBe("function");
       expect(def.function.description.length).toBeGreaterThan(20);
@@ -48,7 +48,7 @@ describe("tool schemas", () => {
     if (!bad.ok) expect(bad.error).toContain("range");
     expect(run("get_item_details", {}, baseline).ok).toBe(false);
     expect(run("list_deadlines", { course: "Underwater Basket Weaving" }, baseline)).toMatchObject({ ok: false, error: expect.stringContaining("No course matches") });
-    expect(TOOLS).toHaveLength(7);
+    expect(TOOLS).toHaveLength(11);
   });
 });
 

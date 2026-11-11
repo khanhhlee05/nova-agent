@@ -1,6 +1,7 @@
 import type { ChatRequest } from "@nova-agent/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AskClient } from "./askClient";
+import type { AskProposal } from "./proposals";
 import { historyOf, settleTools, type AskMessage, type AskRequestContext, type AskSendOptions } from "./thread";
 
 export * from "./thread";
@@ -19,6 +20,8 @@ export type AskThread = {
   clear: () => void;
   /** Replaces the thread with a saved conversation. */
   load: (conversation: { id: string; messages: AskMessage[] }) => void;
+  /** Records what the student decided about one suggestion, and what confirming it touched. */
+  setProposal: (messageId: string, proposalId: string, patch: Partial<Pick<AskProposal, "state" | "applied" | "label">>) => void;
   /** Polite live-region text for screen readers. */
   announcement: string | null;
 };
@@ -96,6 +99,11 @@ export const useAskThread = (
                   rows: [...message.rows, ...event.rows.filter((row, index, list) => list.findIndex((other) => other.kind === row.kind && other.id === row.id) === index && !message.rows.some((existing) => existing.kind === row.kind && existing.id === row.id))],
                 }));
                 break;
+              case "proposal":
+                patch(answerId, (message) =>
+                  (message.proposals ?? []).some((proposal) => proposal.id === event.id) ? message : { ...message, proposals: [...(message.proposals ?? []), { id: event.id, label: event.label, payload: event.payload, state: "pending" }] },
+                );
+                break;
               case "done":
                 patch(answerId, (message) => ({ ...message, usage: event.usage, grounded: event.grounded }));
                 break;
@@ -162,5 +170,11 @@ export const useAskThread = (
 
   const load = useCallback((conversation: { id: string; messages: AskMessage[] }) => replace(conversation.id, conversation.messages, "Conversation restored."), [replace]);
 
-  return useMemo(() => ({ conversationId, messages, status, send, stop, retryLast, clear, load, announcement }), [conversationId, messages, status, send, stop, retryLast, clear, load, announcement]);
+  const setProposal = useCallback(
+    (messageId: string, proposalId: string, change: Partial<Pick<AskProposal, "state" | "applied" | "label">>) =>
+      patch(messageId, (message) => ({ ...message, proposals: (message.proposals ?? []).map((proposal) => (proposal.id === proposalId ? { ...proposal, ...change } : proposal)) })),
+    [patch],
+  );
+
+  return useMemo(() => ({ conversationId, messages, status, send, stop, retryLast, clear, load, setProposal, announcement }), [conversationId, messages, status, send, stop, retryLast, clear, load, setProposal, announcement]);
 };

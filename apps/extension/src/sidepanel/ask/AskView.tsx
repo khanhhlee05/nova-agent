@@ -7,6 +7,8 @@ import type { AskClientFactory } from "./askClient";
 import { AskComposer, type AskAbout, type AskDraft } from "./AskComposer";
 import { AskConversations } from "./AskConversations";
 import type { ConversationSummary } from "./conversations";
+import type { ProposalAction } from "./AskProposals";
+import type { AskProposal, ProposalContext } from "./proposals";
 import type { AskLive } from "./AskRows";
 import { hostOf, type AskSettings } from "./askSettings";
 import { AskSetup } from "./AskSetup";
@@ -36,6 +38,9 @@ export type AskViewProps = {
   onSend?: (text: string) => void;
   /** Saved conversations. Only used while the student has saving turned on. */
   conversations?: AskSavedConversations;
+  /** The data suggestions are checked against, and the handler that carries one out. */
+  proposalContext?: ProposalContext;
+  onProposal?: (messageId: string, proposal: AskProposal, action: ProposalAction) => void;
 };
 
 export type AskSavedConversations = {
@@ -46,7 +51,7 @@ export type AskSavedConversations = {
 };
 
 /** The Ask tab body: setup card until enabled, then the thread and the composer. */
-export const AskView = ({ notices, thread, settings, onSettingsChange, clientFactory, dashboard, mode, now, canOpen, onOpen, live, draft = null, about = null, onClearAbout, onSend, conversations }: AskViewProps) => {
+export const AskView = ({ notices, thread, settings, onSettingsChange, clientFactory, dashboard, mode, now, canOpen, onOpen, live, draft = null, about = null, onClearAbout, onSend, conversations, proposalContext, onProposal }: AskViewProps) => {
   const [editing, setEditing] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const saved = settings.persistConversations === true && conversations ? conversations : null;
@@ -105,7 +110,7 @@ export const AskView = ({ notices, thread, settings, onSettingsChange, clientFac
               <span>Deadlines, what changed, what to start first. Answers cover every course and use the data on this device.</span>
             </div>
           ) : (
-            <AskThread messages={thread.messages} status={thread.status} dashboard={dashboard} now={now} apiBaseUrl={settings.apiBaseUrl} canOpen={canOpen} onOpen={onOpen} onRetry={thread.retryLast} onSettings={() => setEditing(true)} live={live} onAsk={thread.send} />
+            <AskThread messages={thread.messages} status={thread.status} dashboard={dashboard} now={now} apiBaseUrl={settings.apiBaseUrl} canOpen={canOpen} onOpen={onOpen} onRetry={thread.retryLast} onSettings={() => setEditing(true)} live={live} onAsk={thread.send} proposalContext={proposalContext} onProposal={onProposal} />
           )
         ) : null}
         <p className="sr-only" aria-live="polite" aria-atomic="true">

@@ -58,7 +58,8 @@ describe("buildSystemPrompt", () => {
   });
 
   it("stays compact", () => {
-    expect(buildSystemPrompt(snapshot).length).toBeLessThan(3900);
+    // About 1200 tokens: the base prompt grew with planning and suggestions, and is still one screen of text.
+    expect(buildSystemPrompt(snapshot).length).toBeLessThan(4800);
   });
 
   it("states today, the week ranges, and forbids narrowing a broad fetch", () => {
@@ -140,6 +141,6 @@ describe("buildSystemPrompt with the panel's own state", () => {
     const course = snapshot.courses[0];
     const item = snapshot.items[0];
     const full = buildSystemPrompt({ ...snapshot, hiddenCount: 2, personal: Array.from({ length: 8 }, (_, i) => own({ id: `p${i}`, title: `Own deadline number ${i}` })) }, { focus: { courseId: course?.id, itemId: item?.id } });
-    expect(full.length).toBeLessThan(5200);
+    expect(full.length).toBeLessThan(6000);
   });
 });

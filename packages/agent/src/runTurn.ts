@@ -1,4 +1,4 @@
-import type { AskEvent, ChatFocus, ChatMessage, CompactSnapshot, ModelUsage, ToolName } from "@nova-agent/protocol";
+import { PROPOSAL_LIMITS, type AskEvent, type ChatFocus, type ChatMessage, type CompactSnapshot, type ModelUsage, type ToolName } from "@nova-agent/protocol";
 import { checkHonesty } from "./honesty";
 import { ModelError, addUsage, isAbortError, type ChatModel, type ModelMessage, type ToolCall } from "./model";
 import { briefTitles, buildSystemPrompt, quote } from "./prompt";
@@ -31,6 +31,8 @@ export type TurnResult = {
   grounded: boolean;
   corrected: boolean;
   returnedTitles: string[];
+  /** How many suggestions were shown to the student. */
+  proposals: number;
   outcome: "ok" | "error" | "aborted";
   errorCode?: string;
 };
@@ -76,6 +78,7 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
   let corrected = false;
   let grounded = false;
   let finalText = "";
+  let proposals = 0;
 
   const finish = (outcome: TurnResult["outcome"], errorCode?: string): TurnResult => ({
     text: finalText,
@@ -86,6 +89,7 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
     grounded,
     corrected,
     returnedTitles: [...returnedTitles],
+    proposals,
     outcome,
     ...(errorCode ? { errorCode } : {}),
   });
@@ -116,11 +120,19 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
           const args = parseArgs(call.arguments);
           const name = isToolName(call.name, tools) ? call.name : null;
           yield { type: "tool_call", id: call.id, name: name ?? "get_brief", input: args };
-          const result = executeTool(call.name, args, { snapshot: input.snapshot }, tools);
+          let result = executeTool(call.name, args, { snapshot: input.snapshot }, tools);
+          // A turn may suggest a few actions, not a wall of cards; past the limit the model is told and nothing is shown.
+          if (result.ok && result.proposal && proposals >= PROPOSAL_LIMITS.perTurn) {
+            result = { ok: false, error: `Only ${PROPOSAL_LIMITS.perTurn} suggestions fit in one answer. This one was not shown; tell the student what else you would suggest.` };
+          }
           if (name) toolNames.push(name);
           if (result.ok) {
             for (const row of result.rows) for (const title of rowTitles(row)) returnedTitles.add(title);
             yield { type: "tool_result", id: call.id, name: name ?? "get_brief", ok: true, summary: result.summary, rows: result.rows };
+            if (result.proposal) {
+              proposals += 1;
+              yield { type: "proposal", id: `proposal-${rounds}-${call.id}`.slice(0, 120), label: result.proposal.label.slice(0, 300), payload: result.proposal.payload };
+            }
             messages.push({ role: "tool", toolCallId: call.id, content: JSON.stringify({ summary: result.summary, ...(result.data as object) }) });
           } else {
             yield { type: "tool_result", id: call.id, name: name ?? "get_brief", ok: false, summary: "Lookup failed", rows: [], error: result.error };

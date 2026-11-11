@@ -185,17 +185,17 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
         setPendingDelete(entry);
         setAnnouncement(`Deleted the change for "${title}". Undo to restore it.`);
       },
-      addPersonal: (draft: { title: string; dueAt: string; courseId: string | null }) => {
+      addPersonal: (draft: { title: string; dueAt: string; courseId: string | null; id?: string }) => {
         if (!scope) return;
         const at = clock().toISOString();
-        void putPersonalItem(db, { id: `personal-${crypto.randomUUID()}`, scope, ...draft, completedAt: null, createdAt: at, updatedAt: at })
+        void putPersonalItem(db, { id: draft.id ?? `personal-${crypto.randomUUID()}`, scope, title: draft.title, dueAt: draft.dueAt, courseId: draft.courseId, completedAt: null, createdAt: at, updatedAt: at })
           .then(() => setAnnouncement(`Added "${draft.title}" to your Week tab. It stays on this device.`))
           .catch((error: unknown) => setAnnouncement(error instanceof Error ? error.message : "Nova could not save that deadline."));
       },
       updatePersonal: (id: string, draft: { title: string; dueAt: string; courseId: string | null }) => {
         const current = personalItems?.find((item) => item.id === id);
         if (!current) return;
-        void putPersonalItem(db, { ...current, ...draft, updatedAt: clock().toISOString() }).then(() => setAnnouncement(`Saved "${draft.title}".`));
+        void putPersonalItem(db, { ...current, title: draft.title, dueAt: draft.dueAt, courseId: draft.courseId, updatedAt: clock().toISOString() }).then(() => setAnnouncement(`Saved "${draft.title}".`));
       },
       deletePersonal: (id: string, title: string) => {
         commitDelete();

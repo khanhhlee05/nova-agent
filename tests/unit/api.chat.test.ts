@@ -71,6 +71,26 @@ describe("POST /v1/chat", () => {
     expect(lines.join("\n")).not.toContain("What is due");
   });
 
+  it("carries the request's focus, summary, and a suggestion through the stream, and logs only counts", async () => {
+    const { app, lines } = harness();
+    const overdue = request.snapshot.items.find((item) => item.bucket === "overdue" && !item.longOverdue);
+    if (!overdue) throw new Error("fixture changed");
+    const response = await post(app, { ...request, message: "Mark everything that is overdue as done", focus: { courseId: null, tab: "focus", itemId: overdue.id }, summary: "The student asked: hi | Nova answered: hello" });
+    expect(response.status).toBe(200);
+    const events = await readEvents(response);
+    expect(events.map((event) => event.type)).toEqual(["tool_call", "tool_result", "tool_call", "tool_result", "proposal", "text", "done"]);
+    const proposal = events[4];
+    expect(proposal?.type === "proposal" && proposal.payload).toEqual({ kind: "mark_done", itemIds: [overdue.id] });
+    const turn = lines.map((line) => JSON.parse(line) as Record<string, unknown>).find((line) => line.event === "chat.turn");
+    expect(turn).toMatchObject({ toolNames: ["list_deadlines", "propose_mark_done"], proposals: 1, snapshotVersion: 3, outcome: "ok" });
+    expect(lines.join("\n")).not.toContain(overdue.title);
+    expect(lines.join("\n")).not.toContain("Mark everything");
+    // A malformed focus or an oversize summary is a bad request, named by path only.
+    const bad = await post(app, { ...request, focus: { tab: "ask" }, summary: "x".repeat(2000) });
+    expect(bad.status).toBe(400);
+    expect(((await bad.json()) as { issues: string[] }).issues).toEqual(expect.arrayContaining(["focus.tab", "summary"]));
+  });
+
   it("logs the question only when LOG_PROMPTS is on", async () => {
     const { app, lines } = harness({ env: { LOG_PROMPTS: "1" } });
     await readEvents(await post(app, request));

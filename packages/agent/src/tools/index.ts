@@ -5,16 +5,21 @@ import { getChanges } from "./changes";
 import { getCourseLoad } from "./courseLoad";
 import { listDeadlines } from "./deadlines";
 import { getItemDetails } from "./itemDetails";
+import { proposeHide, proposeMarkDone, proposeMarkRead, proposePersonalDeadline } from "./propose";
 import type { ToolContext, ToolResult, ToolSpec } from "./shared";
 import { buildStudyPlan } from "./studyPlan";
 
 export * from "./shared";
 export * from "./period";
 export { ESTIMATE_NOTE, PLAN_DEFAULTS, formatMinutes, type PlanLeftOut } from "./studyPlan";
-export { getBrief, listDeadlines, getItemDetails, getRecentAnnouncements, getChanges, buildStudyPlan, getCourseLoad };
+export { PROPOSED_NOTE, parseClock } from "./propose";
+export { getBrief, listDeadlines, getItemDetails, getRecentAnnouncements, getChanges, buildStudyPlan, getCourseLoad, proposeMarkDone, proposeHide, proposeMarkRead, proposePersonalDeadline };
 
-/** Every tool is read-only over the compact snapshot. There is no tool that fetches, writes, or opens anything. */
-export const TOOLS: readonly ToolSpec[] = [getBrief, listDeadlines, getItemDetails, getRecentAnnouncements, getChanges, buildStudyPlan, getCourseLoad] as readonly ToolSpec[];
+/**
+ * Every tool is read-only over the compact snapshot. There is no tool that fetches, writes, or opens anything.
+ * The propose_ tools return a suggestion for the student to confirm; they change nothing themselves.
+ */
+export const TOOLS: readonly ToolSpec[] = [getBrief, listDeadlines, getItemDetails, getRecentAnnouncements, getChanges, buildStudyPlan, getCourseLoad, proposeMarkDone, proposeHide, proposeMarkRead, proposePersonalDeadline] as readonly ToolSpec[];
 
 export type ToolDefinition = { type: "function"; function: { name: string; description: string; parameters: Record<string, unknown> } };
 

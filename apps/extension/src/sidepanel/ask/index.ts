@@ -2,6 +2,8 @@ export * from "./askSettings";
 export * from "./askClient";
 export * from "./useAskThread";
 export * from "./conversations";
+export * from "./proposals";
+export * from "./AskProposals";
 export * from "./AskView";
 export * from "./AskChips";
 export * from "./AskComposer";

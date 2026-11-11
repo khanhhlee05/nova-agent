@@ -437,6 +437,17 @@ h1, h2, h3, h4, p { margin: 0; }
 .ask-rows-toggle:hover { color: var(--nova-accent); background: var(--nova-accent-soft); }
 .ask-rows { display: flex; flex-direction: column; margin-top: 2px; border-top: 1px solid var(--nova-rule); }
 .ask-note { font-size: 12.5px; color: var(--nova-muted); }
+.ask-proposals { display: flex; flex-direction: column; gap: 8px; }
+.ask-proposal { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--nova-accent); border-radius: var(--nova-radius-md); background: var(--nova-accent-soft); }
+.ask-proposal[data-state="confirmed"], .ask-proposal[data-state="undone"] { border-color: var(--nova-rule-strong); background: var(--nova-bg); }
+.ask-proposal[data-state="dismissed"], .ask-proposal[data-state="expired"] { border-color: var(--nova-rule); background: var(--nova-surface); }
+.ask-proposal[data-state="dismissed"] .ask-proposal-text, .ask-proposal[data-state="expired"] .ask-proposal-text { color: var(--nova-muted); }
+.ask-proposal-kicker { font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: var(--nova-accent); }
+.ask-proposal:not([data-state="pending"]) .ask-proposal-kicker { color: var(--nova-muted); }
+.ask-proposal-text { font-size: 14px; line-height: 1.4; color: var(--nova-ink); overflow-wrap: anywhere; }
+.ask-proposal .card-actions { align-items: center; }
+.ask-proposal-status { font-size: 12.5px; font-weight: 600; color: var(--nova-muted); }
+.ask-proposal[data-state="confirmed"] .ask-proposal-status { color: var(--nova-done); }
 .ask-plan { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--nova-rule); border-radius: var(--nova-radius-md); background: var(--nova-bg); }
 .ask-plan-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--nova-muted); }
 .ask-plan-head strong { font-size: 14px; font-weight: 700; color: var(--nova-ink); }

@@ -1,9 +1,12 @@
-import type { CompactAnnouncement, CompactChange, CompactCourse, CompactItem, CompactPersonal, CompactSnapshot, ToolName, ToolRow } from "@nova-agent/protocol";
+import type { CompactAnnouncement, CompactChange, CompactCourse, CompactItem, CompactPersonal, CompactSnapshot, ProposalPayload, ToolName, ToolRow } from "@nova-agent/protocol";
 import { z } from "zod";
 
 export type ToolContext = { snapshot: CompactSnapshot };
 
-export type ToolResult = { ok: true; summary: string; data: unknown; rows: ToolRow[] } | { ok: false; error: string };
+/** An action a tool suggests. The loop turns it into a `proposal` event; nothing here carries it out. */
+export type ToolProposal = { label: string; payload: ProposalPayload };
+
+export type ToolResult = { ok: true; summary: string; data: unknown; rows: ToolRow[]; proposal?: ToolProposal } | { ok: false; error: string };
 
 export type ToolSpec<I = unknown> = {
   name: ToolName;

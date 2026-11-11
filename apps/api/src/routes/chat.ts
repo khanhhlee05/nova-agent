@@ -87,6 +87,7 @@ export const chatRoute = (context: AppContext): Hono =>
             outcome: timedOut ? "timeout" : (result?.outcome ?? "error"),
             errorCode: result?.errorCode ?? null,
             grounded: result?.grounded ?? null,
+            proposals: result?.proposals ?? 0,
             corrected: result?.corrected ?? null,
             historyLength: request.history.length,
             snapshotBytes,

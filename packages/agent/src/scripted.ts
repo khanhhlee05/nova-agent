@@ -1,5 +1,6 @@
 import type { ModelUsage, ToolName } from "@nova-agent/protocol";
 import type { ChatModel, ModelError, ModelEvent, ModelInput, ModelStop } from "./model";
+import { addCalendarDays } from "./tools/period";
 
 export type ScriptedTurn = {
   text?: string[];
@@ -59,24 +60,51 @@ const lastUserText = (input: ModelInput): string => {
   return "";
 };
 
+const parseTool = (content: string): { summary?: string; proposed?: string; error?: string; items?: { id?: string }[] } => {
+  try {
+    return JSON.parse(content) as { summary?: string; proposed?: string; error?: string; items?: { id?: string }[] };
+  } catch {
+    return {};
+  }
+};
+
+/** The local calendar day the system prompt states, so the router never reads a clock. */
+const todayOf = (input: ModelInput): string | null => /Today is \w{3} (\d{4}-\d{2}-\d{2})/.exec(input.messages[0]?.content ?? "")?.[1] ?? null;
+
+const WANTS_DONE = /\bmark\b.*\bdone\b|\bcheck(ed)? off\b|\btick(ed)? off\b/;
+
 /**
- * Keyword router for demos and UI tests: one tool call, then a sentence that
- * quotes the tool's own summary so the answer is always grounded.
+ * Keyword router for demos and UI tests: a lookup, sometimes a suggestion
+ * built from that lookup, then a sentence that quotes the tool's own summary
+ * so the answer is always grounded.
  */
 export const demoRouter: ScriptedRouter = (input) => {
-  const lastTool = [...input.messages].reverse().find((message) => message.role === "tool");
-  if (lastTool && lastTool.role === "tool") {
-    const summary = (() => {
-      try {
-        return (JSON.parse(lastTool.content) as { summary?: string }).summary ?? "Here is what I found.";
-      } catch {
-        return "Here is what I found.";
-      }
-    })();
-    return { text: [summary, " ", "The rows below come straight from your Brightspace data."], usage: { promptTokens: 120, completionTokens: 24, totalTokens: 144 } };
+  const toolMessages = input.messages.filter((message) => message.role === "tool");
+  const lastTool = toolMessages.at(-1);
+  const question = lastUserText(input);
+  // "Mark what is overdue as done": the lookup comes first, then the suggestion names exactly the items it returned.
+  if (WANTS_DONE.test(question) && toolMessages.length === 1 && lastTool && input.toolChoice !== "none") {
+    const ids = (parseTool(lastTool.content).items ?? []).flatMap((item) => (typeof item.id === "string" ? [item.id] : []));
+    if (ids.length > 0) return { toolCalls: [{ name: "propose_mark_done", args: { ids: ids.slice(0, 20) } }] };
+  }
+  if (lastTool) {
+    const result = parseTool(lastTool.content);
+    if (result.proposed) return { text: [result.summary ?? "I made a suggestion", ". ", "It waits for you to confirm below; nothing has changed yet."], usage: { promptTokens: 140, completionTokens: 20, totalTokens: 160 } };
+    if (result.error) return { text: ["I could not do that: ", result.error] };
+    return { text: [result.summary ?? "Here is what I found.", " ", "The rows below come straight from your Brightspace data."], usage: { promptTokens: 120, completionTokens: 24, totalTokens: 144 } };
   }
   if (input.toolChoice === "none") return { text: ["I could not look that up. Try asking about deadlines, changes, or what to start first."] };
-  const question = lastUserText(input);
+  if (WANTS_DONE.test(question)) {
+    const range = /overdue|late/.test(question) ? "overdue" : /today|tonight/.test(question) ? "today" : "week";
+    return { toolCalls: [{ name: "list_deadlines", args: { range, includePersonal: false } }] };
+  }
+  if (/\bmark\b.*\bread\b/.test(question)) return { toolCalls: [{ name: "propose_mark_read", args: { all: true } }] };
+  const remind = /\b(?:remind me to|add a deadline to|add a reminder to)\s+(.+?)(?:\s+(today|tonight|tomorrow))?(?:\s+at\s+(\d{1,2}(?::\d{2})?\s?(?:am|pm)))?[.?!]*$/.exec(question);
+  const today = todayOf(input);
+  if (remind?.[1] && today) {
+    const date = remind[2] === "tomorrow" || remind[2] === undefined ? addCalendarDays(today, 1) : today;
+    return { toolCalls: [{ name: "propose_personal_deadline", args: { action: "add", title: `${remind[1].charAt(0).toUpperCase()}${remind[1].slice(1)}`, date, ...(remind[3] ? { time: remind[3] } : {}) } }] };
+  }
   // "What is left in <course>?", the chip the Ask hero draws from the course with the most open work.
   const leftIn = /\bleft in (.+?)\??$/.exec(question);
   if (leftIn?.[1]) return { toolCalls: [{ name: "list_deadlines", args: { range: "all", course: leftIn[1].trim() } }] };
