@@ -1,5 +1,8 @@
-import { routes, VILLANOVA_BRIGHTSPACE_ORIGIN } from "../routes";
+import { bytesToBase64, type RawFileFetch, type RawFileResponse } from "../files";
+import { isApprovedFilePath, routes, VILLANOVA_BRIGHTSPACE_ORIGIN } from "../routes";
 import { jsonResponse, type FixtureResolver, type RawResponse } from "../transport";
+import { minimalPdf } from "./pdf";
+import { storedZip } from "./zip";
 
 /**
  * Sanitized, fictional demo tenant shaped like real D2L responses. Dates are
@@ -34,13 +37,13 @@ const folder = (
   id: number,
   name: string,
   dueDate: string | null,
-  extra: Partial<{ IsHidden: boolean; ScoreDenominator: number | null; StartDate: string | null; EndDate: string | null; Group: boolean; Rubric: boolean; SubmissionType: number }> = {},
+  extra: Partial<{ IsHidden: boolean; ScoreDenominator: number | null; StartDate: string | null; EndDate: string | null; Group: boolean; Rubric: boolean; SubmissionType: number; Attachments: DemoFileRef[] }> = {},
 ) => ({
   Id: id,
   CategoryId: null,
   Name: name,
   CustomInstructions: { Text: "", Html: "" },
-  Attachments: [],
+  Attachments: extra.Attachments ?? [],
   TotalFiles: 0,
   UnreadFiles: 0,
   FlaggedFiles: 0,
@@ -116,11 +119,11 @@ const news = (id: number, title: string, text: string, createdDate: string, extr
   IsPinned: extra.IsPinned ?? false,
 });
 
-const submission = (status: number, submitted: boolean, completedAt: string | null = null, score: number | null = null) => ({
+const submission = (status: number, submitted: boolean, completedAt: string | null = null, score: number | null = null, files: DemoFileRef[] = []) => ({
   Entity: { DisplayName: "Demo Student", EntityId: Number(DEMO_USER_ID), EntityType: "User", Active: true },
   Status: status,
   Feedback: score === null ? null : { Feedback: { Text: "Nice work.", Html: "<p>Nice work.</p>" }, Files: [], Score: score, IsGraded: true, RubricAssessments: [] },
-  Submissions: submitted ? [{ Id: 1, Comment: { Text: "", Html: "" }, Files: [], SubmissionDate: completedAt }] : [],
+  Submissions: submitted ? [{ Id: DEMO_SUBMISSION_ID, Comment: { Text: "", Html: "" }, Files: files, SubmissionDate: completedAt }] : [],
   CompletionDate: completedAt,
 });
 
@@ -128,8 +131,70 @@ export type DemoTenantData = {
   versions: unknown;
   whoami: unknown;
   enrollments: unknown;
-  courseData: Record<string, { folders: unknown[]; quizzes: unknown[]; news: unknown[]; submissions: Record<string, unknown[]> }>;
+  courseData: Record<string, { folders: unknown[]; quizzes: unknown[]; news: unknown[]; submissions: Record<string, unknown[]>; toc?: unknown }>;
+  /** Fictional files behind the file routes, keyed by the path that serves them. */
+  files: Record<string, DemoFile>;
 };
+
+export type DemoFile = { bytes: Uint8Array; contentType: string };
+
+type DemoFileRef = { FileId: number; FileName: string; Size: number };
+
+const DEMO_SUBMISSION_ID = 1;
+
+const text = (lines: string[]): Uint8Array => new TextEncoder().encode(lines.join("\n"));
+
+/** The demo files. Their text is what Ask Nova reads in demo mode, so it is written to answer real questions. */
+const DEMO_HANDOUT = minimalPdf([
+  ["ECE 2042 Microcontrollers", "Lab 3: Timer Interrupts", "", "Goal: blink an LED at exactly 1 Hz using a timer interrupt, not a delay loop.", "Configure Timer1 in CTC mode with a prescaler of 256.", "Measure the period on the oscilloscope and report the error in percent."],
+  ["Deliverables", "1. main.c, commented.", "2. A timing diagram exported from the oscilloscope as a PDF.", "3. A half-page reflection on interrupt latency.", "", "Grading: 50 points. Code 25, timing diagram 15, reflection 10.", "Late work loses 10 percent per day."],
+]);
+const DEMO_RUBRIC = text(["Project Proposal rubric (25 points)", "", "Problem statement: 8 points. One paragraph, specific and testable.", "Parts list and budget: 7 points. Under 40 dollars per team.", "Schedule: 5 points. Weekly milestones through week 12.", "Team roles: 5 points. Every member has a named responsibility."]);
+const DEMO_REPORT = text(["Lab 1: Toolchain Setup", "Demo Student", "", "Installed avr-gcc 12.1 and avrdude. Built and flashed the blink example.", "Problem: the programmer was not detected until the USB driver was replaced."]);
+
+/** Course materials. Written so questions about a syllabus, a lecture, or a lab manual have real answers in demo mode. */
+const DEMO_SYLLABUS = text([
+  "<html><head><title>Syllabus</title><style>body{font-family:serif}</style></head><body>",
+  "<h1>ECE 2042 Microcontrollers: Syllabus</h1>",
+  "<h2>Late work</h2><p>Late work loses 10 percent per day, for up to three days. After three days it is not accepted.</p>",
+  "<h2>Office hours</h2><p>Tuesday 2 to 4 PM in CEER 210, or by appointment.</p>",
+  "<h2>Grading</h2><ul><li>Labs: 40 percent</li><li>Quizzes: 20 percent</li><li>Project: 25 percent</li><li>Final exam: 15 percent</li></ul>",
+  "<h2>Collaboration</h2><p>Discuss ideas freely, but every line of code you hand in must be your own or your team's.</p>",
+  "</body></html>",
+]);
+const slide = (title: string, bullets: string[]): string => `<p:sld xmlns:a="a" xmlns:p="p"><p:cSld><p:spTree><a:p><a:r><a:t>${title}</a:t></a:r></a:p>${bullets.map((bullet) => `<a:p><a:r><a:t>${bullet}</a:t></a:r></a:p>`).join("")}</p:spTree></p:cSld></p:sld>`;
+const DEMO_SLIDES = storedZip({
+  "[Content_Types].xml": "<Types/>",
+  "ppt/presentation.xml": "<p:presentation/>",
+  "ppt/slides/slide1.xml": slide("Lecture 5: Interrupts", ["Why polling wastes cycles", "What an interrupt is"]),
+  "ppt/slides/slide2.xml": slide("Interrupt service routines", ["Keep an ISR short: set a flag and return", "Declare shared variables volatile", "Never call delay inside an ISR"]),
+  "ppt/slides/slide3.xml": slide("Interrupt latency", ["Latency is the time from the event to the first ISR instruction", "On the ATmega328P it is at least four clock cycles", "Disabling interrupts globally adds to the worst case"]),
+});
+const DEMO_MANUAL = minimalPdf([
+  ["ECE 2042 Lab Manual", "Section 3: Timers", "", "Timer1 is a 16 bit timer. In CTC mode it counts up to OCR1A and resets.", "The compare match frequency is f_clk divided by the prescaler times (OCR1A + 1)."],
+  ["Section 3.2: Measuring with the oscilloscope", "", "Probe the LED pin and trigger on the rising edge.", "Record the period over at least ten cycles and average."],
+]);
+const DEMO_NOTES = text(["Fourier series notes", "", "A periodic signal with period T can be written as a sum of sines and cosines at multiples of 1/T.", "The coefficient a_n is 2/T times the integral of x(t) cos(2 pi n t / T) over one period.", "Even signals have only cosine terms. Odd signals have only sine terms."]);
+
+const topic = (id: number, title: string, type: "File" | "Link", url: string) => ({ TopicId: id, Identifier: String(id), TypeIdentifier: type, Title: title, Bookmarked: false, Unread: false, Url: url, StartDateTime: null, EndDateTime: null, IsHidden: false, IsLocked: false, LastModifiedDate: "2026-08-25T14:00:00.000Z" });
+const tocModule = (id: number, title: string, topics: unknown[], modules: unknown[] = []) => ({ ModuleId: id, Title: title, Modules: modules, Topics: topics, IsHidden: false, IsLocked: false, LastModifiedDate: "2026-08-25T14:00:00.000Z" });
+
+const MICRO_TOC = {
+  Modules: [
+    tocModule(7101, "Course information", [topic(8101, "Syllabus", "File", "/content/enforced/31001-ECE2042/syllabus.html")]),
+    tocModule(
+      7102,
+      "Week 3: Interrupts",
+      [topic(8102, "Lecture 5: Interrupts", "File", "/content/enforced/31001-ECE2042/lecture5-interrupts.pptx"), topic(8103, "Background reading on latency", "Link", "https://example.invalid/interrupt-latency")],
+      [tocModule(7103, "Lab materials", [topic(8104, "Lab manual", "File", "/content/enforced/31001-ECE2042/lab-manual.pdf")])],
+    ),
+  ],
+};
+const SIGNALS_TOC = { Modules: [tocModule(7301, "Notes", [topic(8301, "Fourier series notes", "File", "/content/enforced/31003-ECE3040/fourier-notes.txt")])] };
+
+const HANDOUT_REF: DemoFileRef = { FileId: 9101, FileName: "Lab 3 handout.pdf", Size: DEMO_HANDOUT.length };
+const RUBRIC_REF: DemoFileRef = { FileId: 9103, FileName: "Proposal rubric.txt", Size: DEMO_RUBRIC.length };
+const REPORT_REF: DemoFileRef = { FileId: 9104, FileName: "lab1-report.txt", Size: DEMO_REPORT.length };
 
 export const buildDemoTenant = (now: Date, scenario: DemoScenario = "baseline"): DemoTenantData => {
   const changed = scenario === "changed";
@@ -151,10 +216,10 @@ export const buildDemoTenant = (now: Date, scenario: DemoScenario = "baseline"):
   const courseData: DemoTenantData["courseData"] = {
     "31001": {
       folders: [
-        folder(4101, "Lab 3: Timer Interrupts", changed ? days(2, now) : days(1, now), { ScoreDenominator: 50 }),
+        folder(4101, "Lab 3: Timer Interrupts", changed ? days(2, now) : days(1, now), { ScoreDenominator: 50, Attachments: [HANDOUT_REF] }),
         // Due yesterday, but late submissions stay open for two more days: the "still open" case.
         folder(4102, "Lab 2: GPIO and Debouncing", days(-1, now, 17, 0), { ScoreDenominator: 50, EndDate: days(2, now, 17, 0) }),
-        folder(4103, "Project Proposal", days(9, now), { ScoreDenominator: 25, Group: true }),
+        folder(4103, "Project Proposal", days(9, now), { ScoreDenominator: 25, Group: true, Attachments: [RUBRIC_REF] }),
         folder(4104, "Lab 1: Toolchain Setup", days(-12, now), { ScoreDenominator: 20 }),
       ],
       quizzes: [quiz(5101, "Quiz 2: Interrupt Latency", days(3, now, 23, 30), { TimeLimit: 30, Attempts: 1 }), ...(changed ? [quiz(5102, "Quiz 3: Serial Protocols", days(6, now, 23, 30), { TimeLimit: 30, Attempts: 1 })] : [])],
@@ -167,8 +232,9 @@ export const buildDemoTenant = (now: Date, scenario: DemoScenario = "baseline"):
         "4102": [submission(0, false)],
         "4103": [submission(0, false)],
         // Lab 1 comes back graded on the second demo refresh.
-        "4104": [submission(1, true, days(-13, now, 21, 4), changed ? 18 : null)],
+        "4104": [submission(1, true, days(-13, now, 21, 4), changed ? 18 : null, [REPORT_REF])],
       },
+      toc: MICRO_TOC,
     },
     "31002": {
       folders: [
@@ -197,6 +263,7 @@ export const buildDemoTenant = (now: Date, scenario: DemoScenario = "baseline"):
       quizzes: [],
       news: [],
       submissions: { "4301": [submission(2, false)], "4302": [submission(0, false)], "4303": [submission(0, false)] },
+      toc: SIGNALS_TOC,
     },
     "31004": {
       folders: [
@@ -210,8 +277,38 @@ export const buildDemoTenant = (now: Date, scenario: DemoScenario = "baseline"):
     },
   };
 
-  return { versions, whoami, enrollments, courseData };
+  const le = DEMO_LE_VERSION;
+  const files: DemoTenantData["files"] = {
+    [routes.dropboxAttachment(le, "31001", "4101", String(HANDOUT_REF.FileId))]: { bytes: DEMO_HANDOUT, contentType: "application/pdf" },
+    [routes.dropboxAttachment(le, "31001", "4103", String(RUBRIC_REF.FileId))]: { bytes: DEMO_RUBRIC, contentType: "text/plain; charset=utf-8" },
+    [routes.submissionFile(le, "31001", "4104", String(DEMO_SUBMISSION_ID), String(REPORT_REF.FileId))]: { bytes: DEMO_REPORT, contentType: "text/plain; charset=utf-8" },
+    [routes.contentTopicFile(le, "31001", "8101")]: { bytes: DEMO_SYLLABUS, contentType: "text/html; charset=utf-8" },
+    [routes.contentTopicFile(le, "31001", "8102")]: { bytes: DEMO_SLIDES, contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation" },
+    [routes.contentTopicFile(le, "31001", "8104")]: { bytes: DEMO_MANUAL, contentType: "application/pdf" },
+    [routes.contentTopicFile(le, "31003", "8301")]: { bytes: DEMO_NOTES, contentType: "text/plain; charset=utf-8" },
+  };
+
+  return { versions, whoami, enrollments, courseData, files };
 };
+
+const NO_HEADERS = { retryAfter: null, rateLimitRemaining: null, rateLimitReset: null };
+
+/**
+ * Serves the demo tenant's files the way the content-script bridge would:
+ * approved file paths only, the same size cap, a 404 for anything else.
+ * `overrides` replace a file's response by exact path, for error states.
+ */
+export const demoFileFetch =
+  (data: DemoTenantData, overrides: Record<string, Partial<RawFileResponse>> = {}): RawFileFetch =>
+  async (path, { maxBytes, headOnly = false }) => {
+    const base: RawFileResponse = { status: 404, contentType: null, redirected: false, finalPath: null, size: null, base64: null, tooLarge: false, headers: NO_HEADERS };
+    if (!isApprovedFilePath(path)) return base;
+    const override = overrides[path];
+    const file = data.files[path];
+    if (!file) return { ...base, ...override };
+    const tooLarge = file.bytes.length > maxBytes;
+    return { ...base, status: 200, contentType: file.contentType, size: file.bytes.length, base64: headOnly || tooLarge ? null : bytesToBase64(file.bytes), tooLarge, ...override };
+  };
 
 export type DemoOverrides = Record<string, RawResponse | unknown>;
 
@@ -223,12 +320,14 @@ export const demoResolver = (data: DemoTenantData, overrides: DemoOverrides = {}
     if (path === routes.versions()) return data.versions;
     if (path === routes.whoami(lp)) return data.whoami;
     if (path.startsWith(`/d2l/api/lp/${lp}/enrollments/myenrollments/`)) return data.enrollments;
-    const course = /^\/d2l\/api\/le\/[\d.]+\/(\d+)\/(dropbox\/folders\/|quizzes\/|news\/)/.exec(path);
+    const course = /^\/d2l\/api\/le\/[\d.]+\/(\d+)\/(dropbox\/folders\/|quizzes\/|news\/|content\/toc$)/.exec(path);
     if (!course) return undefined;
     const entry = data.courseData[course[1] as string];
     if (!entry) return jsonResponse({ Errors: [{ Message: "Not found" }] }, 404);
     const submissions = /dropbox\/folders\/(\d+)\/submissions\/mysubmissions\/$/.exec(path);
     if (submissions) return entry.submissions[submissions[1] as string] ?? jsonResponse(null, 404);
+    // A course with nothing in Content answers with an empty table, the way Brightspace does.
+    if (path.endsWith("/content/toc")) return entry.toc ?? { Modules: [] };
     if (path.endsWith("/dropbox/folders/")) return entry.folders;
     if (path.includes("/quizzes/")) return { Objects: entry.quizzes, Next: null };
     if (path.includes("/news/")) return entry.news;

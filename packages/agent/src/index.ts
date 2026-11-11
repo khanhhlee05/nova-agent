@@ -6,3 +6,4 @@ export * from "./prompt";
 export * from "./honesty";
 export * from "./runTurn";
 export * from "./openaiCompatible";
+export * from "./intents";

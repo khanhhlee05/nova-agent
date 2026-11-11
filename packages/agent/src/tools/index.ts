@@ -2,15 +2,29 @@ import type { ToolName } from "@nova-agent/protocol";
 import { getRecentAnnouncements } from "./announcements";
 import { getBrief } from "./brief";
 import { getChanges } from "./changes";
+import { CLIENT_TOOLS } from "./client";
+import { getCourseLoad } from "./courseLoad";
 import { listDeadlines } from "./deadlines";
 import { getItemDetails } from "./itemDetails";
+import { proposeHide, proposeMarkDone, proposeMarkRead, proposePersonalDeadline } from "./propose";
 import type { ToolContext, ToolResult, ToolSpec } from "./shared";
+import { buildStudyPlan } from "./studyPlan";
 
 export * from "./shared";
-export { getBrief, listDeadlines, getItemDetails, getRecentAnnouncements, getChanges };
+export * from "./period";
+export * from "./client";
+export { ESTIMATE_NOTE, PLAN_DEFAULTS, formatMinutes, type PlanLeftOut } from "./studyPlan";
+export { PROPOSED_NOTE, parseClock } from "./propose";
+export { getBrief, listDeadlines, getItemDetails, getRecentAnnouncements, getChanges, buildStudyPlan, getCourseLoad, proposeMarkDone, proposeHide, proposeMarkRead, proposePersonalDeadline };
 
-/** Every tool is read-only over the compact snapshot. There is no tool that fetches, writes, or opens anything. */
-export const TOOLS: readonly ToolSpec[] = [getBrief, listDeadlines, getItemDetails, getRecentAnnouncements, getChanges] as readonly ToolSpec[];
+/**
+ * Every tool is read-only over the compact snapshot. There is no tool that fetches, writes, or opens anything.
+ * The propose_ tools return a suggestion for the student to confirm; they change nothing themselves.
+ */
+export const TOOLS: readonly ToolSpec[] = [getBrief, listDeadlines, getItemDetails, getRecentAnnouncements, getChanges, buildStudyPlan, getCourseLoad, proposeMarkDone, proposeHide, proposeMarkRead, proposePersonalDeadline] as readonly ToolSpec[];
+
+/** The server's own tools plus the client tools this request's panel can answer. */
+export const toolsFor = (clientTools: readonly string[] | undefined): readonly ToolSpec[] => (clientTools && clientTools.length > 0 ? [...TOOLS, ...CLIENT_TOOLS.filter((tool) => clientTools.includes(tool.name))] : TOOLS);
 
 export type ToolDefinition = { type: "function"; function: { name: string; description: string; parameters: Record<string, unknown> } };
 

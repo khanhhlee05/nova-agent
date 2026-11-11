@@ -5,13 +5,15 @@ import {
   type AcademicItem,
   type Announcement,
   type Course,
+  type CourseMaterial,
+  type ItemAttachment,
   type ItemScore,
   type ItemStatus,
   type SubmissionType,
   type Visibility,
 } from "@nova-agent/core";
 import { pageLinks } from "./routes";
-import type { DropboxFolder, EntityDropbox, MyOrgUnitInfo, NewsItem, QuizReadData } from "./schemas";
+import type { ContentToc, DropboxFolder, EntityDropbox, MyOrgUnitInfo, NewsItem, QuizReadData, TocModule } from "./schemas";
 
 /**
  * Course color slots. These are the light-theme swatches (each at least 3:1
@@ -106,12 +108,34 @@ const submissionTypeOf = (code: number | null | undefined): SubmissionType => {
   }
 };
 
+/** At most this many files are kept per assignment: enough for any real handout set, bounded against a hostile response. */
+export const MAX_ATTACHMENTS_PER_ITEM = 20;
+
+/**
+ * The files on an assignment: the instructor's first, then the files of the
+ * student's own submissions. Names are trimmed and clipped; a file without a
+ * usable id or name is dropped.
+ */
+export const attachmentsOf = (folder: DropboxFolder, status: StatusSource): ItemAttachment[] => {
+  const usable = (file: { FileId: string; FileName: string }): boolean => /^\d{1,12}$/.test(file.FileId) && file.FileName.trim() !== "";
+  const size = (value: number | null | undefined): number | null => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null);
+  const instructor: ItemAttachment[] = (folder.Attachments ?? []).filter(usable).map((file) => ({ id: file.FileId, name: file.FileName.trim().slice(0, 200), size: size(file.Size), source: "instructor" }));
+  const submitted: ItemAttachment[] =
+    status.kind === "known" && status.submission
+      ? status.submission.Submissions.flatMap((submission) =>
+          submission.Id && /^\d{1,12}$/.test(submission.Id) ? (submission.Files ?? []).filter(usable).map((file): ItemAttachment => ({ id: file.FileId, name: file.FileName.trim().slice(0, 200), size: size(file.Size), source: "submission", submissionId: submission.Id })) : [],
+        )
+      : [];
+  return [...instructor, ...submitted].slice(0, MAX_ATTACHMENTS_PER_ITEM);
+};
+
 export type NormalizeContext = { tenantOrigin: string; userId: string; observedAt: string; now: Date };
 
 export const toAssignment = (folder: DropboxFolder, courseId: string, status: StatusSource, ctx: NormalizeContext): AcademicItem => {
   const origin = normalizeOrigin(ctx.tenantOrigin);
   const startAt = normalizeIso(folder.Availability?.StartDate ?? null);
   const endAt = normalizeIso(folder.Availability?.EndDate ?? null);
+  const attachments = attachmentsOf(folder, status);
   return {
     key: buildStableKey({ tenantOrigin: origin, userId: ctx.userId, kind: "assignment", courseId, sourceId: folder.Id }),
     sourceId: folder.Id,
@@ -134,6 +158,7 @@ export const toAssignment = (folder: DropboxFolder, courseId: string, status: St
     hasRubric: (folder.Assessment?.Rubrics?.length ?? 0) > 0,
     submissionType: submissionTypeOf(folder.SubmissionType),
     score: scoreFromSubmission(status),
+    ...(attachments.length > 0 ? { attachments } : {}),
   };
 };
 
@@ -202,4 +227,56 @@ export const toAnnouncement = (news: NewsItem, courseId: string, ctx: NormalizeC
     pinned: news.IsPinned ?? false,
     url: pageLinks.news(origin, courseId),
   };
+};
+
+/** Bounds on one course's table of contents: deep enough for any real course, small enough to store and to show. */
+export const MATERIAL_LIMITS = { topics: 400, depth: 8, title: 200 } as const;
+
+const fileNameOf = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  const path = url.split(/[?#]/)[0] ?? "";
+  const last = path.split("/").filter(Boolean).pop() ?? "";
+  let name = last;
+  try {
+    name = decodeURIComponent(last);
+  } catch {
+    name = last;
+  }
+  return /\.[a-z0-9]{1,8}$/i.test(name) ? name.slice(0, MATERIAL_LIMITS.title) : null;
+};
+
+/**
+ * Flattens a course's table of contents into its topics, in the order a
+ * student sees them. Hidden modules and topics are left out, as is anything
+ * past the depth or count limit. Nothing is fetched here.
+ */
+export const toMaterials = (toc: ContentToc, courseId: string, tenantOrigin: string): CourseMaterial[] => {
+  const origin = normalizeOrigin(tenantOrigin);
+  const out: CourseMaterial[] = [];
+  const walk = (modules: readonly TocModule[], path: string[], depth: number): void => {
+    for (const module of modules) {
+      if (module.IsHidden || depth > MATERIAL_LIMITS.depth) continue;
+      const here = [...path, module.Title.trim().slice(0, MATERIAL_LIMITS.title) || "Untitled module"];
+      for (const topic of module.Topics) {
+        if (out.length >= MATERIAL_LIMITS.topics) return;
+        if (topic.IsHidden || !/^\d{1,12}$/.test(topic.TopicId) || topic.Title.trim() === "") continue;
+        const fileName = fileNameOf(topic.Url);
+        const kind = (topic.TypeIdentifier ?? "").toLowerCase();
+        const type: CourseMaterial["type"] = kind === "link" ? "link" : kind === "file" ? (fileName && /\.html?$/i.test(fileName) ? "page" : "file") : "other";
+        out.push({
+          id: topic.TopicId,
+          courseId,
+          title: topic.Title.trim().slice(0, MATERIAL_LIMITS.title),
+          modulePath: here,
+          type,
+          fileName: type === "file" || type === "page" ? fileName : null,
+          url: pageLinks.contentTopic(origin, courseId, topic.TopicId),
+          updatedAt: normalizeIso(topic.LastModifiedDate),
+        });
+      }
+      walk(module.Modules, here, depth + 1);
+    }
+  };
+  walk(toc.Modules, [], 1);
+  return out;
 };

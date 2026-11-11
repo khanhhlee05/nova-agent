@@ -4,11 +4,21 @@ A fourth tab in Mission Control where a student asks a question in plain words a
 
 ## What it is
 
-- The student types a question (or taps a suggestion in the field). The side panel builds a **compact snapshot** of the course data on this device and sends it with the question to the Nova API.
-- The API runs a small agent loop: the model may call read-only tools (`get_brief`, `list_deadlines`, `get_item_details`, `get_recent_announcements`, `get_changes`) over that snapshot, then writes a short answer. Events stream back as server-sent events.
+- The student types a question (or taps a suggestion in the field: three fixed slots, plus one drawn from the busiest day ahead or the course with the most open work). The side panel builds a **compact snapshot** of the course data on this device and sends it with the question to the Nova API. The snapshot follows the panel: an item marked done counts as done, an item hidden for the session is left out, and the student's own deadlines ride along in their own list.
+- The API runs a small agent loop: the model may call read-only tools (`get_brief`, `list_deadlines`, `get_item_details`, `get_recent_announcements`, `get_changes`, `build_study_plan`, `get_course_load`) over that snapshot, then writes a short answer. Events stream back as server-sent events.
 - `list_deadlines` takes a `range` (`overdue` for the last two weeks, `long-overdue` for older open items, `today`, `tomorrow`, `week` for the panel's next 7 days, `next-week` for Monday to Sunday of next calendar week, `later`, `no-date`, `all` for totals only) or an inclusive `from`/`to` window in `YYYY-MM-DD` for any other period. It filters on the local calendar date by string comparison, so the server does no date math, and the prompt tells the model never to fetch `all` or `later` and narrow the result itself.
+- `build_study_plan` takes `days` (1 to 14, default 3), `hoursPerDay` (0.5 to 12, default 2), an optional `course`, and an optional `startDate`. The schedule is computed by the tool, never by the model. Work that can still be on time is protected first: counting back from each deadline inside those days, the time it needs is held. Overdue work then takes the earliest time that is not held, since it is late either way and must not make something else late. On-time work is placed next, by the day it has to be done (the planner's score breaks ties), in the earliest free time. Then, only while time is left, later work by score, and work without a due date last. An item may span days. Work due before noon has to be finished the day before. Nothing is placed after its own deadline: what does not fit is reported as left out, with the minutes missing. Items marked done, long overdue items, hidden items, and the student's own deadlines are not scheduled. Time per item is the planner's estimate (see `PRIORITY.md`), and the tool, the prompt, and the card all say it is an estimate. The same snapshot and arguments always give the same plan under the same plan id.
+- Four `propose_` tools let the model suggest an action instead of only describing it: `propose_mark_done` and `propose_hide` (item ids), `propose_mark_read` (change ids, or every unread change, optionally for one course), and `propose_personal_deadline` (`add`, `move`, or `complete` one of the student's own Week tab deadlines; a day as `YYYY-MM-DD` and a clock time, so the device and not the server turns them into an instant). A propose tool changes nothing. It validates the ids and dates against the snapshot, refuses what does not exist or is already done, and returns a suggestion. See **Suggestions** below.
+- `read_attachment` is different from every tool above: the panel runs it, not the server. It lists the files on an assignment, or reads one. See **Reading assignment files** below.
+- `search_course_materials` and `read_course_material` are run by the panel too. The first searches the text of a course's Content area (syllabus, slides, readings) that the student had Nova read, and returns the passages that match best. The second reads one topic from start to finish. See **Course materials** below.
+- `get_course_load` returns, per course: open items, overdue items, items due in a period (same ranges and date windows as `list_deadlines`) with the points at stake, the next deadline, changes in the last two weeks, and graded points so far. Courses with the most late work come first.
 - The panel shows the lookups it made (each with the tool's own summary, such as "2 items due next week (Sep 14 to Sep 20)"), the answer, and a "Show N matching items" toggle. The rows behind it, collapsed by default, use the same markup as the Focus and Changes tabs and come from tool results, never from the model's text.
-- Nothing is written to Brightspace. The only actions are opening a Brightspace page the student could open themselves.
+- Rows carry the controls of the tab they came from, wired to the same handlers: an item row can be marked done on this device or hidden until the next refresh, a change row marked read, and one of the student's own deadlines marked done or shown on the Week tab. Rows read live state, so a mark made after an answer shows on it.
+- Under the latest finished answer, up to three follow-up questions are offered. They are derived from the lookups the answer made, never from the model's text.
+- A question can be started from the other tabs while Ask is on: **Ask Nova about this** in an item's details (Focus and Week), **Ask what this means** on a change, and **Ask why** on the next move. Each writes a question into the composer, with the item it is about shown above it, and sends nothing until the student does. The item's exact id goes with that one question so the lookup does not depend on a title search.
+- A study plan is shown open under the answer as a card, day by day, each slot with its minutes and the reason it sits there. **Add to Week** turns every slot into one of the student's own deadlines on the Week tab (tagged **Study plan**, due at 11:59 PM of its day or at the item's own deadline when that is earlier the same day). Only one plan lives on the Week tab: adding another replaces it, and **Remove from Week** deletes its entries. This is local, like every deadline the student adds.
+- A course row carries **Show on Focus**, which filters the Focus tab to that course.
+- Nothing is written to Brightspace. Every action either opens a Brightspace page the student could open themselves or changes something stored on this device.
 
 ## What is sent, and what never leaves the device
 
@@ -22,9 +32,20 @@ Sent with every question, whatever the question is about (nothing is filtered by
 | Announcement titles, dates, pinned flag, links | No body text |
 | Change events: kind, title, before and after values (due dates, statuses, visibility, scores), detected date, read flag | Last 14 days |
 | Counts, refresh time, whether the refresh was complete, mode (live or demo) | |
+| The names and sizes of each assignment's files | Only while **Let Nova read assignment files** is on. Names, never contents |
+| The text of a file the student asked about | Up to 12,000 characters per lookup, only in a turn where the model asked for that file and the student has allowed reading in this panel session. Extracted on the device; the file itself is never sent |
+| The topic names of a course's Content area: title, module path, kind, and whether its text is on the device | Only for a course the student turned on under **Course materials**, at most 80 topics per course. Names, never contents. A course that is off sends nothing about its Content area |
+| Passages of a course's materials | Only in a turn where the model searched or read a topic of a turned-on course: up to 8 passages of at most 1,000 characters for a search, up to 12,000 characters for a read. Found on the device; the files and the rest of their text are never sent |
+| A time estimate per open item | Minutes, from the planner, for study plans. An estimate from kind, points, and time limit |
+| Done marks from the Focus tab | One flag per item. A marked item counts as completed in every answer, the same as in the panel, and its Brightspace status is still sent |
+| The deadlines the student added on the Week tab | Title, due date, optional course, done flag, and whether it is a slot of a study plan. Open ones, plus ones finished in the last two weeks. Kept in their own list: never counted, never ranked, never mixed with Brightspace items |
+| How many items are hidden for this session | A count only. The hidden items themselves are left out |
+| What the student was looking at | The course the panel is filtered to, the tab they came from, and the item id when the question was started from one item. A hint for the model, never a filter on the lookups |
 | The question and up to twelve prior messages of this session's thread | Text only |
 
-Never sent: cookies, raw Brightspace responses, the tenant origin, the student id or name, announcement bodies, observation metadata, anything from a course the student is not enrolled in, the "marked done on this device" checkmarks from the Focus tab (Ask answers from Brightspace statuses only, so an item the student ticked off locally still counts as open in an answer), and the deadlines the student added by hand on the Week tab. The API stores nothing academic; its logs carry counts only (`LOG_PROMPTS=0`).
+In hosted mode the server also learns the email address the student signs in with, and keeps it with a count of the tokens each question used. It stores nothing from the rows above, with one exception the student has to choose: saved conversations kept on the server (see **Hosted mode**), which hold the questions, the answers, and the rows under them.
+
+Never sent: cookies, raw Brightspace responses, the tenant origin, the student id or name, announcement bodies, observation metadata, anything from a course the student is not enrolled in, and the contents of items hidden in Brightspace or hidden by the student for the session. The API stores nothing academic; its logs carry counts only (`LOG_PROMPTS=0`).
 
 Ask Nova is off until the student turns it on in the tab, after reading the same statement there.
 
@@ -63,15 +84,25 @@ npm run smoke:api -- --api http://127.0.0.1:8787 --token <NOVA_DEV_TOKEN>   # ex
 | `MAX_TOKENS` | `700` | Per model call. |
 | `MAX_ROUNDS` | `4` | Tool rounds before the model is forced to answer. |
 | `REQUEST_TIMEOUT_MS` | `60000` | |
+| `CLIENT_TOOL_TIMEOUT_MS` | `30000` | How long a turn waits for the panel to answer a lookup only it can make (reading a file). When it runs out the model is told the lookup failed. |
 | `DAILY_TOKEN_CAP` | `200000` | Tokens per UTC day for the whole server, counted in memory per process: it resets on restart and is not shared between instances (best effort). Each request reserves `TURN_TOKEN_ESTIMATE` up front and answers 429 `budget_exhausted` at once if that would pass the cap, then settles to the real usage when the turn ends. A turn with no usage report is charged `MAX_TOKENS × rounds`. `0` disables the cap. |
 | `TURN_TOKEN_ESTIMATE` | `MAX_TOKENS × MAX_ROUNDS` (2800) | Worst-case tokens reserved per request. A cap below this refuses to start. |
 | `LOG_PROMPTS` | `0` | `1` adds question and answer text to the turn log. |
+| `ASK_DISABLED` | `0` | `1` refuses every question at once with `budget_exhausted` (the kill switch). The panel then answers what it can on the device. |
+| `AUTH_MODE` | `none` | `google` turns on hosted mode: students sign in and use is counted per student. See **Hosted mode**. |
+| `GOOGLE_CLIENT_ID`, `JWT_SECRET`, `DATABASE_URL` | | Required with `AUTH_MODE=google`: the OAuth client the extension signs in with, a secret of at least 32 characters that signs the server's access tokens, and a Postgres database. |
+| `ALLOWED_EMAIL_DOMAINS` | | Comma-separated domains allowed to sign in, such as `villanova.edu`. Empty allows any Google account. |
+| `USER_DAILY_TOKEN_CAP` | `40000` | Tokens one student may use per UTC day. 0 means no limit. |
+| `USER_TURNS_PER_10_MIN` | `20` | Questions one student may ask per ten minutes. 0 means no limit. |
+| `ACCESS_TOKEN_TTL_SECONDS`, `REFRESH_TOKEN_TTL_DAYS` | `900`, `30` | How long a sign-in lasts without use. |
 
 `apps/api/.env` is gitignored. The key must never be committed, logged, or built into the extension.
 
 ## Free models
 
 OpenRouter's free tier is rate limited (roughly 20 requests per minute and a small daily allowance without credits) and some free endpoints route to providers whose data policy allows training on prompts. Prefer demo data with free models. The probe filters for `tools` support; models without it answer from the brief in the system prompt but cannot look anything up.
+
+`npm run probe:api -- --try` asks the first five such models one question over demo data through the real agent loop and prints, per model, whether it called a tool, whether its answer passed the check, the rounds, the tokens, and the time, best first, as rows for the table below (`--try 8` for more, `--model <id>` to name them, `--json` for the raw results). It needs `OPENROUTER_API_KEY` and sends only demo data.
 
 Record here which ids worked once the live test runs:
 
@@ -85,16 +116,118 @@ Record here which ids worked once the live test runs:
 2. `POST /v1/chat` validates the body (`packages/protocol`), reserves the turn's worst-case tokens against the daily cap, and starts the loop (`runTurn`); the reservation is settled to real usage when the turn ends.
 3. The system prompt carries the date, the courses, counts, and a brief (next move, overdue, today, upcoming), so a weak model still answers from real facts. Tools cover everything deeper.
 4. Up to `MAX_ROUNDS` rounds: tool calls run over the snapshot, results go back to the model. The last round forces a text answer.
-5. The answer text is held back until it has been checked against the item titles the tools returned and the brief listed. If it names an item that neither contains, the model is nudged once (only while a round is left, so model calls never exceed `MAX_ROUNDS`); `done.grounded` reports whether the answer that was finally shown passed. The check is title-level: dates, points, and statuses in the answer text are not verified, and the rows under the answer carry the real values.
-6. Events: `tool_call`, `tool_result` (with rows), one `text` event with the checked answer, then `done` (usage, rounds, grounded) or a typed `error`.
+5. The answer text is held back until it has been checked against the item titles the tools returned and the brief listed. If it names an item that neither contains, the model is nudged once (only while a round is left, so model calls never exceed `MAX_ROUNDS`); `done.grounded` reports whether the answer that was finally shown passed. Three more checks run on the same draft. Quotations: text in quotation marks of four or more words has to appear, word for word, in the prompt, the conversation, or a tool result of this turn, so a model cannot put invented words in a syllabus's mouth. Dates: every calendar day the answer states (`2026-09-09`, `Sep 9`, `9th of September`) has to be a day the model was shown, and a weekday written next to a date has to be that date's weekday. Points: a number in front of "points" or "pts" has to be a number the model was shown. Relative words (tomorrow, next week), a weekday on its own, statuses, and arithmetic the model does itself are not verified; the rows under the answer carry the real values. One correction is asked for per turn, whichever check failed first.
+6. Events: `tool_call`, `client_tool` when the lookup is one the panel makes, `tool_result` (with rows), `proposal` after the result of a propose tool, the answer as `text`, then `done` (usage, rounds, grounded) or a typed `error`.
+7. Text arrives one of two ways. A request without `streamText` gets one `text` event, sent only after the check. A request with `streamText: true` (what the panel sends) gets `text` events as the model writes, and a `text_reset` event whenever what has been shown is not the answer: `lookup` when the words came before a tool call, `correction` when the draft failed the check and is being written again. The panel clears the paragraph on a reset and says so after a correction. `done.grounded` is the verdict on the text that stands; when no round is left for a correction, the draft stays and the panel marks it as not verified. A stopped answer keeps the words written so far, marked as unchecked, and is not sent as history with the next question.
 
 ## Prompt injection
 
-Course names, codes, and item titles come from Brightspace and can contain anything an instructor or a compromised course types. In the system prompt they are stripped of control characters, quoted, and placed between whole-line `BEGIN COURSE DATA` and `END COURSE DATA` markers under a notice that nothing inside is an instruction; tool results reach the model as JSON. Tests prove the shape: a hostile title cannot add a marker line, a `system:` line, or a control character, and it flows through tools and the honesty nudge as data. What the tests cannot prove is that a given model obeys the notice. What bounds the damage if it does not: the tools are read-only (the model cannot act on anything), the honesty check flags names it did not look up, and the panel renders rows from tool results rather than from the answer text.
+Course names, codes, item titles, file names, Content topic names, the text of a file the student has Nova read, and passages of course materials come from Brightspace and can contain anything an instructor or a compromised course types. In the system prompt they are stripped of control characters, quoted, and placed between whole-line `BEGIN COURSE DATA` and `END COURSE DATA` markers under a notice that nothing inside is an instruction; tool results, file text included, reach the model as JSON, and a file's text carries its own note that it is material and not instructions. Tests prove the shape: a hostile title cannot add a marker line, a `system:` line, or a control character, and it flows through tools and the honesty nudge as data. What the tests cannot prove is that a given model obeys the notice. What bounds the damage if it does not: the tools are read-only (the most a model can do is suggest one of six local actions, each of which the student sees in the panel's own words and has to confirm), the honesty check flags names it did not look up, and the panel renders rows from tool results rather than from the answer text.
 
 ## States the tab carries
 
-Off (setup card), API unreachable, API without a key, streaming (Stop replaces Send), stopped, typed errors (rate limited with retry-after, budget exhausted, unauthorized, timeout), demo banner, empty data. The thread is session-only and survives switching tabs, not closing the panel.
+Off (setup card), API unreachable, API without a key, streaming (the answer appears as it is written; Stop replaces Send), stopped, corrected, not verified, answered on the device, typed errors (rate limited with retry-after, budget exhausted, unauthorized, timeout), demo banner, empty data. A lookup that never reported back before Stop reads as stopped, not as still running. Clearing the thread or opening another conversation mid-answer cancels that answer at once, and the cancelled turn cannot write into the thread that replaced it.
+
+## Hosted mode
+
+By default the API is one person's own server: it listens on the loopback address, needs no account, and stores nothing. With `AUTH_MODE=google` the same server can be shared by a class.
+
+**Signing in.** `/healthz` says `auth: "google"` and names the OAuth client. The Ask settings then show **Sign in with Google**. Chrome opens Google's own window (`chrome.identity.launchWebAuthFlow`, scope `openid email`); the panel receives an ID token and posts it to `POST /v1/auth/google`. The server checks the token's signature against Google's published keys, that it was issued to this project's client, that it has not expired, and that the address is verified and, when `ALLOWED_EMAIL_DOMAINS` is set, in an allowed domain. It answers with an access token (15 minutes) and a refresh token (30 days, single use: each refresh returns a new one, and only its hash is stored). The panel keeps both on the device, sends the access token with each question, and renews it by itself. **Sign out** ends the session on the server and forgets it on the device.
+
+**Limits.** Each question is counted against the student who asked: `USER_DAILY_TOKEN_CAP` tokens per UTC day and `USER_TURNS_PER_10_MIN` questions per ten minutes, checked and charged under a lock on the student's row so two questions sent at once cannot both pass. Past the daily allowance the server answers `budget_exhausted`; past the pace, `rate_limited` with the seconds to wait. Both are failures the panel can answer through on the device for its suggested questions. The server-wide `DAILY_TOKEN_CAP` still applies on top, and `ASK_DISABLED=1` pauses every question at once.
+
+**What the server stores.** In Postgres: the account (Google's subject id, the email address, when it was made), the hashes of live refresh tokens, and one row per question with its time, token counts, and model. Course data has no table of its own. The schema is plain SQL in `apps/api/src/store/migrations.ts`, applied on start. `GET /v1/me` returns the student's use and limits, `GET /v1/usage` the totals per day, and `DELETE /v1/me` (**Delete my account** in the settings, after a second press) removes the account and every row that belongs to it.
+
+**Saved conversations on the server.** A signed-in student who saves conversations on the device can also turn on **Also keep them on the Nova server**, so they follow the student to another device. It is off until chosen, because a conversation holds course titles and dates and this is the one place they are stored anywhere but the device. While it is on, each saved conversation is copied up after an answer (`PUT /v1/conversations/{id}`), and when the panel opens the two sides are brought level: the newer copy of a conversation wins, whole. A deletion made while the server is out of reach is remembered and finished later, so a deleted conversation does not come back. Turning the server copy off, or saving itself off, deletes every copy on the server (again remembered until the server confirms). The server keeps the newest twenty per student, 200 KB each, as the panel sent them, and what comes back is validated like anything read from storage. Signing out leaves the copies on the server for the next sign-in; deleting the account removes them.
+
+**Running it.** `apps/api/Dockerfile` builds an image with only the API and the packages it runs (`docker build -f apps/api/Dockerfile -t nova-api .` from the repository root). Configuration is environment only. Register the extension's redirect address, `https://<extension id>.chromiumapp.org/`, on a Google OAuth client of type Web application, and set `CORS_ORIGINS` to the exact `chrome-extension://<extension id>`. The server refuses to start on a public address unless `AUTH_MODE=google` or `NOVA_DEV_TOKEN` is set, and refuses hosted mode without its client id, secret, and database.
+
+**Not verified here.** Sign-in was tested end to end against the real server and schema with a stand-in for Google whose keys the tests hold. A sign-in through Google itself, in the installed extension, needs a Google Cloud OAuth client and has not been run. The Docker image's steps were replayed in a clean directory; the image itself was not built.
+
+## When the server cannot answer
+
+If the server is unreachable, has no model key, is rate limited, or has used its daily budget, and the failure comes before the server has sent anything, the panel tries to answer on the device. A small grammar (`matchIntent` in `packages/agent`) recognises the questions the panel itself suggests and their close variants: what is due (today, tomorrow, a weekday, this week, next week, in a course), what is overdue, what changed, announcements, what to start first, which course needs attention, what is left in a course, and a study plan. It maps the question to one lookup, runs it over the same snapshot with the same tools, and writes one sentence from the lookup's own summary, so the sentence is true of the rows under it by construction. The answer carries a note with the reason and "Answered on this device without the AI model." Nothing leaves the device for such an answer.
+
+A question the grammar does not recognise keeps the error banner: anything that asks why, needs a file or course materials, asks for an action, or points back at an earlier answer ("among these"). So does any failure that arrives after the server began to answer, and any other kind of failure (a rejected access code, a timeout).
+
+## Ratings
+
+Each finished answer has a thumbs up and a thumbs down. A rating is stored on this device (`askFeedback`, schema version 7, newest 500 per account): the question, the lookups made, whether the answer was grounded or corrected, the model, and the rating. The answer's text is not stored. The same thumb takes a rating back. **Export ratings** in the Ask settings saves them as a JSON file for the project's own evaluation. Ratings are never sent to the server, and **Clear local Nova data** deletes them.
+
+## Usage
+
+Under the status line the panel shows the tokens of the last answer and, when the server reports a daily limit, how much of it is used today, as a percentage and a bar (`/healthz` returns `usedToday` and `dailyCap`; the panel asks when the Ask tab is opened and after each answer). From 90 percent on it says the server is nearly out. The count is the server's own, for everyone who uses it, best effort and reset on restart.
+
+## Composer
+
+Enter sends and Shift+Enter breaks the line. With the field empty, the Up arrow brings back the last question. A slash pressed anywhere in the panel, outside a text field and with no dialog open, goes to the Ask tab and the field. Past 1,500 characters a counter shows how many of the 2,000 allowed are used.
+
+## Reading assignment files
+
+Ask Nova can answer from a handout or rubric the instructor attached to an assignment, or from a file the student handed in. The server cannot reach Brightspace, so the file is read by the panel and only its text passes through the server, for that turn.
+
+**What a refresh keeps.** The names and sizes of each assignment's files, from the same two responses a refresh already makes. No file is downloaded during a refresh.
+
+**How a file gets read.**
+
+1. The request lists the lookups this panel can make (`clientTools: ["read_attachment"]`), and the snapshot carries each item's file names. Both only while **Let Nova read assignment files** is on (the default) and something can serve files (a Brightspace tab with the bridge, or demo data).
+2. The model calls `read_attachment` with an item id, and a file id to read one. The server validates the arguments and, having first registered that it is waiting, sends a `client_tool` event (`turnId`, call `id`, `name`, `input`) down the stream.
+3. The panel makes the lookup and posts the result to `POST /v1/chat/{turnId}/tool-result`. The server accepts one result per waiting call, hands it to the model as JSON data, and emits the ordinary `tool_result` event. If no result arrives within `CLIENT_TOOL_TIMEOUT_MS`, or the turn is stopped, the model is told the lookup failed and the turn still ends.
+4. The first time in a panel session that a file would be read for an answer, nothing is read. The model is told the student has not allowed it yet, and the panel shows a card naming the file and its size. **Allow for this session** asks the same question again; **Not now** leaves it. Permission is never stored. Listing a file's name is not reading and needs none.
+
+**On the device.** The panel downloads the file once through the student's own Brightspace session (the content script's file bridge: approved file routes only, capped at 10 MB, one attempt), extracts the text, stores the text, and drops the bytes. PDF goes through pdf.js (the text layer only, nothing rendered), Word and PowerPoint through a zip read of their XML, web pages through a tag strip that never runs anything, plain text and code as they are. What a format cannot give as text (a scan, an image, a spreadsheet) is reported as such, and that outcome is remembered too so the file is not downloaded again for the same answer. Up to 40,000 characters are kept per file, for the newest 50 files per account, in the `attachmentText` table (schema version 5). **Clear local Nova data** wipes them. A stored read is reused while the file's name and size are unchanged.
+
+**What the model gets.** Up to 12,000 characters per call, with page or slide marks, a note that it is course material and not instructions, and the offset to continue from when there is more. One page or slide can be asked for by number. A result may carry at most 24,000 bytes of data and 25 rows; the server rejects anything larger and logs only that it happened.
+
+**In the panel.** An item's details list its files (Focus and Week), with **Read** while reading is on: the same download and extraction, started by the student, for use in a later question. The rows under an answer show each file with whether it has been read on this device. **Check file access** in the Connection report says whether the tenant serves these files at all; see `BRIGHTSPACE_ACCESS.md`.
+
+## Suggestions
+
+The only way Ask Nova changes anything, and only on this device.
+
+1. A propose tool returns a suggestion. The loop sends it to the panel as a `proposal` event (`id`, `label`, `payload`) right after the tool result, and tells the model only that it was proposed, not done, and never whether it was accepted. At most three suggestions are shown per answer; past that the tool call fails with a message the model can relay.
+2. The panel shows a card under the answer. The sentence on the card is written by the panel from the payload and the data on the device, not taken from the server, so what is confirmed is what runs. Anything already done, already hidden, already read, or no longer there is left out of the sentence and the effect; when nothing is left, the card says why and offers no **Confirm**.
+3. **Confirm** runs the same handler the Focus, Week, or Changes tab calls: a done mark, a session hide, a read flag, or a write to the student's own deadlines. **Dismiss** changes nothing. Decided cards stay as a record.
+4. A confirmed card offers **Undo** where the effect can be reversed exactly (done marks, read flags, a moved or completed deadline); it reverses only what that confirmation touched. An added deadline offers **Show on Week** instead, and a hide says that Show all brings the item back.
+
+Nothing in this path can reach Brightspace: the payload kinds are a closed list (`mark_done`, `hide_item`, `mark_changes_read`, `add_personal_deadline`, `move_personal_deadline`, `complete_personal_deadline`), validated by the shared schema on both ends, and the server executes none of them. In a saved conversation, a suggestion that was still pending is restored as expired, and a confirmed one as a record without Undo, because the data it was made against has moved on.
+
+## Saved conversations
+
+Off by default: the thread lives in memory, survives switching tabs, and is gone when the panel closes. The setup card and the Ask settings carry one checkbox, **Save conversations on this device**. The status line under the tabs always says which mode is on ("Cleared when you close the panel" or "Saved on this device").
+
+While saving is on:
+
+- The thread is written to the extension's own database (`conversations` table in IndexedDB, version 4 of the schema) after every finished answer, exactly as the thread holds it, rows included, so a saved answer re-renders as it was. Nothing is saved while an answer streams, and an empty thread is never saved.
+- A conversation is titled by its first question, clipped to 60 characters. No model call names it.
+- The newest 20 per Brightspace account are kept; the oldest is deleted first.
+- The status line gains **New conversation** and **Conversations**. The list shows title, number of questions, and age; opening one restores the thread, with rows collapsed and still actionable, and continues it under the same id. Deleting one is immediate. The panel always opens on a fresh thread.
+- Stored messages are read back defensively: a row, lookup, or message in a shape this build does not know is dropped on its own, never the whole conversation.
+- Turning saving off deletes every saved conversation, and the checkbox says so before it is saved. **Clear local Nova data** deletes them too.
+
+Saved conversations never leave the device. The server stays stateless.
+
+### Long threads
+
+The server sees the last twelve messages. When a thread is longer, the panel writes a summary of what came before, without a model: each earlier question, and for each earlier answer the summaries of the lookups it made (or its first words when it made none). It is capped at 1500 characters, dropping the oldest exchanges first, and goes with the request as `summary`. The server puts it inside the data section of the prompt, on one cleaned line, labeled as data and not instructions.
+
+## Course materials
+
+Ask Nova can answer from a course's Content area: the syllabus, lecture slides, readings, lab manuals. It is the same division of work as assignment files (the panel reads, the server only relays text for one turn), with two differences: the student turns it on one course at a time, and what is sent is the few passages a question needs, found by a search that runs on the device.
+
+**Turning a course on.** Nothing about a course's Content area is requested until the student says so, in one of two places: **Course materials** at the top of the Ask tab lists every course with **Let Nova read this course**, and a question about a course that is off shows a card naming the course (**Allow and read** / **Not now**). The choice is stored with the Ask settings (`materialsCourses`), unlike the per-session permission for assignment files, because reading a course is a download of many files and should not repeat every session. **Forget materials** turns the course off and deletes its list and every passage read from it.
+
+**What gets read.** One request lists the course (`GET .../content/toc`, JSON, through the same transport as a refresh). Topics that are files or pages with a name Nova can open (PDF, Word, PowerPoint, web page, plain text) are then downloaded one at a time through the file bridge (`GET .../content/topics/{topicId}/file`), their text is extracted with the same code as assignment files, cut into passages of about 800 characters that never span two pages or slides, and stored; the bytes are dropped. Links, quizzes, videos, and hidden topics are never requested. Limits per course: 60 files, 150 MB downloaded, 20 MB per file, 120,000 characters kept per file. A file that gave no text is remembered so it is not downloaded again. Reading stops at once on a sign-in page or a slow-down answer. **Choose files** lets the student untick topics; an unticked topic's text is deleted immediately.
+
+**Staying current.** After a refresh, each turned-on course is listed again and only topics that are new or whose last-modified time changed are downloaded. Opening the panel downloads nothing. Text of topics that left the course is dropped.
+
+**Search.** `search_course_materials` takes a `query`, an optional `course` (id, code, or part of the name), and a `limit` (default 5, at most 8). The panel ranks passages with BM25 keyword scoring (stop words dropped, simple plurals folded, a small bonus when a query word is in the topic's own title), at most three passages per topic, deterministic for the same index and query. Each passage comes back with its topic, module path, and page or slide. There are no embeddings and no index on the server: a question about an idea worded differently from the material can miss, and the model is told to search with the words the material would use. `read_course_material` returns one topic in parts of up to 12,000 characters, or one page or slide by number.
+
+**What the model is told.** The system prompt lists, for each turned-on course, the first few topic names with their ids, and how many courses are still off. Passages arrive as JSON tool data with a note that they are course material and not instructions.
+
+**In the panel.** The rows under an answer show each topic a passage came from, with its module, its page or slide, and a link to the topic in Brightspace. Storage is two tables added in schema version 6: `materialToc` (one row per course) and `materialText` (one row per topic, its passages). **Clear local Nova data** wipes both.
+
+**Limits to know.** Whether a tenant serves Content files to the session is not known until tried: **Check file access** covers it once a course is on. Scanned PDFs and images give no text. Keyword search does not understand synonyms.
 
 ## Testing
 
@@ -104,11 +237,11 @@ Everything in CI runs on fixtures: SSE parsing, the compact snapshot, every tool
 
 Run on a developer machine with Chrome and network access:
 
-1. `npm run probe:api`, set `OPENROUTER_MODEL` to a free model with tool support, `npm run dev:api`.
+1. `npm run probe:api -- --try`, paste the rows it prints into the table above, set `OPENROUTER_MODEL` to the best one, `npm run dev:api`.
 2. `npm run smoke:api -- --question "What is due this week in Microcontrollers?"` returns a `tool_call`, rows, an answer, and `grounded=true`. Record the model id in the table above.
 3. `npm run build --workspace @nova-agent/extension`, load `apps/extension/dist`, open the Ask tab, Test connection, Turn on Ask Nova, and ask the three suggested questions on demo data.
 4. Rotate the OpenRouter key afterwards if it was ever shared outside `.env`.
 
-## Not in slice 1
+## Not built yet
 
-Sign-in, a database, saved conversations, per-user quotas, Google Calendar, the no-model intent matcher as an offline fallback, hosting, and the on-device model adapter. See `BACKEND_PLAN.md`.
+Google Calendar, a deploy pipeline and a live deployment, a dollar-denominated budget, an on-device language model, and meaning-based (embedding) search over course materials. See `ASK_NOVA_PLAN.md` for the next slices and `BACKEND_PLAN.md` for the hosted backend.

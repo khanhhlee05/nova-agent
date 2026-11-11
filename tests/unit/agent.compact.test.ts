@@ -18,7 +18,7 @@ describe("compactSnapshot calendar", () => {
   it("sends local calendar dates so the server never does date math", async () => {
     const { snapshot, events } = await demo();
     const compact = compactSnapshot(snapshot, events, NOW, { mode: "demo" });
-    expect(compact.version).toBe(2);
+    expect(compact.version).toBe(3);
     expect(compact.calendar).toEqual({ today: "2026-09-08", weekStart: "2026-09-07", thisWeek: { from: "2026-09-08", to: "2026-09-14" }, nextWeek: { from: "2026-09-14", to: "2026-09-20" } });
     for (const item of compact.items) {
       if (item.dueAt) expect(item.dueDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
@@ -121,5 +121,72 @@ describe("compactSnapshot", () => {
     expect(JSON.stringify(compact)).not.toMatch(/\p{Cc}/u);
     expect(compactSnapshotSchema.safeParse(compact).success).toBe(true);
     expect(cleanText("a\u0000b\n\nc")).toBe("a b c");
+  });
+});
+
+describe("compactSnapshot parity with the panel", () => {
+  const day = (offset: number, hour = 12) => new Date(NOW.getTime() + offset * 86_400_000 + (hour - 14) * 3_600_000).toISOString();
+  const open = makeItem({ sourceId: "101", courseId: "c1", title: "Essay draft", dueAt: day(1) });
+  const marked = makeItem({ sourceId: "102", courseId: "c1", title: "Reading notes", dueAt: day(2) });
+  const submitted = makeItem({ sourceId: "103", courseId: "c1", title: "Lab report", dueAt: day(-1), status: "submitted" });
+  const hiddenBySession = makeItem({ sourceId: "104", courseId: "c1", title: "Secret quiz", kind: "quiz", dueAt: day(3) });
+  const source = makeSnapshot(NOW.toISOString(), [open, marked, submitted, hiddenBySession], { courses: [makeCourse("c1", { name: "Writing" })] });
+  const localDone = new Map([
+    [marked.key, NOW.toISOString()],
+    // A mark on something Brightspace already lists as done is not a local mark any more.
+    [submitted.key, NOW.toISOString()],
+  ]);
+
+  it("treats an item marked done on this device as completed, unranked, and uncounted", () => {
+    const plain = compactSnapshot(source, [], NOW, { mode: "live" });
+    const compact = compactSnapshot(source, [], NOW, { mode: "live", localDone });
+    const before = plain.items.find((item) => item.id === "a102");
+    const after = compact.items.find((item) => item.id === "a102");
+    expect(before).toMatchObject({ bucket: "this-week" });
+    expect(before?.doneLocally).toBeUndefined();
+    expect(before?.priority).not.toBeNull();
+    expect(after).toMatchObject({ bucket: "completed", doneLocally: true, priority: null, reasons: [], status: "not-started", longOverdue: false });
+    expect(compact.items.find((item) => item.id === "a103")?.doneLocally).toBeUndefined();
+    expect(compact.counts.thisWeek).toBe(plain.counts.thisWeek - 1);
+    expect(compact.counts.activeItems).toBe(plain.counts.activeItems - 1);
+    expect(compactSnapshotSchema.safeParse(compact).success).toBe(true);
+    // The same numbers the panel shows with the same marks.
+    const dashboard = buildDashboard({ snapshot: source, events: [], now: NOW, courseFilter: null, localMarks: localDone });
+    expect(compact.counts.thisWeek).toBe(dashboard.counts.thisWeek);
+    expect(compact.counts.overdue).toBe(dashboard.counts.overdue);
+    expect(dashboard.localDone.has(marked.key)).toBe(true);
+    expect(dashboard.localDone.has(submitted.key)).toBe(false);
+  });
+
+  it("leaves hidden items out and sends only how many there are", () => {
+    const compact = compactSnapshot(source, [], NOW, { mode: "live", dismissedItemKeys: new Set([hiddenBySession.key]) });
+    expect(compact.items.map((item) => item.id)).not.toContain("q104");
+    expect(JSON.stringify(compact)).not.toContain("Secret quiz");
+    expect(compact.hiddenCount).toBe(1);
+    expect(compactSnapshot(source, [], NOW, { mode: "live" }).hiddenCount).toBe(0);
+    const dashboard = buildDashboard({ snapshot: source, events: [], now: NOW, courseFilter: null, dismissedItemKeys: new Set([hiddenBySession.key]) });
+    expect(compact.counts.thisWeek).toBe(dashboard.counts.thisWeek);
+  });
+
+  it("carries the student's own deadlines apart from Brightspace items, with buckets and without stale finished ones", () => {
+    const personal = [
+      { id: "personal-1", title: "Email\nadvisor", dueAt: day(0, 20), courseId: null, completedAt: null },
+      { id: "personal-2", title: "Study group", dueAt: day(3), courseId: "c1", completedAt: null },
+      { id: "personal-3", title: "Old errand", dueAt: day(-30), courseId: null, completedAt: day(-29) },
+      { id: "personal-4", title: "Returned library book", dueAt: day(-2), courseId: "gone", completedAt: day(-2) },
+      { id: "personal-5", title: "Late thing", dueAt: day(-1), courseId: null, completedAt: null },
+      { id: "personal-6", title: "\u0000", dueAt: day(1), courseId: null, completedAt: null },
+      { id: "personal-7", title: "No date", dueAt: "not a date", courseId: null, completedAt: null },
+    ];
+    const compact = compactSnapshot(source, [], NOW, { mode: "live", personal });
+    expect(compactSnapshotSchema.safeParse(compact).success).toBe(true);
+    expect(compact.personal?.map((deadline) => deadline.id)).toEqual(["personal-4", "personal-5", "personal-1", "personal-2"]);
+    expect(compact.personal?.find((deadline) => deadline.id === "personal-1")).toMatchObject({ title: "Email advisor", bucket: "today", done: false, courseId: null, dueDate: "2026-09-08" });
+    expect(compact.personal?.find((deadline) => deadline.id === "personal-2")).toMatchObject({ bucket: "this-week", courseId: "c1" });
+    expect(compact.personal?.find((deadline) => deadline.id === "personal-4")).toMatchObject({ bucket: "completed", done: true, courseId: null });
+    expect(compact.personal?.find((deadline) => deadline.id === "personal-5")).toMatchObject({ bucket: "overdue", done: false });
+    // Counts never include them: the panel keeps the two apart.
+    expect(compact.counts).toEqual(compactSnapshot(source, [], NOW, { mode: "live" }).counts);
+    expect(compact.items.some((item) => item.title === "Study group")).toBe(false);
   });
 });

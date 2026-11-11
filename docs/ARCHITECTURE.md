@@ -28,14 +28,14 @@ flowchart TD
 
 | Area | Responsibility |
 |---|---|
-| `packages/brightspace` | Route allowlist and builders, version discovery, both paging forms, retries and rate limiting, session detection, Zod schemas, error union, normalization, feasibility probe, demo tenant fixtures |
+| `packages/brightspace` | Route allowlist and builders, version discovery, both paging forms, retries and rate limiting, session detection, Zod schemas, error union, normalization, feasibility probe, the capped file transport for the two assignment-file routes, demo tenant fixtures |
 | `packages/core` | Canonical models, stable keys, local-timezone deadline buckets, snapshots, retention constants, semantic diff |
 | `packages/planner` | Pure priority score, stable ordering, reason text |
-| `apps/extension` | Manifest V3 lifecycle, Nova Orb content script, typed messaging, Chrome host boundary, Dexie persistence, sync coordinator, Mission Control UI |
+| `apps/extension` | Manifest V3 lifecycle, Nova Orb content script, typed messaging (a JSON bridge and a separate, capped file bridge), Chrome host boundary, Dexie persistence, sync coordinator, on-device text extraction (`src/files`), Mission Control UI |
 | `apps/web` | Public demo only. Untouched by this slice. |
 | `packages/protocol` | Zod schemas shared by extension and API: compact snapshot, chat request, server-sent events, SSE parser |
 | `packages/agent` | Compact snapshot builder (runs in the browser), read-only tools, `runTurn` loop with the honesty check, `ChatModel` adapters (OpenAI-compatible streaming, scripted) |
-| `apps/api` | Node + Hono: `POST /v1/chat` (SSE), `GET /healthz`, CORS allowlist, body limit, optional dev token, daily token cap, content-free logs. Stateless. |
+| `apps/api` | Node + Hono: `POST /v1/chat` (SSE), `POST /v1/chat/{turnId}/tool-result` (the panel's answer to a lookup only it can make), `GET /healthz`, CORS allowlist, body limit, optional dev token, daily token cap, content-free logs. By default it stores nothing; a turn's pending lookups live in memory until it ends. With `AUTH_MODE=google`: Google sign-in (`/v1/auth/*`), `/v1/me`, `/v1/usage`, `/v1/conversations`, per-student limits, and a Postgres database holding accounts, session hashes, and token counts. |
 
 ## Sync state machine
 
@@ -71,8 +71,10 @@ Ask tab ──compactSnapshot()──▶ POST /v1/chat (question, history, snaps
 ```
 
 - The compact snapshot is built in the browser so buckets and local dates follow the student's time zone; the server never does date math.
-- The server is stateless: history travels with the request, usage is an in-memory daily counter, logs carry counts only.
+- By default the server is stateless: history travels with the request, usage is an in-memory daily counter, logs carry counts only. In hosted mode (`AUTH_MODE=google`) it also has a Postgres database with accounts, sessions, per-student token counts, and, only for a student who turned that on, a copy of their saved conversations.
 - Rows under an answer come from tool results, never from the model's text. The tab is force-mounted so the session-only thread survives switching tabs.
+- Some lookups are made by the panel, not the server, because only the panel can reach Brightspace and the student's storage: reading an assignment's file, and searching or reading a course's materials. The server sends a `client_tool` event, waits for `POST /v1/chat/{turnId}/tool-result`, and treats the answer as tool data.
+- Course materials are indexed on the device: text is cut into passages in `materialText`, and a BM25 keyword search (`src/files/search.ts`) picks the few passages a question needs. No embeddings and no index on the server.
 - Details, environment, and privacy statement: [ASK_NOVA.md](./ASK_NOVA.md).
 
 ## Authentication outcome
@@ -81,6 +83,7 @@ See [BRIGHTSPACE_ACCESS.md](./BRIGHTSPACE_ACCESS.md). In short: the feasibility 
 
 ## Data retention and privacy
 
-- Stored locally only: normalized academic metadata, change events, sync status, UI preferences, resolved API versions, and the sanitized feasibility report.
-- Never stored or logged: cookies, tokens, raw HTML, raw Brightspace payloads, announcement attachments.
+- Stored locally only: normalized academic metadata (including the names and sizes of assignment files), change events, sync status, UI preferences, resolved API versions, the sanitized feasibility report and file access check, done marks, the student's own deadlines, saved Ask Nova conversations when saving is on, the extracted text of assignment files the student had Nova read (newest 50; never the files themselves), and, for each course whose materials the student turned on, its table of contents and the text of its files as passages (never the files themselves).
+- Also stored locally: ratings of Ask Nova answers (the question and how the answer was made, not the answer), and, when signed in to a hosted Nova server, that sign-in (an access token and a refresh token for that server only).
+- Never stored or logged: Brightspace cookies or tokens, raw HTML, raw Brightspace payloads, announcement attachments.
 - **Clear local Nova data** in the panel menu wipes every table after confirmation.

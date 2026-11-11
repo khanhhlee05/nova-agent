@@ -1,6 +1,22 @@
 # Nova backend: plan for the AI and calendar services
 
-Status: slice 1 built (stateless chat API, no sign-in or database yet). See `ASK_NOVA.md`. Replaces the "no backend" position in `CHATBOT_PLAN.md` for the AI and Google Calendar features. Brightspace access is unchanged.
+Status: partly built. See **Hosted mode** in `ASK_NOVA.md` for what runs today.
+
+| Part | State |
+|---|---|
+| Stateless chat API, tools, loop, SSE, budget cap | Built (slice 1 and the Ask Nova slices). |
+| Google sign-in, access and refresh tokens, `GET` and `DELETE /v1/me` | Built, behind `AUTH_MODE=google`. Tested against the real schema with a stand-in for Google; not yet run against Google itself. |
+| Per-student daily allowance, pace limit, kill switch, `GET /v1/usage` | Built. |
+| Postgres schema and migrations | Built, as plain SQL through a three-method query interface instead of Drizzle: one less dependency, and the same SQL runs in tests on an embedded Postgres. Checked against Postgres 16 with concurrent connections. |
+| Saved conversations across devices | Built, as an opt-in copy of what the panel saves: newer copy wins, deletions survive an unreachable server. Conversations are stored whole as the panel sends them (one `conversations` table), not as separate `messages` rows, and the server keeps no history of its own for a chat turn. |
+| Dockerfile | Written; its steps were replayed in a clean directory, the image itself was not built. |
+| Deploy pipeline, hosting, a live deployment | Not built: needs the accounts in step 0. |
+| Google Calendar (OAuth, token storage, sync, proposals) | Not built. |
+| Monthly dollar cap | Not built; limits are in tokens. |
+
+Differences from the plan below, where it was built: refresh tokens are single use; the OAuth client id reaches the extension through `/healthz` instead of a build setting; propose tools exist only for actions on the device, so there is no `POST /v1/proposals/:id/confirm`.
+
+Original plan follows. Replaces the "no backend" position in `CHATBOT_PLAN.md` for the AI and Google Calendar features. Brightspace access is unchanged.
 
 ## Why a backend
 

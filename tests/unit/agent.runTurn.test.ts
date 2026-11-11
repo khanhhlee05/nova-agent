@@ -178,6 +178,32 @@ describe("runTurn", () => {
     expect(result.errorCode).toBe("rate_limited");
   });
 
+  it("checks the student's own deadline titles the same way as item titles", async () => {
+    const own = { id: "personal-1", title: "Office hours with Dr. Rao", courseId: null, dueAt: "2026-09-20T16:00:00.000Z", dueLocal: "Sun, Sep 20, 12:00 PM", dueDate: "2026-09-20", bucket: "later" as const, done: false };
+    const withOwn: CompactSnapshot = { ...snapshot, personal: [own] };
+    // Due later, so the brief does not list it: naming it without a lookup is flagged and nudged.
+    expect(checkHonesty("Go to Office hours with Dr. Rao.", withOwn, briefTitles(withOwn)).unverified).toEqual(["Office hours with Dr. Rao"]);
+    const nudged = await drive([{ text: ["Go to Office hours with Dr. Rao."] }, { text: ["I cannot verify that."] }], { snapshot: withOwn });
+    expect(nudged.result.corrected).toBe(true);
+    // After a lookup returned it as a row, the same sentence is grounded.
+    const looked = await drive([{ toolCalls: [{ name: "list_deadlines", args: { range: "later" } }] }, { text: ["Go to Office hours with Dr. Rao."] }], { snapshot: withOwn });
+    expect(looked.result).toMatchObject({ grounded: true, corrected: false });
+    expect(looked.result.returnedTitles).toContain("Office hours with Dr. Rao");
+    // Due today, the brief lists it, so no lookup is needed.
+    const soon: CompactSnapshot = { ...snapshot, personal: [{ ...own, bucket: "today", dueDate: "2026-09-08", dueLocal: "Tue, Sep 8, 9:00 PM", dueAt: "2026-09-09T01:00:00.000Z" }] };
+    expect((await drive([{ text: ["Go to Office hours with Dr. Rao."] }], { snapshot: soon })).result).toMatchObject({ grounded: true, corrected: false, rounds: 1 });
+  });
+
+  it("puts the focus hint in the system prompt and lets the focused item be named without a lookup", async () => {
+    const item = snapshot.items.find((entry) => entry.title === "Project Proposal");
+    if (!item) throw new Error("fixture changed");
+    const plain = await drive([{ text: ["Project Proposal is next."] }, { text: ["I cannot verify that."] }]);
+    expect(plain.result.corrected).toBe(true);
+    const focused = await drive([{ text: ["Project Proposal is next."] }], { focus: { itemId: item.id, tab: "focus", courseId: null } });
+    expect(focused.result).toMatchObject({ grounded: true, corrected: false });
+    expect(focused.model.calls[0]?.messages[0]?.content).toContain(`[id ${item.id}]. Call get_item_details with this id before answering.`);
+  });
+
   it("passes history through in order", async () => {
     const { model } = await drive([{ text: ["Sure."] }], { history: [{ role: "user", content: "hi" }, { role: "assistant", content: "hello" }], message: "thanks" });
     expect(model.calls[0]?.messages.map((message) => message.role)).toEqual(["system", "user", "assistant", "user"]);

@@ -12,8 +12,8 @@ import {
   type Announcement,
   type ChangeEvent,
 } from "@nova-agent/core";
-import { explainPriority, rankItems } from "@nova-agent/planner";
-import { COMPACT_LIMITS, type CompactChange, type CompactItem, type CompactSnapshot } from "@nova-agent/protocol";
+import { estimateStudyMinutes, explainPriority, rankItems } from "@nova-agent/planner";
+import { COMPACT_LIMITS, type CompactChange, type CompactItem, type CompactPersonal, type CompactSnapshot } from "@nova-agent/protocol";
 import { addDays, addWeeks, differenceInCalendarDays, endOfWeek, format, startOfDay, startOfWeek } from "date-fns";
 
 export type CompactOptions = {
@@ -24,7 +24,26 @@ export type CompactOptions = {
   completedWithinDays?: number;
   changesWithinDays?: number;
   announcementsWithinDays?: number;
+  /** Item keys the student marked done on this device. Such items count as completed, the same as on the Focus tab. */
+  localDone?: { has(key: string): boolean };
+  /** Item keys hidden for this session. They are left out; only their count is sent. */
+  dismissedItemKeys?: { has(key: string): boolean };
+  /** Deadlines the student added by hand on the Week tab. */
+  personal?: readonly PersonalInput[];
+  /** Send the names of each item's files. Only while the student lets Ask Nova read attachments. */
+  includeAttachments?: boolean;
+  /**
+   * Content topics per course, for the courses whose materials the student lets Ask Nova read. A course in this
+   * map is sent with its topic names (possibly none); a course outside it is sent without the field.
+   */
+  materials?: ReadonlyMap<string, readonly MaterialInput[]>;
 };
+
+/** The fields of a Content topic the compact snapshot needs. */
+export type MaterialInput = { id: string; title: string; modulePath: readonly string[]; type: "file" | "page" | "link" | "other"; read: boolean };
+
+/** The fields of a student-added deadline the compact snapshot needs. */
+export type PersonalInput = { id: string; title: string; dueAt: string; courseId: string | null; completedAt: string | null; planId?: string | null };
 
 const LOCAL_FORMAT = "EEE, MMM d, h:mm a";
 
@@ -119,14 +138,35 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
     .filter((course) => course.active)
     .sort((a, b) => a.name.localeCompare(b.name))
     .slice(0, COMPACT_LIMITS.courses)
-    .map((course) => ({ id: course.id, name: clip(course.name), code: course.code ? cleanText(course.code).slice(0, 64) : null, homeUrl: course.homeUrl, active: course.active }));
+    .map((course) => {
+      const topics = options.materials?.get(course.id);
+      return {
+        id: course.id,
+        name: clip(course.name),
+        code: course.code ? cleanText(course.code).slice(0, 64) : null,
+        homeUrl: course.homeUrl,
+        active: course.active,
+        ...(topics
+          ? {
+              materials: topics
+                .filter((topic) => /^\d{1,12}$/.test(topic.id) && cleanText(topic.title) !== "")
+                .slice(0, COMPACT_LIMITS.materials)
+                .map((topic) => ({ id: topic.id, title: cleanText(topic.title).slice(0, COMPACT_LIMITS.fileName), module: cleanText(topic.modulePath.join(" › ")).slice(0, COMPACT_LIMITS.title), type: topic.type, read: topic.read })),
+            }
+          : {}),
+      };
+    });
   const courseIds = new Set(courses.map((course) => course.id));
 
   const window = deadlineWindow(now);
-  const visible = snapshot.items.filter((item) => courseIds.has(item.courseId) && item.visibility !== "hidden" && item.visibility !== "expired");
-  const eligible = visible.filter((item) => isActive(item) || (isDone(item) && withinDays(item.dueAt, now, completedWithinDays)));
+  const dismissed = options.dismissedItemKeys;
+  const visible = snapshot.items.filter((item) => courseIds.has(item.courseId) && item.visibility !== "hidden" && item.visibility !== "expired" && !dismissed?.has(item.key));
+  // A local mark only matters while Brightspace still lists the item as open, the same rule as the dashboard.
+  const marked = (item: AcademicItem): boolean => !isDone(item) && options.localDone?.has(item.key) === true;
+  const recentlyDue = (item: AcademicItem): boolean => !item.dueAt || withinDays(item.dueAt, now, completedWithinDays);
+  const eligible = visible.filter((item) => (marked(item) ? recentlyDue(item) : isActive(item) || (isDone(item) && withinDays(item.dueAt, now, completedWithinDays))));
   // Long overdue items are not ranked, the same as on the Focus tab: the planner would put any of them first.
-  const ranked = new Map(rankItems(visible.filter((item) => isActive(item) && !isLongOverdue(item, now)), { now }).map((entry) => [entry.item.key, entry]));
+  const ranked = new Map(rankItems(visible.filter((item) => isActive(item) && !marked(item) && !isLongOverdue(item, now)), { now }).map((entry) => [entry.item.key, entry]));
 
   const dueTime = (item: AcademicItem): number => (item.dueAt ? new Date(item.dueAt).getTime() : Number.POSITIVE_INFINITY);
   const items: CompactItem[] = [...eligible]
@@ -134,6 +174,7 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
     .slice(0, maxItems)
     .map((item) => {
       const entry = ranked.get(item.key);
+      const doneLocally = marked(item);
       return {
         id: shortId(item.key, item.kind),
         courseId: item.courseId,
@@ -142,9 +183,19 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
         dueAt: item.dueAt,
         dueLocal: localOf(item.dueAt),
         dueDate: dateOf(item.dueAt),
-        bucket: classifyDeadline(item, window),
-        longOverdue: isLongOverdue(item, now),
+        bucket: doneLocally ? "completed" : classifyDeadline(item, window),
+        longOverdue: !doneLocally && isLongOverdue(item, now),
         status: item.status,
+        ...(doneLocally ? { doneLocally: true } : {}),
+        ...(isActive(item) && !doneLocally ? { estimateMinutes: estimateStudyMinutes(item) } : {}),
+        ...(options.includeAttachments && item.attachments && item.attachments.length > 0
+          ? {
+              attachments: item.attachments
+                .filter((file) => /^\d{1,12}$/.test(file.id) && cleanText(file.name) !== "")
+                .slice(0, COMPACT_LIMITS.attachments)
+                .map((file) => ({ id: file.id, name: cleanText(file.name).slice(0, COMPACT_LIMITS.fileName), size: typeof file.size === "number" && file.size >= 0 ? Math.round(file.size) : null, source: file.source })),
+            }
+          : {}),
         visibility: compactVisibility(item),
         pointsPossible: item.pointsPossible,
         earnedScore: item.score?.graded ? item.score.earned : null,
@@ -191,11 +242,32 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
       };
     });
 
+  const personal: CompactPersonal[] = [...(options.personal ?? [])]
+    .filter((deadline) => !Number.isNaN(new Date(deadline.dueAt).getTime()) && cleanText(deadline.title) !== "")
+    .filter((deadline) => deadline.completedAt === null || withinDays(deadline.dueAt, now, completedWithinDays))
+    .sort((a, b) => a.dueAt.localeCompare(b.dueAt) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id))
+    .slice(0, COMPACT_LIMITS.personal)
+    .map((deadline) => {
+      const done = deadline.completedAt !== null;
+      return {
+        id: deadline.id.slice(0, 80),
+        title: clip(deadline.title),
+        // A deadline tied to a course that is no longer active is kept, without the course.
+        courseId: deadline.courseId && courseIds.has(deadline.courseId) ? deadline.courseId : null,
+        dueAt: deadline.dueAt,
+        dueLocal: localOf(deadline.dueAt) ?? deadline.dueAt,
+        dueDate: dateOf(deadline.dueAt) ?? format(now, DATE_FORMAT),
+        bucket: classifyDeadline({ dueAt: deadline.dueAt, status: done ? "completed" : "not-started" }, window),
+        done,
+        ...(deadline.planId ? { fromPlan: true } : {}),
+      };
+    });
+
   const activeItems = items.filter((item) => item.bucket !== "completed");
   const count = (bucket: CompactItem["bucket"]) => activeItems.filter((item) => item.bucket === bucket && !item.longOverdue).length;
   const today = count("today");
   return {
-    version: 2,
+    version: 3,
     mode: options.mode,
     now: now.toISOString(),
     timezone: options.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC",
@@ -215,6 +287,8 @@ export const compactSnapshot = (snapshot: AcademicSnapshot, events: readonly Cha
       activeItems: activeItems.length,
     },
     calendar: calendarOf(now),
+    personal,
+    hiddenCount: dismissed ? snapshot.items.filter((item) => dismissed.has(item.key)).length : 0,
   };
 };
 

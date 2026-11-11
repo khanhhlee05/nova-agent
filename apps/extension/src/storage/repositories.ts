@@ -9,7 +9,9 @@ import {
   type AcademicSnapshot,
   type ChangeEvent,
 } from "@nova-agent/core";
-import type { LocalMarkRecord, NovaDb, PersonalItemRecord, StoredChangeEvent, StoredSnapshot, SyncStatusRecord } from "./novaDb";
+import { MAX_CONVERSATIONS, conversationTitle, reviveMessages, type StoredConversation } from "../sidepanel/ask/conversations";
+import type { AskMessage } from "../sidepanel/ask/thread";
+import type { AskFeedbackRecord, AttachmentTextRecord, ConversationRecord, LocalMarkRecord, MaterialTextRecord, MaterialTocRecord, NovaDb, PersonalItemRecord, StoredChangeEvent, StoredSnapshot, SyncStatusRecord } from "./novaDb";
 
 export const INITIAL_SYNC_STATUS: SyncStatusRecord = {
   key: "current",
@@ -143,6 +145,158 @@ export const putPersonalItem = async (db: NovaDb, item: PersonalItemRecord): Pro
 
 export const deletePersonalItem = async (db: NovaDb, id: string): Promise<void> => {
   await db.personalItems.delete(id);
+};
+
+/**
+ * Puts one study plan on the Week tab. Only one plan lives there at a time:
+ * every slot of an earlier plan is removed first, whichever plan it came
+ * from, so asking for a new plan replaces the old one instead of stacking.
+ * All or nothing: over the cap, nothing changes.
+ */
+export const replacePlanItems = async (db: NovaDb, scope: string, items: readonly PersonalItemRecord[]): Promise<void> => {
+  await db.transaction("rw", db.personalItems, async () => {
+    const existing = await db.personalItems.where("scope").equals(scope).toArray();
+    const fromPlans = existing.filter((item) => (item.planId ?? null) !== null);
+    if (existing.length - fromPlans.length + items.length > MAX_PERSONAL_ITEMS) {
+      throw new Error(`Nova keeps at most ${MAX_PERSONAL_ITEMS} deadlines you add yourself. Delete a few on the Week tab, then add the plan again.`);
+    }
+    if (fromPlans.length > 0) await db.personalItems.bulkDelete(fromPlans.map((item) => item.id));
+    if (items.length > 0) await db.personalItems.bulkPut([...items]);
+  });
+};
+
+/** Removes every slot of one plan from the Week tab. Returns how many were removed. */
+export const deletePlanItems = async (db: NovaDb, scope: string, planId: string): Promise<number> =>
+  db.personalItems
+    .where("scope")
+    .equals(scope)
+    .filter((item) => item.planId === planId)
+    .delete();
+
+const toStored = (record: ConversationRecord): StoredConversation => ({ id: record.id, title: record.title, createdAt: record.createdAt, updatedAt: record.updatedAt, messages: reviveMessages(record.messages) });
+
+/** Saved conversations for one account, most recently used first. */
+export const listConversations = async (db: NovaDb, scope: string): Promise<StoredConversation[]> =>
+  (await db.conversations.where("scope").equals(scope).toArray()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)).map(toStored);
+
+export const getConversation = async (db: NovaDb, id: string): Promise<StoredConversation | null> => {
+  const record = await db.conversations.get(id);
+  return record ? toStored(record) : null;
+};
+
+/**
+ * Adds or replaces one conversation, titled by its first question, then keeps
+ * the newest `MAX_CONVERSATIONS` for the account. An empty thread is never
+ * saved, and saving an empty thread over a stored one removes it.
+ */
+export const saveConversation = async (db: NovaDb, scope: string, conversation: { id: string; messages: AskMessage[] }, now: Date): Promise<void> => {
+  await db.transaction("rw", db.conversations, async () => {
+    if (conversation.messages.length === 0) {
+      await db.conversations.delete(conversation.id);
+      return;
+    }
+    const existing = await db.conversations.get(conversation.id);
+    const at = now.toISOString();
+    await db.conversations.put({ id: conversation.id, scope, title: conversationTitle(conversation.messages), createdAt: existing?.createdAt ?? at, updatedAt: at, messages: conversation.messages });
+    const all = await db.conversations.where("scope").equals(scope).toArray();
+    const stale = all.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)).slice(MAX_CONVERSATIONS);
+    if (stale.length > 0) await db.conversations.bulkDelete(stale.map((entry) => entry.id));
+  });
+};
+
+/**
+ * Stores a conversation that came from the server as it was saved there: its
+ * own title and times are kept, so the newer of two copies can be told apart
+ * later. The newest `MAX_CONVERSATIONS` for the account are kept, as for any save.
+ */
+export const putSyncedConversation = async (db: NovaDb, scope: string, conversation: { id: string; title: string; createdAt: string; updatedAt: string; messages: AskMessage[] }): Promise<void> => {
+  if (conversation.messages.length === 0) return;
+  await db.transaction("rw", db.conversations, async () => {
+    await db.conversations.put({ ...conversation, scope });
+    const all = await db.conversations.where("scope").equals(scope).toArray();
+    const stale = all.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)).slice(MAX_CONVERSATIONS);
+    if (stale.length > 0) await db.conversations.bulkDelete(stale.map((record) => record.id));
+  });
+};
+
+export const deleteConversation = async (db: NovaDb, id: string): Promise<void> => {
+  await db.conversations.delete(id);
+};
+
+/** Turning "Save conversations" off deletes every saved one, for every account on this device. */
+export const clearConversations = async (db: NovaDb): Promise<void> => {
+  await db.conversations.clear();
+};
+
+/** How many read files are kept per account. The oldest read goes first. */
+export const MAX_ATTACHMENT_TEXTS = 50;
+
+export const attachmentTextId = (itemKey: string, fileId: string): string => `${itemKey}#${fileId}`;
+
+export const listAttachmentTexts = async (db: NovaDb, scope: string): Promise<AttachmentTextRecord[]> => db.attachmentText.where("scope").equals(scope).toArray();
+
+export const getAttachmentText = async (db: NovaDb, itemKey: string, fileId: string): Promise<AttachmentTextRecord | null> => (await db.attachmentText.get(attachmentTextId(itemKey, fileId))) ?? null;
+
+/** Stores one file's text and keeps the newest `MAX_ATTACHMENT_TEXTS` for the account. */
+export const putAttachmentText = async (db: NovaDb, record: AttachmentTextRecord): Promise<void> => {
+  await db.transaction("rw", db.attachmentText, async () => {
+    await db.attachmentText.put(record);
+    const all = await db.attachmentText.where("scope").equals(record.scope).toArray();
+    const stale = all.sort((a, b) => b.extractedAt.localeCompare(a.extractedAt) || a.id.localeCompare(b.id)).slice(MAX_ATTACHMENT_TEXTS);
+    if (stale.length > 0) await db.attachmentText.bulkDelete(stale.map((entry) => entry.id));
+  });
+};
+
+export const materialTocId = (scope: string, courseId: string): string => `${scope}#${courseId}`;
+export const materialTextId = (scope: string, courseId: string, topicId: string): string => `${scope}#${courseId}#${topicId}`;
+
+export const listMaterialTocs = async (db: NovaDb, scope: string): Promise<MaterialTocRecord[]> => db.materialToc.where("scope").equals(scope).toArray();
+
+export const putMaterialToc = async (db: NovaDb, record: MaterialTocRecord): Promise<void> => {
+  await db.materialToc.put(record);
+};
+
+export const listMaterialTexts = async (db: NovaDb, scope: string): Promise<MaterialTextRecord[]> => db.materialText.where("scope").equals(scope).toArray();
+
+export const putMaterialText = async (db: NovaDb, record: MaterialTextRecord): Promise<void> => {
+  await db.materialText.put(record);
+};
+
+/** "Forget materials": the course's table of contents and every passage read from it. */
+export const forgetCourseMaterials = async (db: NovaDb, scope: string, courseId: string): Promise<void> => {
+  await db.transaction("rw", db.materialToc, db.materialText, async () => {
+    await db.materialToc.delete(materialTocId(scope, courseId));
+    await db.materialText.where("[scope+courseId]").equals([scope, courseId]).delete();
+  });
+};
+
+/** Drops the stored text of topics that are no longer in the course, or that the student unticked. */
+export const pruneMaterialTexts = async (db: NovaDb, scope: string, courseId: string, keepTopicIds: ReadonlySet<string>): Promise<number> =>
+  db.materialText
+    .where("[scope+courseId]")
+    .equals([scope, courseId])
+    .filter((record) => !keepTopicIds.has(record.topicId))
+    .delete();
+
+/** Ratings kept per account. Past this the oldest go. */
+export const MAX_ASK_FEEDBACK = 500;
+
+export const askFeedbackId = (scope: string, messageId: string): string => `${scope}#${messageId}`;
+
+/** Every rating for this account, oldest first. */
+export const listAskFeedback = async (db: NovaDb, scope: string): Promise<AskFeedbackRecord[]> => (await db.askFeedback.where("scope").equals(scope).toArray()).sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
+
+/** Stores one rating, replacing an earlier one for the same answer, and keeps the newest `MAX_ASK_FEEDBACK`. */
+export const putAskFeedback = async (db: NovaDb, record: AskFeedbackRecord): Promise<void> => {
+  await db.transaction("rw", db.askFeedback, async () => {
+    await db.askFeedback.put(record);
+    const all = await listAskFeedback(db, record.scope);
+    if (all.length > MAX_ASK_FEEDBACK) await db.askFeedback.bulkDelete(all.slice(0, all.length - MAX_ASK_FEEDBACK).map((entry) => entry.id));
+  });
+};
+
+export const deleteAskFeedback = async (db: NovaDb, scope: string, messageId: string): Promise<void> => {
+  await db.askFeedback.delete(askFeedbackId(scope, messageId));
 };
 
 export const getPreference = async <T>(db: NovaDb, key: string, fallback: T): Promise<T> => {

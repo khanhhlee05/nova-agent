@@ -17,6 +17,45 @@ export type Importance = "low" | "normal" | "high";
 /** How an assignment is handed in. D2L SUBMISSIONTYPE_T: 0 file, 1 text, 2 on paper, 3 observed in person. */
 export type SubmissionType = "online" | "on-paper" | "observed" | "unknown";
 
+/**
+ * A file attached to an assignment: one the instructor attached to the
+ * folder, or one the student handed in. Only the name and size are kept from
+ * a refresh; the bytes are fetched when the student asks for them.
+ */
+export type ItemAttachment = {
+  /** Brightspace file id, unique within its folder or submission. */
+  id: string;
+  name: string;
+  /** Size in bytes, when Brightspace says. */
+  size: number | null;
+  source: "instructor" | "submission";
+  /** The submission the file belongs to; present for `submission` files. */
+  submissionId?: string;
+};
+
+/**
+ * One topic from a course's Content area: a file the instructor uploaded, a
+ * page written in Brightspace, or a link. Only its place and name are kept
+ * from the table of contents; a file's bytes are fetched when the student
+ * has Nova read the course's materials.
+ */
+export type CourseMaterial = {
+  /** Brightspace topic id. */
+  id: string;
+  courseId: string;
+  title: string;
+  /** The modules the topic sits under, outermost first. */
+  modulePath: string[];
+  /** `file`: an uploaded file. `page`: an HTML page. `link`: an address elsewhere. `other`: anything else (a quiz, a discussion). */
+  type: "file" | "page" | "link" | "other";
+  /** The file's own name, when the topic is a file or a page. */
+  fileName: string | null;
+  /** The topic's page in Brightspace. */
+  url: string | null;
+  /** When Brightspace says the topic last changed. */
+  updatedAt: string | null;
+};
+
 /** A score Brightspace reported for the student on this item. `earned` is null when feedback exists without a number. */
 export type ItemScore = { earned: number | null; graded: boolean };
 
@@ -68,6 +107,8 @@ export type AcademicItem = {
   lateAllowed?: boolean | null;
   /** The score Brightspace reported; null when nothing has been graded. */
   score?: ItemScore | null;
+  /** Files on the assignment. Absent on quizzes and on snapshots stored before attachments were read. */
+  attachments?: ItemAttachment[];
 };
 
 export type Announcement = {

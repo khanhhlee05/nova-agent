@@ -11,7 +11,8 @@ export type Reservation = { day: string; tokens: number };
 export class UsageCounter {
   private readonly days = new Map<string, number>();
 
-  constructor(private readonly dailyCap: number) {}
+  /** Tokens allowed per UTC day; 0 means no limit. */
+  constructor(readonly dailyCap: number) {}
 
   private key(now: Date): string {
     return now.toISOString().slice(0, 10);

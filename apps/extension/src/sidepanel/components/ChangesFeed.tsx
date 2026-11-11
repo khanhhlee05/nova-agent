@@ -1,5 +1,5 @@
 import type { ChangeEvent } from "@nova-agent/core";
-import { Check, ExternalLink, Radio, Trash2 } from "lucide-react";
+import { Check, ExternalLink, MessageCircleQuestionMark, Radio, Trash2 } from "lucide-react";
 import { formatDeadline, formatDetected } from "../format";
 import { STATUS_LABELS, changeTitle, changeVerb, type Dashboard } from "../model";
 import { changeIcon } from "./icons";
@@ -14,6 +14,8 @@ export type ChangesFeedProps = {
   onSetRead: (id: string, read: boolean) => void;
   /** Permanent: the event is removed from local storage, not hidden for the session. */
   onDelete: (id: string, title: string) => void;
+  /** Starts an Ask Nova question about one change. Absent when Ask is off. */
+  onAsk?: (event: ChangeEvent) => void;
 };
 
 const GROUPS: { key: keyof Dashboard["changes"]; label: string }[] = [
@@ -22,7 +24,7 @@ const GROUPS: { key: keyof Dashboard["changes"]; label: string }[] = [
   { key: "earlier", label: "Earlier" },
 ];
 
-export const ChangesFeed = ({ dashboard, now, baselineOnly, canOpen, onOpen, onSetRead, onDelete }: ChangesFeedProps) => (
+export const ChangesFeed = ({ dashboard, now, baselineOnly, canOpen, onOpen, onSetRead, onDelete, onAsk }: ChangesFeedProps) => (
   <div className="stack">
     {dashboard.totalChanges === 0 ? (
       <div className="empty">
@@ -36,7 +38,7 @@ export const ChangesFeed = ({ dashboard, now, baselineOnly, canOpen, onOpen, onS
           <h3 className="feed-group-label">{group.label}</h3>
           <ul className="feed-group">
             {dashboard.changes[group.key].map((event) => (
-              <SignalRow key={event.id} event={event} dashboard={dashboard} now={now} canOpen={canOpen} onOpen={onOpen} onSetRead={onSetRead} onDelete={onDelete} />
+              <SignalRow key={event.id} event={event} dashboard={dashboard} now={now} canOpen={canOpen} onOpen={onOpen} onSetRead={onSetRead} onDelete={onDelete} onAsk={onAsk} />
             ))}
           </ul>
         </section>
@@ -45,9 +47,9 @@ export const ChangesFeed = ({ dashboard, now, baselineOnly, canOpen, onOpen, onS
   </div>
 );
 
-type SignalRowProps = Pick<ChangesFeedProps, "dashboard" | "now" | "canOpen" | "onOpen" | "onSetRead" | "onDelete"> & { event: ChangeEvent };
+type SignalRowProps = Pick<ChangesFeedProps, "dashboard" | "now" | "canOpen" | "onOpen" | "onSetRead" | "onDelete" | "onAsk"> & { event: ChangeEvent };
 
-const SignalRow = ({ event, dashboard, now, canOpen, onOpen, onSetRead, onDelete }: SignalRowProps) => {
+const SignalRow = ({ event, dashboard, now, canOpen, onOpen, onSetRead, onDelete, onAsk }: SignalRowProps) => {
   const { icon, tone } = changeIcon(event);
   const course = dashboard.courseById.get(event.courseId);
   const item = dashboard.itemByKey.get(event.entityKey);
@@ -74,6 +76,12 @@ const SignalRow = ({ event, dashboard, now, canOpen, onOpen, onSetRead, onDelete
             <button type="button" className="disclosure" style={{ minHeight: 24, marginLeft: -2 }} onClick={() => onOpen(link)}>
               <ExternalLink size={12} aria-hidden="true" />
               Open
+            </button>
+          ) : null}
+          {onAsk ? (
+            <button type="button" className="disclosure" style={{ minHeight: 24 }} aria-label={`Ask Nova what the change to "${title}" means`} onClick={() => onAsk(event)}>
+              <MessageCircleQuestionMark size={12} aria-hidden="true" />
+              Ask what this means
             </button>
           ) : null}
         </div>

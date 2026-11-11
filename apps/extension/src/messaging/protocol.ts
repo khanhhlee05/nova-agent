@@ -33,6 +33,7 @@ export type NovaMessage =
   | { type: "OPEN_PANEL" }
   | { type: "PING" }
   | { type: "BRIGHTSPACE_FETCH"; path: string }
+  | { type: "BRIGHTSPACE_FETCH_FILE"; path: string; maxBytes: number; headOnly: boolean }
   | { type: "SYNC_REQUEST"; reason: "manual" | "auto" }
   | { type: "SYNC_PROGRESS"; phase: SyncPhase }
   | { type: "SYNC_RESULT"; phase: SyncPhase; unreadCount: number };
@@ -40,6 +41,11 @@ export type NovaMessage =
 export type FetchBridgeFailure = "unsafe-path" | "network" | "timeout" | "no-tab" | "no-bridge";
 
 export type FetchBridgeResult = { ok: true; response: import("@nova-agent/brightspace").RawResponse } | { ok: false; reason: FetchBridgeFailure };
+
+export type FileBridgeResult = { ok: true; response: import("@nova-agent/brightspace").RawFileResponse } | { ok: false; reason: FetchBridgeFailure };
+
+/** The largest file the bridge will carry. Mirrors `HARD_FILE_CAP_BYTES`; the content script clamps to it again. */
+export const BRIDGE_FILE_CAP_BYTES = 20 * 1024 * 1024;
 
 /** chrome.storage.local key the side panel writes and the orb reads. Holds only a count. */
 export const BADGE_STORAGE_KEY = "nova:unread";
@@ -54,6 +60,10 @@ export const parseMessage = (value: unknown): NovaMessage | null => {
       return { type: value.type };
     case "BRIGHTSPACE_FETCH":
       return typeof value.path === "string" && value.path.length > 0 && value.path.length <= 2048 ? { type: "BRIGHTSPACE_FETCH", path: value.path } : null;
+    case "BRIGHTSPACE_FETCH_FILE":
+      return typeof value.path === "string" && value.path.length > 0 && value.path.length <= 2048 && typeof value.maxBytes === "number" && Number.isInteger(value.maxBytes) && value.maxBytes > 0 && value.maxBytes <= BRIDGE_FILE_CAP_BYTES
+        ? { type: "BRIGHTSPACE_FETCH_FILE", path: value.path, maxBytes: value.maxBytes, headOnly: value.headOnly === true }
+        : null;
     case "SYNC_REQUEST":
       return value.reason === "manual" || value.reason === "auto" ? { type: "SYNC_REQUEST", reason: value.reason } : null;
     case "SYNC_PROGRESS":

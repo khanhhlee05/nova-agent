@@ -2,9 +2,11 @@ import { PenLine, Plus, X } from "lucide-react";
 import { Popover } from "radix-ui";
 import { format } from "date-fns";
 import { formatTime } from "../format";
+import type { AcademicItem } from "@nova-agent/core";
 import type { Dashboard, PersonalDeadline, WeekDay, WeekEntry } from "../model";
 import { courseSwatch } from "../theme";
 import { ItemDetails } from "./ItemDetails";
+import type { AttachmentControls } from "./ItemFiles";
 import { PersonalDetails } from "./PersonalDetails";
 import { dayKey } from "./WeekStrip";
 import { KindIcon } from "./icons";
@@ -37,10 +39,14 @@ export type WeekViewProps = {
   selectedDay: string | null;
   /** Present when the student can add their own deadlines from a picked day. */
   personal?: PersonalActions;
+  /** Starts an Ask Nova question about one item. Absent when Ask is off. */
+  onAsk?: (item: AcademicItem) => void;
+  /** Lets the student read assignment files from an item's details. */
+  files?: AttachmentControls;
 };
 
 /** Time-led agenda. The seven-day strip lives in the field above; this is the list under it. */
-export const WeekView = ({ dashboard, days: page = dashboard.week, now, canOpen, onOpen, onDismiss, selectedDay, personal }: WeekViewProps) => {
+export const WeekView = ({ dashboard, days: page = dashboard.week, now, canOpen, onOpen, onDismiss, selectedDay, personal, onAsk, files }: WeekViewProps) => {
   const nextBusy = page.find((day) => !day.isToday && (day.entries.some((entry) => entry.bucket !== "completed") || day.custom.some((deadline) => deadline.completedAt === null)));
   const days = selectedDay ? page.filter((day) => dayKey(day.date) === selectedDay) : page;
   return (
@@ -66,17 +72,18 @@ export const WeekView = ({ dashboard, days: page = dashboard.week, now, canOpen,
                   const { deadline } = row;
                   const course = deadline.courseId ? dashboard.courseById.get(deadline.courseId) : undefined;
                   const done = deadline.completedAt !== null;
+                  const fromPlan = (deadline.planId ?? null) !== null;
                   return (
                     <Popover.Root key={`personal-${deadline.id}`}>
                       <Popover.Trigger asChild>
-                        <button type="button" className="event-chip" data-personal="true" data-done={done} aria-label={`${deadline.title}, added by you, ${course?.name ?? "no course"}, ${formatTime(deadline.dueAt)}${done ? ", done" : ""}`}>
+                        <button type="button" className="event-chip" data-personal="true" data-done={done} aria-label={`${deadline.title}, ${fromPlan ? "from your study plan" : "added by you"}, ${course?.name ?? "no course"}, ${formatTime(deadline.dueAt)}${done ? ", done" : ""}`}>
                           <span className="time mono">{formatTime(deadline.dueAt)}</span>
                           <span className="event-main">
                             <span className="title">{deadline.title}</span>
                             <span className="event-sub">
                               <span className="course-dot" data-hollow={!course} style={course ? { background: courseSwatch(course.color) } : undefined} aria-hidden="true" />
                               <span className="course-name">{course?.name ?? "No course"}</span>
-                              <span className="own-tag">Added by you</span>
+                              <span className="own-tag">{fromPlan ? "Study plan" : "Added by you"}</span>
                               {done ? <span className="done-label">· Done</span> : null}
                             </span>
                           </span>
@@ -120,7 +127,7 @@ export const WeekView = ({ dashboard, days: page = dashboard.week, now, canOpen,
                         <Popover.Close className="icon-button icon-button-sm popover-close" aria-label="Close details">
                           <X size={14} aria-hidden="true" />
                         </Popover.Close>
-                        <ItemDetails item={item} course={course} ranked={dashboard.ranked.get(item.key)} now={now} canOpen={canOpen(item.url)} onOpen={onOpen} headingLevel="h3" onDismiss={() => onDismiss(item.key, item.title)} markedAt={dashboard.localDone.get(item.key) ?? null} />
+                        <ItemDetails item={item} course={course} ranked={dashboard.ranked.get(item.key)} now={now} canOpen={canOpen(item.url)} onOpen={onOpen} headingLevel="h3" onDismiss={() => onDismiss(item.key, item.title)} markedAt={dashboard.localDone.get(item.key) ?? null} onAsk={onAsk ? () => onAsk(item) : undefined} files={files} />
                       </Popover.Content>
                     </Popover.Portal>
                   </Popover.Root>

@@ -1,4 +1,5 @@
 import { toBrightspaceError, type BrightspaceError } from "./errors";
+import { FILE_TIMEOUT_MS, type FileFailure, type RawFileFetch } from "./files";
 import { routes, type ApprovedBrightspacePath } from "./routes";
 import { enrollmentsPageSchema, versionsSchema, whoAmISchema } from "./schemas";
 import { DEFAULT_TIMEOUT_MS, classifyResponse, type RawFetch, type RawResponse } from "./transport";
@@ -56,6 +57,46 @@ export type FeasibilityReport = {
   selectedVersions: Pick<ResolvedVersions, "lp" | "le"> | null;
   /** Course count only; never names or IDs. */
   activeEnrollmentCount: number | null;
+};
+
+export type FileProbeOperation = "dropboxAttachment" | "submissionFile" | "contentTopicFile";
+
+/**
+ * `ok`: the route answered 2xx. `not-tested`: the student's data has no such
+ * file to try, so nothing is known either way. Anything else is why the
+ * route did not serve the file.
+ */
+export type FileProbeStep = { operation: FileProbeOperation; outcome: "ok" | "not-tested" | FileFailure; status: number | null; contentType: string | null; size: number | null };
+
+/** Whether the tenant serves files to the session. A separate check from the connection probe, run after a refresh has found a file to try. */
+export type FileAccessReport = { probedAt: string; steps: FileProbeStep[] };
+
+const LOGIN = /\/d2l\/(login|lp\/auth|lp\/login|sso)/i;
+
+/**
+ * Asks one file route for its headers only: status, type, and size are
+ * recorded, the body is never read, and no file name or id is kept. `path`
+ * is null when there is nothing in the student's data to try.
+ */
+export const probeFileRoute = async (rawFileFetch: RawFileFetch | null, operation: FileProbeOperation, path: ApprovedBrightspacePath | null): Promise<FileProbeStep> => {
+  const blank = { operation, status: null, contentType: null, size: null };
+  if (!path) return { ...blank, outcome: "not-tested" };
+  if (!rawFileFetch) return { ...blank, outcome: "network" };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FILE_TIMEOUT_MS);
+  try {
+    const response = await rawFileFetch(path, { signal: controller.signal, maxBytes: 1, headOnly: true });
+    const seen = { operation, status: response.status, contentType: response.contentType, size: response.size };
+    if (response.status === 401 || (response.finalPath !== null && LOGIN.test(response.finalPath))) return { ...seen, outcome: "session-expired" };
+    if (response.status === 403) return { ...seen, outcome: "permission-denied" };
+    if (response.status === 404) return { ...seen, outcome: "not-found" };
+    if (response.status === 429) return { ...seen, outcome: "rate-limited" };
+    return { ...seen, outcome: response.status >= 200 && response.status < 300 ? "ok" : "network" };
+  } catch (caught) {
+    return { ...blank, outcome: toBrightspaceError(caught, operation).kind === "unsafe-path" ? "unsafe-path" : "network" };
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
 export const runFeasibilityProbe = async (
@@ -160,6 +201,18 @@ export const REQUIRED_READ_ONLY_ROUTES = [
   "GET /d2l/api/le/{version}/{orgUnitId}/dropbox/folders/{folderId}/submissions/mysubmissions/",
   "GET /d2l/api/le/{version}/{orgUnitId}/quizzes/",
   "GET /d2l/api/le/{version}/{orgUnitId}/news/",
+] as const;
+
+/**
+ * Read-only routes Ask Nova uses when the student lets it read assignment files or a course's Content area.
+ * Not needed for Mission Control itself. The table of contents is JSON; the other three are downloads. The
+ * OAuth scopes that cover them have not been confirmed on the Villanova tenant.
+ */
+export const OPTIONAL_FILE_ROUTES = [
+  "GET /d2l/api/le/{version}/{orgUnitId}/dropbox/folders/{folderId}/attachments/{fileId}",
+  "GET /d2l/api/le/{version}/{orgUnitId}/dropbox/folders/{folderId}/submissions/{submissionId}/files/{fileId}",
+  "GET /d2l/api/le/{version}/{orgUnitId}/content/toc",
+  "GET /d2l/api/le/{version}/{orgUnitId}/content/topics/{topicId}/file",
 ] as const;
 
 /** D2L OAuth 2 scopes that cover the routes above. */

@@ -23,6 +23,17 @@ Excluded from ranking: submitted and completed items, hidden and expired items, 
 - The hero shows the top item and its two strongest reasons. The details panel shows up to three reasons, a one-sentence reading of the score ("Top of the list at 74 out of 100: overdue by 1 day and still unfinished; worth 50 points, one of the bigger items in this course; overdue, but still open for a late submission."), and a breakdown of every component against its maximum.
 - Baseline reasons (a plain assignment or quiz, points not shared by Brightspace) only appear when nothing stronger exists.
 
+## Time estimates for study plans
+
+Brightspace does not say how long work takes. For Ask Nova's study plans the planner estimates it (`estimateStudyMinutes`), and every place that shows the number says it is an estimate:
+
+| Item | Estimate |
+|---|---|
+| Quiz | Its time limit (30 minutes when untimed) plus 45 minutes of review, between 45 minutes and 4 hours |
+| Assignment | By points possible: 3 hours at 100 or more, 2 hours at 50 or more, 90 minutes at 20 or more, 1 hour below that, 90 minutes when Brightspace does not say. Group work adds 30 minutes |
+
+Rounded to 15 minutes, never below 30. The estimate does not feed the priority score.
+
 ## Other signals read from the same responses
 
 - Earned scores: `mysubmissions` carries `Feedback.Score` once an assignment is graded. Nova shows it in the item details ("36 of 40"), sends it to Ask Nova as `earnedScore`, and reports a score arriving or changing as a "Graded" change. A withdrawn score is not reported. Quiz scores are not available through the allowlisted routes.

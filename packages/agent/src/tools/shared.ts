@@ -1,9 +1,13 @@
-import type { CompactAnnouncement, CompactChange, CompactCourse, CompactItem, CompactSnapshot, ToolName, ToolRow } from "@nova-agent/protocol";
+import type { CompactAnnouncement, CompactChange, CompactCourse, CompactItem, CompactPersonal, CompactSnapshot, ProposalPayload, ToolName, ToolRow } from "@nova-agent/protocol";
 import { z } from "zod";
 
 export type ToolContext = { snapshot: CompactSnapshot };
 
-export type ToolResult = { ok: true; summary: string; data: unknown; rows: ToolRow[] } | { ok: false; error: string };
+/** An action a tool suggests. The loop turns it into a `proposal` event; nothing here carries it out. */
+export type ToolProposal = { label: string; payload: ProposalPayload };
+
+/** `error` is what the model reads. `note`, when present, is a short line for the student, shown instead of it. */
+export type ToolResult = { ok: true; summary: string; data: unknown; rows: ToolRow[]; proposal?: ToolProposal } | { ok: false; error: string; note?: string };
 
 export type ToolSpec<I = unknown> = {
   name: ToolName;
@@ -11,6 +15,8 @@ export type ToolSpec<I = unknown> = {
   input: z.ZodType<I, unknown>;
   /** OpenAI-style JSON schema for `input`, derived from the zod schema. */
   jsonSchema: Record<string, unknown>;
+  /** True for a tool the panel runs. The loop validates its arguments, then asks the panel instead of calling `run`. */
+  client?: true;
   run(input: I, context: ToolContext): ToolResult;
 };
 
@@ -91,8 +97,21 @@ export const itemRow = (snapshot: CompactSnapshot, item: CompactItem): ToolRow =
   dueLocal: item.dueLocal,
   bucket: item.bucket,
   status: item.status,
+  ...(item.doneLocally ? { doneLocally: true } : {}),
   url: item.url,
   priority: item.priority,
+});
+
+export const personalRow = (snapshot: CompactSnapshot, deadline: CompactPersonal): ToolRow => ({
+  kind: "personal",
+  id: deadline.id,
+  title: deadline.title,
+  courseId: deadline.courseId,
+  courseName: deadline.courseId ? courseName(snapshot, deadline.courseId) : null,
+  dueAt: deadline.dueAt,
+  dueLocal: deadline.dueLocal,
+  bucket: deadline.bucket,
+  done: deadline.done,
 });
 
 export const announcementRow = (snapshot: CompactSnapshot, announcement: CompactAnnouncement): ToolRow => ({
@@ -137,6 +156,20 @@ export const itemData = (snapshot: CompactSnapshot, item: CompactItem) => ({
   points: item.pointsPossible,
   earnedScore: item.earnedScore ?? null,
   priority: item.priority,
+  ...(item.doneLocally ? { markedDoneByStudent: true } : {}),
+  ...(item.attachments && item.attachments.length > 0 ? { files: item.attachments.map((file) => ({ fileId: file.id, name: file.name, from: file.source === "instructor" ? "the instructor" : "the student's submission" })) } : {}),
+});
+
+/** A deadline the student typed in. `source` keeps it from being read as a Brightspace item. */
+export const personalData = (snapshot: CompactSnapshot, deadline: CompactPersonal) => ({
+  id: deadline.id,
+  source: deadline.fromPlan ? "a slot from a study plan the student added to the Week tab, not a separate task" : "added by the student, not in Brightspace",
+  title: deadline.title,
+  course: deadline.courseId ? courseName(snapshot, deadline.courseId) : null,
+  due: deadline.dueLocal,
+  dueDate: deadline.dueDate,
+  bucket: deadline.bucket,
+  done: deadline.done,
 });
 
 export const changeData = (snapshot: CompactSnapshot, change: CompactChange) => ({
@@ -150,6 +183,9 @@ export const changeData = (snapshot: CompactSnapshot, change: CompactChange) => 
   after: change.after ? { due: change.after.dueLocal ?? change.after.dueAt, status: change.after.status, visibility: change.after.visibility, score: change.after.score, pointsPossible: change.after.pointsPossible } : null,
   read: change.read,
 });
+
+/** Every item title a row shows, so an answer that names one counts as looked up. A plan day shows the titles in its slots. */
+export const rowTitles = (row: ToolRow): string[] => (row.kind === "plan-day" ? row.slots.map((slot) => slot.title) : [row.title]);
 
 export const plural = (count: number, one: string, many = `${one}s`): string => `${count} ${count === 1 ? one : many}`;
 

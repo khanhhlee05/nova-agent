@@ -26,7 +26,7 @@ const titles = (rows: ToolRow[]) => rows.map((row) => row.title);
 describe("tool schemas", () => {
   it("expose OpenAI-style function definitions without $schema and with optional fields not required", () => {
     const defs = toolSchemasForModel();
-    expect(defs.map((def) => def.function.name)).toEqual(["get_brief", "list_deadlines", "get_item_details", "get_recent_announcements", "get_changes"]);
+    expect(defs.map((def) => def.function.name)).toEqual(["get_brief", "list_deadlines", "get_item_details", "get_recent_announcements", "get_changes", "build_study_plan", "get_course_load", "propose_mark_done", "propose_hide", "propose_mark_read", "propose_personal_deadline"]);
     for (const def of defs) {
       expect(def.type).toBe("function");
       expect(def.function.description.length).toBeGreaterThan(20);
@@ -48,7 +48,7 @@ describe("tool schemas", () => {
     if (!bad.ok) expect(bad.error).toContain("range");
     expect(run("get_item_details", {}, baseline).ok).toBe(false);
     expect(run("list_deadlines", { course: "Underwater Basket Weaving" }, baseline)).toMatchObject({ ok: false, error: expect.stringContaining("No course matches") });
-    expect(TOOLS).toHaveLength(5);
+    expect(TOOLS).toHaveLength(11);
   });
 });
 
@@ -96,7 +96,7 @@ describe("list_deadlines", () => {
     const micro = ok(run("list_deadlines", { range: "all", course: "micro" }, baseline));
     expect(titles(micro.rows)).toEqual(expect.arrayContaining(["Lab 3: Timer Interrupts", "Lab 2: GPIO and Debouncing", "Project Proposal", "Quiz 2: Interrupt Latency"]));
     expect(titles(micro.rows)).not.toContain("Lab 1: Toolchain Setup");
-    expect(micro.rows.every((row) => row.courseName === "Microcontrollers")).toBe(true);
+    expect(micro.rows.every((row) => row.kind === "item" && row.courseName === "Microcontrollers")).toBe(true);
     const withDone = ok(run("list_deadlines", { range: "all", course: "ECE-2042-001", includeDone: true }, baseline));
     expect(titles(withDone.rows)).toContain("Lab 1: Toolchain Setup");
     const quizzes = ok(run("list_deadlines", { range: "all", kind: "quiz" }, baseline));
@@ -123,7 +123,7 @@ describe("list_deadlines periods", () => {
     expect(titles(now.rows)).toEqual(["Quiz 3: Serial Protocols", "Project Proposal"]);
     expect(now.summary).toBe("2 items due next week (Sep 14 to Sep 20).");
     const micro = ok(run("list_deadlines", { range: "next-week", course: "micro" }, changed));
-    expect(micro.rows.every((row) => row.courseName === "Microcontrollers")).toBe(true);
+    expect(micro.rows.every((row) => row.kind === "item" && row.courseName === "Microcontrollers")).toBe(true);
     expect(micro.summary).toContain("in Microcontrollers");
   });
 
@@ -193,10 +193,97 @@ describe("get_changes", () => {
     const row = moved.rows[0];
     expect(row?.kind === "change" && row.before?.dueLocal && row.after?.dueLocal).toBeTruthy();
     const micro = ok(run("get_changes", { course: "31001", since: "today" }, changed));
-    expect(micro.rows.every((change) => change.courseName === "Microcontrollers")).toBe(true);
+    expect(micro.rows.every((change) => change.kind === "change" && change.courseName === "Microcontrollers")).toBe(true);
     expect(titles(micro.rows)).toEqual(expect.arrayContaining(["Lab 3: Timer Interrupts", "Quiz 3: Serial Protocols", "Lab 3 deadline extended"]));
     const read = { ...changed, changes: changed.changes.map((change, index) => ({ ...change, read: index === 0 })) };
     expect(ok(run("get_changes", { unreadOnly: true }, read)).rows).toHaveLength(changed.changes.length - 1);
     expect(ok(run("get_changes", {}, baseline)).rows).toEqual([]);
+  });
+});
+
+describe("done marks and the student's own deadlines", () => {
+  const at = (offsetDays: number, hour = 12) => new Date(NOW.getTime() + offsetDays * 86_400_000 + (hour - 14) * 3_600_000).toISOString();
+  const withLocalState = async (): Promise<CompactSnapshot> => {
+    const current = await demoSnapshot("baseline", NOW);
+    const lab3 = current.items.find((item) => item.title === "Lab 3: Timer Interrupts");
+    if (!lab3) throw new Error("fixture changed");
+    const micro = lab3.courseId;
+    return compactSnapshot(current, [], NOW, {
+      mode: "demo",
+      timezone: "America/New_York",
+      localDone: new Set([lab3.key]),
+      personal: [
+        { id: "personal-today", title: "Email lab partner", dueAt: at(0, 21), courseId: micro, completedAt: null },
+        { id: "personal-week", title: "Office hours with Dr. Rao", dueAt: at(3), courseId: null, completedAt: null },
+        { id: "personal-next", title: "Order parts for the project", dueAt: at(8), courseId: micro, completedAt: null },
+        { id: "personal-done", title: "Print the lab sheet", dueAt: at(1), courseId: micro, completedAt: at(0) },
+        { id: "personal-late", title: "Return the oscilloscope", dueAt: at(-1), courseId: null, completedAt: null },
+      ],
+    });
+  };
+
+  it("leaves an item marked done out of the week and brings it back with includeDone, flagged", async () => {
+    const snapshot = await withLocalState();
+    const week = ok(run("list_deadlines", {}, snapshot));
+    expect(titles(week.rows)).not.toContain("Lab 3: Timer Interrupts");
+    const withDone = ok(run("list_deadlines", { range: "all", includeDone: true, includePersonal: false }, snapshot));
+    const row = withDone.rows.find((entry) => entry.title === "Lab 3: Timer Interrupts");
+    expect(row).toMatchObject({ kind: "item", bucket: "completed", doneLocally: true, status: "not-started" });
+    const data = withDone.data as { items: { title: string; markedDoneByStudent?: boolean }[] };
+    expect(data.items.find((item) => item.title === "Lab 3: Timer Interrupts")?.markedDoneByStudent).toBe(true);
+    expect(data.items.find((item) => item.title === "Problem Set 6: Fourier Series")?.markedDoneByStudent).toBeUndefined();
+    expect(withDone.rows.every((entry) => entry.kind === "item")).toBe(true);
+    const brief = ok(run("get_brief", {}, snapshot));
+    expect((brief.data as { nextMove: { title: string } | null }).nextMove?.title).not.toBe("Lab 3: Timer Interrupts");
+  });
+
+  it("lists the student's own deadlines for the same period in their own list and rows", async () => {
+    const snapshot = await withLocalState();
+    const week = ok(run("list_deadlines", {}, snapshot));
+    const own = week.rows.filter((row) => row.kind === "personal");
+    expect(own.map((row) => row.title)).toEqual(["Email lab partner", "Office hours with Dr. Rao"]);
+    expect(own[0]).toMatchObject({ id: "personal-today", courseName: "Microcontrollers", bucket: "today", done: false });
+    expect(own[1]).toMatchObject({ courseId: null, courseName: null });
+    expect(week.summary).toMatch(/, plus 2 of your own deadlines\.$/);
+    // Brightspace rows come first and are never mixed with the student's own.
+    expect(week.rows.findIndex((row) => row.kind === "personal")).toBe(week.rows.filter((row) => row.kind === "item").length);
+    const data = week.data as { total: number; items: unknown[]; ownDeadlines: { source: string; title: string }[] };
+    expect(data.ownDeadlines.map((entry) => entry.title)).toEqual(["Email lab partner", "Office hours with Dr. Rao"]);
+    expect(data.ownDeadlines[0]?.source).toContain("not in Brightspace");
+    expect(data.total).toBe(week.rows.filter((row) => row.kind === "item").length);
+  });
+
+  it("applies range, window, course, and done filters to the student's own deadlines, and no kind or long-overdue", async () => {
+    const snapshot = await withLocalState();
+    const own = (args: unknown) => ok(run("list_deadlines", args, snapshot)).rows.filter((row) => row.kind === "personal").map((row) => row.title);
+    expect(own({ range: "overdue" })).toEqual(["Return the oscilloscope"]);
+    expect(own({ range: "long-overdue" })).toEqual([]);
+    expect(own({ range: "next-week" })).toEqual(["Order parts for the project"]);
+    expect(own({ from: "2026-09-11", to: "2026-09-11" })).toEqual(["Office hours with Dr. Rao"]);
+    expect(own({ range: "all", course: "micro" })).toEqual(["Email lab partner", "Order parts for the project"]);
+    expect(own({ range: "all", course: "micro", includeDone: true })).toEqual(["Email lab partner", "Print the lab sheet", "Order parts for the project"]);
+    expect(own({ range: "week", kind: "quiz" })).toEqual([]);
+    expect(own({ range: "week", includePersonal: false })).toEqual([]);
+    const none = ok(run("list_deadlines", { range: "week", includePersonal: false }, snapshot));
+    expect(none.summary).not.toContain("your own");
+    expect("ownDeadlines" in (none.data as object)).toBe(false);
+  });
+
+  it("adds the student's own deadlines to the brief without changing counts or the next move", async () => {
+    const snapshot = await withLocalState();
+    const plain = compactSnapshot(await demoSnapshot("baseline", NOW), [], NOW, { mode: "demo", timezone: "America/New_York" });
+    const brief = ok(run("get_brief", {}, snapshot));
+    const data = brief.data as { counts: CompactSnapshot["counts"]; ownDeadlines: { title: string }[] };
+    expect(data.ownDeadlines.map((entry) => entry.title)).toEqual(["Return the oscilloscope", "Email lab partner", "Office hours with Dr. Rao"]);
+    expect(data.counts).toEqual(snapshot.counts);
+    expect(snapshot.counts.overdue).toBe(plain.counts.overdue);
+    expect(snapshot.counts.today).toBe(plain.counts.today);
+    // Only what is late or due today rides along as rows.
+    expect(brief.rows.filter((row) => row.kind === "personal").map((row) => row.title)).toEqual(["Return the oscilloscope", "Email lab partner"]);
+    expect(brief.rows.filter((row) => row.kind === "item").length).toBeLessThanOrEqual(8);
+    const quiet = ok(run("get_brief", {}, baseline));
+    expect("ownDeadlines" in (quiet.data as object)).toBe(false);
+    expect("hiddenByStudent" in (quiet.data as object)).toBe(false);
+    expect((ok(run("get_brief", {}, { ...baseline, hiddenCount: 2 })).data as { hiddenByStudent: number }).hiddenByStudent).toBe(2);
   });
 });

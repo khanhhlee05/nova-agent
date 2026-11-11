@@ -16,9 +16,9 @@ Implemented in the first vertical slice (features A–D):
 - **Mission Control**: Chrome side panel with Focus, Week, and Changes tabs, launched from a Nova Orb injected into Brightspace.
 - **Since Your Last Visit**: local snapshots and a semantic diff that avoids false positives and duplicate events.
 - **Priority engine**: deterministic, explainable scoring in `packages/planner`.
-- **Ask Nova**: a chat tab over the same data, answered by a small Node API that calls an OpenRouter model with read-only tools. Off until the student turns it on. See [docs/ASK_NOVA.md](docs/ASK_NOVA.md).
+- **Ask Nova**: a chat tab over the same data, answered by a small Node API that calls an OpenRouter model with read-only tools. It honors done marks and personal deadlines, builds study plans, suggests local actions that wait for a confirmation, can save conversations on the device, and can read assignment files and a course's Content area on the device when the student allows it. Off until the student turns it on. See [docs/ASK_NOVA.md](docs/ASK_NOVA.md).
 
-Planned next: sign-in and saved conversations, Google Calendar sync, ICS export, study planning.
+Ask Nova also streams its answers, checks dates, points, and quotations against the data, and answers its own suggested questions on the device when the server cannot. The API can also run for a class instead of one person: with `AUTH_MODE=google` students sign in with Google and use is counted per student (see **Hosted mode** in [docs/ASK_NOVA.md](docs/ASK_NOVA.md)). Saved conversations can follow a signed-in student to another device when they choose that. Not built: Google Calendar sync and a live deployment. See [docs/ASK_NOVA_PLAN.md](docs/ASK_NOVA_PLAN.md) and [docs/BACKEND_PLAN.md](docs/BACKEND_PLAN.md). 
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/BRIGHTSPACE_ACCESS.md](docs/BRIGHTSPACE_ACCESS.md) for the data flow and the authentication outcome.
 

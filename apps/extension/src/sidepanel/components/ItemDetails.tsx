@@ -1,9 +1,10 @@
 import type { AcademicItem, Course } from "@nova-agent/core";
 import { BAND_LABELS, COMPONENT_LABELS, COMPONENT_MAX, describePriority, explainPriority, priorityBand, type RankedItem } from "@nova-agent/planner";
-import { ChevronDown, ExternalLink, EyeOff } from "lucide-react";
+import { ChevronDown, ExternalLink, EyeOff, MessageCircleQuestionMark } from "lucide-react";
 import { useState } from "react";
 import { formatExact, formatRelative } from "../format";
 import { KIND_LABELS, STATUS_LABELS } from "../model";
+import { ItemFiles, type AttachmentControls } from "./ItemFiles";
 
 export type ItemDetailsProps = {
   item: AcademicItem;
@@ -17,10 +18,14 @@ export type ItemDetailsProps = {
   onDismiss?: () => void;
   /** When the student marked the item done on this device, if they did. */
   markedAt?: string | null;
+  /** Starts an Ask Nova question about this item. Absent when Ask is off. */
+  onAsk?: () => void;
+  /** Lets the student read the assignment's files. Without it the files are listed by name only. */
+  files?: AttachmentControls;
 };
 
 /** Shared detail body used by the Focus row expansion and the Week popover. */
-export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headingLevel = "h4", onDismiss, markedAt = null }: ItemDetailsProps) => {
+export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headingLevel = "h4", onDismiss, markedAt = null, onAsk, files }: ItemDetailsProps) => {
   const [showBreakdown, setShowBreakdown] = useState(false);
   // Up to three reasons here; the hero shows two. Every non-zero part is in the breakdown below.
   const reasons = ranked ? explainPriority(item, ranked.priority, 3) : [];
@@ -107,11 +112,18 @@ export const ItemDetails = ({ item, course, ranked, now, canOpen, onOpen, headin
       ) : (
         <p className="muted">Not ranked: {item.status === "submitted" || item.status === "completed" || markedAt ? "already done." : "not yet available."}</p>
       )}
+      <ItemFiles item={item} now={now} controls={files} />
       <div className="card-actions">
         {link ? (
           <button type="button" className="button button-sm" onClick={() => onOpen(link)}>
             <ExternalLink size={14} aria-hidden="true" />
             {canOpen ? "Open in Brightspace" : "Open course"}
+          </button>
+        ) : null}
+        {onAsk ? (
+          <button type="button" className="button button-sm" onClick={onAsk}>
+            <MessageCircleQuestionMark size={14} aria-hidden="true" />
+            Ask Nova about this
           </button>
         ) : null}
         {onDismiss ? (

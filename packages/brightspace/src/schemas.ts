@@ -18,6 +18,13 @@ const richText = z
   .nullable()
   .optional();
 
+/** A file as D2L lists it on a dropbox folder or a submission. The size is in bytes. */
+export const fileRefSchema = z.object({ FileId: id, FileName: z.string(), Size: z.number().nullable().optional() });
+export type FileRef = z.infer<typeof fileRefSchema>;
+
+// A malformed entry in a file list must never fail the whole folder: the list is dropped, the assignment stays.
+const fileList = z.array(fileRefSchema).nullable().optional().catch(undefined);
+
 export const productVersionSchema = z.object({
   ProductCode: z.string(),
   LatestVersion: z.string().nullable().optional(),
@@ -69,6 +76,8 @@ export const dropboxFolderSchema = z.object({
   /** D2L SUBMISSIONTYPE_T: 0 file, 1 text, 2 on paper, 3 observed in person. */
   SubmissionType: z.number().nullable().optional(),
   CustomInstructions: richText,
+  /** Files the instructor attached to the assignment. */
+  Attachments: fileList,
 });
 export type DropboxFolder = z.infer<typeof dropboxFolderSchema>;
 export const dropboxFoldersSchema = z.array(dropboxFolderSchema);
@@ -80,7 +89,7 @@ export const entityDropboxSchema = z.object({
   CompletionDate: isoDate,
   /** Instructor feedback; `Score` is the earned score when the item has been graded. */
   Feedback: z.object({ Score: z.number().nullable().optional(), IsGraded: z.boolean().nullable().optional() }).nullable().optional(),
-  Submissions: z.array(z.object({ Id: id.optional(), SubmissionDate: isoDate })).optional().default([]),
+  Submissions: z.array(z.object({ Id: id.optional(), SubmissionDate: isoDate, Files: fileList })).optional().default([]),
 });
 export type EntityDropbox = z.infer<typeof entityDropboxSchema>;
 export const mySubmissionsSchema = z.array(entityDropboxSchema);
@@ -118,3 +127,42 @@ export const newsItemSchema = z.object({
 });
 export type NewsItem = z.infer<typeof newsItemSchema>;
 export const newsListSchema = z.array(newsItemSchema);
+
+export type TocTopic = { TopicId: string; Title: string; TypeIdentifier?: string | null | undefined; Url?: string | null | undefined; IsHidden?: boolean | undefined; LastModifiedDate: string | null };
+export type TocModule = { ModuleId: string; Title: string; IsHidden?: boolean | undefined; Modules: TocModule[]; Topics: TocTopic[] };
+
+export const tocTopicSchema = z.object({
+  TopicId: id,
+  Title: z.string(),
+  /** "File" for an uploaded file or an HTML page, "Link" for an address; other values exist. */
+  TypeIdentifier: z.string().nullable().optional(),
+  Url: z.string().nullable().optional(),
+  IsHidden: z.boolean().optional(),
+  LastModifiedDate: isoDate,
+});
+
+// A module may hold modules. One malformed topic or module is dropped on its own; its siblings stay.
+const listOf = <T>(schema: z.ZodType<T>) =>
+  z
+    .array(z.unknown())
+    .nullable()
+    .optional()
+    .transform((entries): T[] =>
+      (entries ?? []).flatMap((entry) => {
+        const parsed = schema.safeParse(entry);
+        return parsed.success ? [parsed.data] : [];
+      }),
+    );
+
+export const tocModuleSchema: z.ZodType<TocModule> = z.lazy(() =>
+  z.object({
+    ModuleId: id,
+    Title: z.string(),
+    IsHidden: z.boolean().optional(),
+    Modules: listOf(tocModuleSchema),
+    Topics: listOf(tocTopicSchema as z.ZodType<TocTopic>),
+  }),
+) as z.ZodType<TocModule>;
+
+export const contentTocSchema = z.object({ Modules: listOf(tocModuleSchema) });
+export type ContentToc = z.infer<typeof contentTocSchema>;

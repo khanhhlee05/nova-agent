@@ -1,9 +1,10 @@
 import { z } from "zod";
-import { courseName, defineTool, dueOrder, itemData, itemRow, plural } from "./shared";
+import { personalSoon } from "../prompt";
+import { courseName, defineTool, dueOrder, itemData, itemRow, personalData, personalRow, plural } from "./shared";
 
 export const getBrief = defineTool({
   name: "get_brief",
-  description: "Overview of the student's workload right now: counts, the single next move with its reasons, what is overdue, what is due today, and the next few upcoming deadlines. Call this for questions like 'what should I do first' or 'how bad is this week'.",
+  description: "Overview of the student's workload right now: counts, the single next move with its reasons, what is overdue, what is due today, the next few upcoming deadlines, and the student's own deadlines for the next seven days. Call this for questions like 'what should I do first' or 'how bad is this week'.",
   input: z.object({}),
   run: (_input, { snapshot }) => {
     const active = snapshot.items.filter((item) => item.bucket !== "completed" && !item.longOverdue);
@@ -17,6 +18,9 @@ export const getBrief = defineTool({
       .sort(dueOrder)
       .slice(0, 5);
     const rows = [...(nextMove ? [nextMove] : []), ...overdue, ...today].filter((item, index, list) => list.findIndex((other) => other.id === item.id) === index).slice(0, 8);
+    // The student's own deadlines never change the counts or the next move; they ride along so "what is on my plate" is complete.
+    const own = personalSoon(snapshot);
+    const ownNow = own.filter((deadline) => deadline.bucket === "overdue" || deadline.bucket === "today").slice(0, 3);
     const summary = nextMove
       ? `${plural(snapshot.counts.overdue, "overdue item")}, ${plural(snapshot.counts.today, "item")} due today${longOverdue > 0 ? `, ${longOverdue} long overdue not counted` : ""}. Start with ${nextMove.title}.`
       : "Nothing active right now.";
@@ -34,8 +38,10 @@ export const getBrief = defineTool({
         longOverdue,
         dueToday: today.map((item) => itemData(snapshot, item)),
         upcoming: upcoming.map((item) => itemData(snapshot, item)),
+        ...(own.length > 0 ? { ownDeadlines: own.slice(0, 5).map((deadline) => personalData(snapshot, deadline)) } : {}),
+        ...(snapshot.hiddenCount ? { hiddenByStudent: snapshot.hiddenCount } : {}),
       },
-      rows: rows.map((item) => itemRow(snapshot, item)),
+      rows: [...rows.map((item) => itemRow(snapshot, item)), ...ownNow.map((deadline) => personalRow(snapshot, deadline))],
     };
   },
 });

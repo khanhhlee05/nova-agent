@@ -9,7 +9,7 @@ import { z } from "zod";
  * Time-zone facts (buckets, local date strings, days ago) are computed in the
  * browser so a server in any zone reads the same "today" the student sees.
  */
-export const COMPACT_LIMITS = { courses: 12, items: 200, announcements: 30, changes: 60, title: 200, reasons: 3 } as const;
+export const COMPACT_LIMITS = { courses: 12, items: 200, announcements: 30, changes: 60, personal: 100, title: 200, reasons: 3, attachments: 10, fileName: 120, materials: 80 } as const;
 
 const title = z.string().min(1).max(COMPACT_LIMITS.title);
 const iso = z.string().min(1);
@@ -24,14 +24,41 @@ export type CompactBucket = z.infer<typeof compactBucketSchema>;
 export const compactItemStatusSchema = z.enum(["not-started", "in-progress", "submitted", "completed", "unknown"]);
 export const compactItemKindSchema = z.enum(["assignment", "quiz"]);
 
+/** One topic of a course's Content area, by name. Never its contents. */
+export const compactMaterialSchema = z.object({
+  id: z.string().min(1).max(12),
+  title: z.string().min(1).max(COMPACT_LIMITS.fileName),
+  /** The modules it sits under, joined with " › ". */
+  module: z.string().max(COMPACT_LIMITS.title),
+  type: z.enum(["file", "page", "link", "other"]),
+  /** Whether its text has been read on the device, so a search can find it. */
+  read: z.boolean(),
+});
+export type CompactMaterial = z.infer<typeof compactMaterialSchema>;
+
 export const compactCourseSchema = z.object({
   id: z.string().min(1),
   name: title,
   code: z.string().max(64).nullable(),
   homeUrl: safeUrl,
   active: z.boolean(),
+  /**
+   * The course's Content topics, by name. Present only for a course whose materials the student has let Nova
+   * read; its presence, even empty, is what tells the model the course can be searched.
+   */
+  materials: z.array(compactMaterialSchema).max(COMPACT_LIMITS.materials).optional(),
 });
 export type CompactCourse = z.infer<typeof compactCourseSchema>;
+
+/** A file on an assignment, by name. The bytes and the text never ride in the snapshot. */
+export const compactAttachmentSchema = z.object({
+  id: z.string().min(1).max(12),
+  name: z.string().min(1).max(COMPACT_LIMITS.fileName),
+  size: z.number().int().min(0).nullable(),
+  /** `instructor`: attached to the assignment. `submission`: handed in by the student. */
+  source: z.enum(["instructor", "submission"]),
+});
+export type CompactAttachment = z.infer<typeof compactAttachmentSchema>;
 
 export const compactItemSchema = z.object({
   /** Short id: kind initial plus the Brightspace source id, for example "a4101" or "q5101". */
@@ -48,16 +75,47 @@ export const compactItemSchema = z.object({
   /** Overdue for more than two weeks (usually closed or never updated). Still in the `overdue` bucket; optional for older clients. */
   longOverdue: z.boolean().optional(),
   status: compactItemStatusSchema,
+  /**
+   * The student marked this done on this device while Brightspace still lists it as open. Such an item sits in the
+   * `completed` bucket and is never ranked, the same as on the Focus tab. Optional for older clients.
+   */
+  doneLocally: z.boolean().optional(),
   visibility: z.enum(["visible", "scheduled", "unknown"]),
   pointsPossible: z.number().nullable(),
   /** Earned score Brightspace reported, when graded. Optional for older clients. */
   earnedScore: z.number().nullable().optional(),
   url: safeUrl.nullable(),
+  /**
+   * Minutes the planner estimates the work takes, for study plans. An estimate from kind, points, and time limit:
+   * Brightspace does not report effort. Only on open items; optional for older clients.
+   */
+  estimateMinutes: z.number().int().min(15).max(1440).optional(),
   /** Priority score 0..100 from the planner, null when the item is not rankable. */
   priority: z.number().int().min(0).max(100).nullable(),
   reasons: z.array(z.string().max(160)).max(COMPACT_LIMITS.reasons),
+  /** Names of the files on the assignment. Sent only while the student lets Ask Nova read attachments. */
+  attachments: z.array(compactAttachmentSchema).max(COMPACT_LIMITS.attachments).optional(),
 });
 export type CompactItem = z.infer<typeof compactItemSchema>;
+
+/**
+ * A deadline the student typed in on the Week tab. Kept apart from `items` so counts, ranking, and the
+ * brief stay identical to the panel, which never mixes the two.
+ */
+export const compactPersonalSchema = z.object({
+  id: z.string().min(1).max(80),
+  title,
+  /** A course of the student's, or null for "no course". */
+  courseId: z.string().min(1).nullable(),
+  dueAt: iso,
+  dueLocal: localDate,
+  dueDate: calendarDateSchema,
+  bucket: compactBucketSchema,
+  done: z.boolean(),
+  /** True for a slot of a study plan the student added to the Week tab, so it is not read as a separate task. */
+  fromPlan: z.boolean().optional(),
+});
+export type CompactPersonal = z.infer<typeof compactPersonalSchema>;
 
 export const compactAnnouncementSchema = z.object({
   id: z.string().min(2).max(40),
@@ -138,8 +196,11 @@ export const compactCalendarSchema = z.object({
 export type CompactCalendar = z.infer<typeof compactCalendarSchema>;
 
 export const compactSnapshotSchema = z.object({
-  /** 2 added `dueDate` and `calendar`. An older extension gets a clear bad_request, not a field error. */
-  version: z.literal(2),
+  /**
+   * 2 added `dueDate` and `calendar`. 3 added done marks, the student's own deadlines, and the hidden count;
+   * every field 3 added is optional, so a version 2 client still gets answers.
+   */
+  version: z.union([z.literal(2), z.literal(3)]),
   mode: z.enum(["live", "demo"]),
   now: iso,
   timezone: z.string().min(1).max(64),
@@ -152,5 +213,9 @@ export const compactSnapshotSchema = z.object({
   changes: z.array(compactChangeSchema).max(COMPACT_LIMITS.changes),
   counts: compactCountsSchema,
   calendar: compactCalendarSchema,
+  /** The student's own deadlines: open ones, plus ones finished in the last two weeks. */
+  personal: z.array(compactPersonalSchema).max(COMPACT_LIMITS.personal).optional(),
+  /** How many items the student hid for this session. Their contents are not sent. */
+  hiddenCount: z.number().int().min(0).optional(),
 });
 export type CompactSnapshot = z.infer<typeof compactSnapshotSchema>;

@@ -1,9 +1,10 @@
-import { normalizeOrigin, type AcademicItem, type Announcement, type Course } from "@nova-agent/core";
+import { normalizeOrigin, type AcademicItem, type Announcement, type Course, type CourseMaterial } from "@nova-agent/core";
 import { BrightspaceFailure, fail, isFatalForSync, toBrightspaceError, type BrightspaceError } from "./errors";
-import { isCourseOffering, toAnnouncement, toAssignment, toCourse, toQuiz, type StatusSource } from "./normalize";
+import { isCourseOffering, toAnnouncement, toAssignment, toCourse, toMaterials, toQuiz, type StatusSource } from "./normalize";
 import { collectBookmarkPages, collectNextPages } from "./paging";
 import { routes } from "./routes";
 import {
+  contentTocSchema,
   dropboxFoldersSchema,
   enrollmentsPageSchema,
   mySubmissionsSchema,
@@ -159,6 +160,14 @@ export class BrightspaceClient {
 
   listNews(orgUnitId: string, since?: string): Promise<NewsItem[]> {
     return this.withVersions("le", ({ le }) => this.transport.getJson(routes.news(le, orgUnitId, { since }), newsListSchema));
+  }
+
+  /**
+   * The topics of one course's Content area, by name and place. One request, no files. Not part of a
+   * refresh: it is asked for only for a course whose materials the student has Nova read.
+   */
+  listMaterials(orgUnitId: string): Promise<CourseMaterial[]> {
+    return this.withVersions("le", async ({ le }) => toMaterials(await this.transport.getJson(routes.contentToc(le, orgUnitId), contentTocSchema), orgUnitId, this.tenantOrigin));
   }
 
   /**

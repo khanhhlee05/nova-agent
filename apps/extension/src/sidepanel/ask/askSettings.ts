@@ -8,11 +8,28 @@ export type AskSettings = {
   apiBaseUrl: string;
   /** Optional shared bearer token for a locally run API. Null when the API has none. */
   token: string | null;
+  /**
+   * Off by default: the conversation lives in memory and is gone when the panel closes.
+   * On: conversations are kept in the extension's own database on this device until deleted.
+   * Optional so settings saved before it existed still read as off.
+   */
+  persistConversations?: boolean;
+  /**
+   * On by default: Nova may read a file on an assignment when a question needs it, after asking once per session.
+   * Off: files are never read for an answer, and their names are not sent.
+   */
+  readAttachments?: boolean;
+  /** Courses whose Content area the student lets Nova read. Empty by default: each course is turned on by itself. */
+  /** Also keep saved conversations on the Nova server the student is signed in to. Off unless turned on. */
+  syncConversations?: boolean;
+  materialsCourses?: string[];
+  /** Per course, the Content topics the student unticked. */
+  materialsExcluded?: Record<string, string[]>;
 };
 
 export const ASK_SETTINGS_PREFERENCE = "ai.settings";
 
-export const DEFAULT_ASK_SETTINGS: AskSettings = { enabled: false, apiBaseUrl: "http://localhost:8787", token: null };
+export const DEFAULT_ASK_SETTINGS: AskSettings = { enabled: false, apiBaseUrl: "http://localhost:8787", token: null, persistConversations: false, readAttachments: true, materialsCourses: [], materialsExcluded: {} };
 
 export type ApiBaseUrlReason = "invalid" | "insecure";
 export type ApiBaseUrlCheck = { url: string; reason: null } | { url: null; reason: ApiBaseUrlReason };
@@ -54,4 +71,8 @@ export const hostOf = (url: string): string => {
 };
 
 /** Settings saved before the https rule existed: a failing address turns Ask off so the setup card explains why. */
-export const effectiveAskSettings = (settings: AskSettings): AskSettings => (normalizeApiBaseUrl(settings.apiBaseUrl) === null ? { ...settings, enabled: false } : settings);
+export const effectiveAskSettings = (stored: AskSettings): AskSettings => {
+  // Settings saved by an older build lack the newer keys; they read as the defaults.
+  const settings = { ...DEFAULT_ASK_SETTINGS, ...stored };
+  return normalizeApiBaseUrl(settings.apiBaseUrl) === null ? { ...settings, enabled: false } : settings;
+};

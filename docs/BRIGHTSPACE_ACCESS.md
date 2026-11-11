@@ -62,7 +62,33 @@ Routes used by features A–D:
 
 OAuth 2 scopes that cover them: `core:*:*`, `enrollment:orgunit:read`, `dropbox:folders:read`, `quizzing:quizzes:read`, `news:access:read`. Both lists are exported from `packages/brightspace` as `REQUIRED_READ_ONLY_ROUTES` and `REQUIRED_OAUTH_SCOPES`.
 
-Deliberately not used: quiz attempt routes (unreliable for learners, so quiz status is always `unknown`), calendar routes, any page scraping, and any undocumented endpoint.
+### Optional: assignment files (Ask Nova only)
+
+Used only when the student lets Ask Nova read assignment files, and only for a file they asked about. Not needed by Mission Control.
+
+| Route | Purpose |
+|---|---|
+| `GET /d2l/api/le/{v}/{orgUnitId}/dropbox/folders/{folderId}/attachments/{fileId}` | A file the instructor attached to an assignment |
+| `GET /d2l/api/le/{v}/{orgUnitId}/dropbox/folders/{folderId}/submissions/{submissionId}/files/{fileId}` | A file from the student's own submission |
+
+The file names and sizes come from the two dropbox routes above (`Attachments` on a folder, `Files` on a submission); no extra request is made during a refresh.
+
+### Optional: course materials (Ask Nova only)
+
+Used only for a course whose materials the student turned on in the Ask tab. A course that is off is never asked about its Content area.
+
+| Route | Purpose |
+|---|---|
+| `GET /d2l/api/le/{v}/{orgUnitId}/content/toc` | The course's table of contents: module and topic names, kinds, last-modified times (JSON) |
+| `GET /d2l/api/le/{v}/{orgUnitId}/content/topics/{topicId}/file` | One topic's file, for topics that are files or pages |
+
+The table of contents is requested once when a course is turned on and once after each refresh. A topic's file is downloaded once, and again only when its last-modified time changes. Per course: at most 60 files and 150 MB, one request at a time, and reading stops on a sign-in page or a 429. The address Brightspace lists for a link topic is never requested or stored.
+
+All four optional routes are exported as `OPTIONAL_FILE_ROUTES`. Which OAuth scopes cover them has not been confirmed on the Villanova tenant.
+
+Whether the tenant serves these to a session is a separate check, **Check file access** in the Connection report (live mode only, after a refresh). It asks each download route for the headers of one file (an instructor attachment and a submitted file the last refresh found, and one topic of a course whose materials are on), records the status, content type, and size, and nothing else: no body is read, and no file name or id is kept. A route with no file to try is reported as not tested. Result on the Villanova tenant: not yet run.
+
+Deliberately not used: Content module and topic detail routes (the table of contents is enough), quiz attempt routes (unreliable for learners, so quiz status is always `unknown`), calendar routes, any page scraping, and any undocumented endpoint.
 
 ## Next step if authorization is required
 
@@ -78,4 +104,5 @@ Deliberately not used: quiz attempt routes (unreliable for learners, so quiz sta
 - Network failures and `5xx` retry at most three times with exponential backoff and jitter. `401`, `403`, `404`, and validation failures never retry.
 - Login redirects and HTML bodies map to `session-expired`, not parse errors.
 - `404` on an optional per-course resource becomes a non-blocking warning. A failed course never invalidates successful ones. Session expiry, an unsupported API version, or an unrecoverable rate limit aborts the whole sync.
+- File downloads go through their own bridge message and never through the JSON one. The content script accepts only a path the allowlist marks as a file route, streams the body, and stops at a cap (10 MB for an assignment file, 20 MB at the most whatever is asked for). One attempt, a 30-second timeout, no retry. A login redirect maps to `session-expired`; an HTML body alone does not, because the file may be HTML.
 - Pagination follows `PagingInfo.Bookmark`/`HasMoreItems` and `Next`/`Objects`, stops on a repeated bookmark or URL, and caps at 50 pages. `Next` URLs must match the tenant origin and start with `/d2l/api/`.
