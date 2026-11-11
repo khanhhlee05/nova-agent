@@ -1,4 +1,4 @@
-import type { AskEvent, ChatMessage, CompactSnapshot, ModelUsage, ToolName } from "@nova-agent/protocol";
+import type { AskEvent, ChatFocus, ChatMessage, CompactSnapshot, ModelUsage, ToolName } from "@nova-agent/protocol";
 import { checkHonesty } from "./honesty";
 import { ModelError, addUsage, isAbortError, type ChatModel, type ModelMessage, type ToolCall } from "./model";
 import { briefTitles, buildSystemPrompt, quote } from "./prompt";
@@ -10,6 +10,8 @@ export type RunTurnInput = {
   snapshot: CompactSnapshot;
   history: ChatMessage[];
   message: string;
+  /** What the student was looking at; a prompt hint only. */
+  focus?: ChatFocus;
   model: ChatModel;
   tools?: readonly ToolSpec[];
   /** Tool rounds before the model is forced to answer. Default 4. */
@@ -59,11 +61,11 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
   const maxRounds = Math.max(1, input.maxRounds ?? 4);
   const definitions = toolSchemasForModel(tools);
   const messages: ModelMessage[] = [
-    { role: "system", content: buildSystemPrompt(input.snapshot) },
+    { role: "system", content: buildSystemPrompt(input.snapshot, { focus: input.focus }) },
     ...input.history.map((entry): ModelMessage => ({ role: entry.role, content: entry.content })),
     { role: "user", content: input.message },
   ];
-  const allowedTitles = new Set(briefTitles(input.snapshot));
+  const allowedTitles = new Set(briefTitles(input.snapshot, { focus: input.focus }));
   const returnedTitles = new Set<string>();
   const toolNames: ToolName[] = [];
   let usage: ModelUsage | null = null;

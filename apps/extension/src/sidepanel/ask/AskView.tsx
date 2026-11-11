@@ -4,7 +4,8 @@ import { Banner } from "../components/Banners";
 import { Tip } from "../components/Tip";
 import type { Dashboard } from "../model";
 import type { AskClientFactory } from "./askClient";
-import { AskComposer } from "./AskComposer";
+import { AskComposer, type AskAbout, type AskDraft } from "./AskComposer";
+import type { AskLive } from "./AskRows";
 import { hostOf, type AskSettings } from "./askSettings";
 import { AskSetup } from "./AskSetup";
 import { AskThread } from "./AskThread";
@@ -22,10 +23,19 @@ export type AskViewProps = {
   onOpen: (url: string) => void;
   /** Connection and data notices shared with the other tabs, shown above everything else. */
   notices?: ReactNode;
+  /** Live state and row actions for every course. */
+  live?: AskLive;
+  /** A question another tab wrote into the composer. */
+  draft?: AskDraft | null;
+  /** The item that question is about, shown above the composer until sent or cleared. */
+  about?: AskAbout | null;
+  onClearAbout?: () => void;
+  /** Sends from the composer, so the caller can attach the item the question is about. Defaults to `thread.send`. */
+  onSend?: (text: string) => void;
 };
 
 /** The Ask tab body: setup card until enabled, then the thread and the composer. */
-export const AskView = ({ notices, thread, settings, onSettingsChange, clientFactory, dashboard, mode, now, canOpen, onOpen }: AskViewProps) => {
+export const AskView = ({ notices, thread, settings, onSettingsChange, clientFactory, dashboard, mode, now, canOpen, onOpen, live, draft = null, about = null, onClearAbout, onSend }: AskViewProps) => {
   const [editing, setEditing] = useState(false);
   const showSetup = !settings.enabled || editing;
   const streaming = thread.status === "streaming";
@@ -68,14 +78,14 @@ export const AskView = ({ notices, thread, settings, onSettingsChange, clientFac
               <span>Deadlines, what changed, what to start first. Answers cover every course and use the data on this device.</span>
             </div>
           ) : (
-            <AskThread messages={thread.messages} status={thread.status} dashboard={dashboard} now={now} apiBaseUrl={settings.apiBaseUrl} canOpen={canOpen} onOpen={onOpen} onRetry={thread.retryLast} onSettings={() => setEditing(true)} />
+            <AskThread messages={thread.messages} status={thread.status} dashboard={dashboard} now={now} apiBaseUrl={settings.apiBaseUrl} canOpen={canOpen} onOpen={onOpen} onRetry={thread.retryLast} onSettings={() => setEditing(true)} live={live} onAsk={thread.send} />
           )
         ) : null}
         <p className="sr-only" aria-live="polite" aria-atomic="true">
           {thread.announcement ?? ""}
         </p>
       </div>
-      <AskComposer streaming={streaming} disabled={!settings.enabled || editing} onSend={thread.send} onStop={thread.stop} />
+      <AskComposer streaming={streaming} disabled={!settings.enabled || editing} onSend={onSend ?? thread.send} onStop={thread.stop} draft={draft} about={about} onClearAbout={onClearAbout} />
     </div>
   );
 };

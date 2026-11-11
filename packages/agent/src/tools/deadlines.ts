@@ -1,6 +1,6 @@
 import type { CompactBucket } from "@nova-agent/protocol";
 import { z } from "zod";
-import { MAX_ROWS, defineTool, dueOrder, itemData, itemRow, plural, resolveCourse } from "./shared";
+import { MAX_ROWS, defineTool, dueOrder, itemData, itemRow, personalData, personalRow, plural, resolveCourse } from "./shared";
 
 const rangeSchema = z.enum(["overdue", "long-overdue", "today", "tomorrow", "week", "next-week", "later", "no-date", "all"]);
 type Range = z.infer<typeof rangeSchema>;
@@ -43,6 +43,9 @@ const RANGE_LABEL: Record<Range, string> = {
   all: "in total",
 };
 
+/** The student's own deadlines shown per lookup. */
+const PERSONAL_ROWS = 10;
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** "Sep 14" from "2026-09-14". Month names of a calendar string do not depend on any time zone. */
@@ -54,7 +57,7 @@ export const shortDate = (date: string): string => {
 export const listDeadlines = defineTool({
   name: "list_deadlines",
   description:
-    "Lists assignments and quizzes due in one period, optionally for one course or one kind. Ranges: 'overdue' (the last two weeks), 'long-overdue' (older than that, usually closed or never updated by the instructor), 'today', 'tomorrow', 'week' (today plus the next six days, the default), 'next-week' (Monday to Sunday of the calendar week after this one), 'later' (after the next seven days), 'no-date', and 'all' (for totals only). For any other period, such as a month or before or after a date, pass from and/or to as YYYY-MM-DD. Completed items are excluded unless includeDone is true.",
+    "Lists assignments and quizzes due in one period, optionally for one course or one kind. Ranges: 'overdue' (the last two weeks), 'long-overdue' (older than that, usually closed or never updated by the instructor), 'today', 'tomorrow', 'week' (today plus the next six days, the default), 'next-week' (Monday to Sunday of the calendar week after this one), 'later' (after the next seven days), 'no-date', and 'all' (for totals only). For any other period, such as a month or before or after a date, pass from and/or to as YYYY-MM-DD. Completed items, and items the student marked done on this device, are excluded unless includeDone is true. The student's own deadlines (typed in on the Week tab, not in Brightspace) for the same period come back in a separate list.",
   input: z.object({
     range: rangeSchema
       .optional()
@@ -63,7 +66,8 @@ export const listDeadlines = defineTool({
     to: dateSchema.optional().describe("Last due date to include, YYYY-MM-DD, inclusive."),
     course: z.string().max(120).optional().describe("Course id, code, or part of the course name."),
     kind: z.enum(["assignment", "quiz"]).optional().describe("Only this kind of item."),
-    includeDone: z.boolean().optional().describe("Include submitted and completed items. Default false."),
+    includeDone: z.boolean().optional().describe("Include submitted and completed items, and items the student marked done. Default false."),
+    includePersonal: z.boolean().optional().describe("Include the student's own deadlines for the same period. Default true; they are never mixed into the Brightspace items."),
     limit: z.number().int().min(1).max(50).optional().describe("Maximum items to return. Default 20."),
   }),
   run: (input, { snapshot }) => {
@@ -98,17 +102,28 @@ export const listDeadlines = defineTool({
       .filter((item) => inWindow(item.dueDate))
       .sort(dueOrder);
     const shown = matches.slice(0, limit);
+    // The student's own deadlines follow the same period and course, but never a kind filter or the long-overdue fold.
+    const own =
+      input.includePersonal === false || input.kind !== undefined || range === "long-overdue"
+        ? []
+        : (snapshot.personal ?? [])
+            .filter((deadline) => (course ? deadline.courseId === course.id : true))
+            .filter((deadline) => (input.includeDone ? true : !deadline.done))
+            .filter((deadline) => (buckets ? buckets.includes(deadline.bucket) : true))
+            .filter((deadline) => inWindow(deadline.dueDate))
+            .sort((a, b) => a.dueAt.localeCompare(b.dueAt) || a.title.localeCompare(b.title));
+    const ownShown = own.slice(0, Math.min(limit, PERSONAL_ROWS));
     const where = course ? ` in ${course.name}` : "";
     const period = next ? ` (${shortDate(next.from)} to ${shortDate(next.to)})` : "";
     const between = !windowed ? "" : input.from && input.to ? ` between ${input.from} and ${input.to}` : input.from ? ` on or after ${input.from}` : ` on or before ${input.to}`;
     const label = windowed && range === "all" ? "due" : RANGE_LABEL[range];
     const older = range === "overdue" ? snapshot.items.filter((item) => item.longOverdue && item.bucket !== "completed" && (course ? item.courseId === course.id : true) && (input.kind ? item.kind === input.kind : true)).length : 0;
-    const summary = `${plural(matches.length, input.kind ?? "item")} ${label}${period}${between}${where}${matches.length > shown.length ? ` (showing ${shown.length})` : ""}${older > 0 ? `, plus ${older} long overdue not listed` : ""}.`;
+    const summary = `${plural(matches.length, input.kind ?? "item")} ${label}${period}${between}${where}${matches.length > shown.length ? ` (showing ${shown.length})` : ""}${older > 0 ? `, plus ${older} long overdue not listed` : ""}${own.length > 0 ? `, plus ${own.length} of your own ${own.length === 1 ? "deadline" : "deadlines"}` : ""}.`;
     return {
       ok: true,
       summary,
-      data: { range, from: input.from ?? null, to: input.to ?? null, window: next, course: course?.name ?? null, total: matches.length, items: shown.map((item) => itemData(snapshot, item)) },
-      rows: shown.map((item) => itemRow(snapshot, item)),
+      data: { range, from: input.from ?? null, to: input.to ?? null, window: next, course: course?.name ?? null, total: matches.length, items: shown.map((item) => itemData(snapshot, item)), ...(own.length > 0 ? { ownDeadlines: ownShown.map((deadline) => personalData(snapshot, deadline)) } : {}) },
+      rows: [...shown.map((item) => itemRow(snapshot, item)), ...ownShown.map((deadline) => personalRow(snapshot, deadline))],
     };
   },
 });

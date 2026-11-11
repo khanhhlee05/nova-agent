@@ -19,8 +19,21 @@ export const toolRowSchema = z.discriminatedUnion("kind", [
     dueLocal: z.string().nullable(),
     bucket: compactBucketSchema,
     status: compactItemStatusSchema,
+    /** Marked done by the student on this device. */
+    doneLocally: z.boolean().optional(),
     url,
     priority: z.number().nullable(),
+  }),
+  z.object({
+    kind: z.literal("personal"),
+    id: z.string(),
+    title: z.string(),
+    courseId: z.string().nullable(),
+    courseName: z.string().nullable(),
+    dueAt: z.string(),
+    dueLocal: z.string(),
+    bucket: compactBucketSchema,
+    done: z.boolean(),
   }),
   z.object({
     kind: z.literal("announcement"),

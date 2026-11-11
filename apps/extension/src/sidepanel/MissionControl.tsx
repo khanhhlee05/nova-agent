@@ -1,12 +1,12 @@
 import type { FeasibilityReport } from "@nova-agent/brightspace";
 import { isSafeTenantLink } from "@nova-agent/brightspace";
-import { compactSnapshot } from "@nova-agent/agent";
-import type { ChangeEvent, DeadlineBucket } from "@nova-agent/core";
+import { compactSnapshot, shortId } from "@nova-agent/agent";
+import type { AcademicItem, ChangeEvent, DeadlineBucket } from "@nova-agent/core";
 import type { ChatMessage, ChatRequest } from "@nova-agent/protocol";
 import { CheckCheck, EyeOff, Plus } from "lucide-react";
 import { Tabs, Tooltip } from "radix-ui";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { AskChips, AskView, useAskThread, type AskClient, type AskClientFactory, type AskSettings } from "./ask";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AskChips, AskView, useAskThread, type AskAbout, type AskClient, type AskClientFactory, type AskDraft, type AskLive, type AskSendOptions, type AskSettings } from "./ask";
 import type { SyncStatusRecord } from "../storage/novaDb";
 import { PHASE_LABELS, isRunningPhase, isStale, type SyncRuntimeState } from "../sync/syncState";
 import { StateBanners, SyncProgress } from "./components/Banners";
@@ -27,10 +27,10 @@ import { WeekNav } from "./components/WeekNav";
 import { WeekStrip } from "./components/WeekStrip";
 import { WeekView } from "./components/WeekView";
 import { countDismissed, type SessionDismissals } from "./dismissals";
-import { format } from "date-fns";
+import { format, startOfDay } from "date-fns";
 import { pluralize } from "./format";
 import { askHero, changesHero, weekHero } from "./heroes";
-import { focusCategoryOf, lastWeekOffset, weekPage, type CourseFilter as CourseFilterValue, type Dashboard, type FocusCategory, type PersonalDeadline, type SortKey } from "./model";
+import { changeTitle, focusCategoryOf, lastWeekOffset, weekPage, type CourseFilter as CourseFilterValue, type Dashboard, type FocusCategory, type PersonalDeadline, type SortKey } from "./model";
 import { applyTheme, type Theme } from "./theme";
 
 export type TabId = "focus" | "week" | "changes" | "ask";
@@ -90,6 +90,10 @@ export type AskProps = {
   clientFactory: AskClientFactory;
   /** Raw change events; the compact snapshot is built from them, ignoring the course filter. */
   events: readonly ChangeEvent[];
+  /** Every done mark on this device, item key to when, for all courses. Optional so older callers still work. */
+  localMarks?: ReadonlyMap<string, string>;
+  /** Every deadline the student added by hand, for all courses. */
+  personal?: readonly PersonalDeadline[];
 };
 
 export type MissionControlProps = {
@@ -149,20 +153,54 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
   const toggleAllGroups = (buckets: readonly DeadlineBucket[], collapse: boolean) =>
     actions.setPreferences({ collapsedGroups: collapse ? [...new Set([...(preferences.collapsedGroups ?? []), ...buckets])] : (preferences.collapsedGroups ?? []).filter((entry) => !buckets.includes(entry)) });
 
+  // The tab the student was on before Ask, sent as a hint with each question.
+  const lastTab = useRef<Exclude<TabId, "ask">>("focus");
+  if (tab !== "ask") lastTab.current = tab;
+
   // The thread lives here so the hero's suggestion chips and the tab body share one conversation. Inert without `ask`.
   const buildRequest = useCallback(
-    (message: string, history: ChatMessage[]): ChatRequest | null =>
+    (message: string, history: ChatMessage[], options: AskSendOptions): ChatRequest | null =>
       dashboard && ask
         ? {
             message,
             history,
-            snapshot: compactSnapshot(dashboard.snapshot, ask.events, now, { mode: status.mode === "fixture" ? "demo" : "live", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+            // Built from the whole snapshot, not the filtered dashboard: Ask covers every course, and honors what the panel honors.
+            snapshot: compactSnapshot(dashboard.snapshot, ask.events, now, {
+              mode: status.mode === "fixture" ? "demo" : "live",
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              localDone: ask.localMarks,
+              dismissedItemKeys: dismissals.items,
+              personal: ask.personal,
+            }),
+            focus: { courseId: preferences.courseFilter, tab: lastTab.current, ...(options.focusItemId ? { itemId: options.focusItemId } : {}) },
             client: { name: "nova-extension", version: CLIENT_VERSION },
           }
         : null,
-    [ask, dashboard, now, status.mode],
+    [ask, dashboard, dismissals.items, now, preferences.courseFilter, status.mode],
   );
   const thread = useAskThread(ask?.client ?? null, buildRequest);
+
+  // A question another tab starts: written into the composer, with the item it is about, and the Ask tab opened.
+  const [askDraft, setAskDraft] = useState<AskDraft | null>(null);
+  const [askAbout, setAskAbout] = useState<AskAbout | null>(null);
+  const draftCount = useRef(0);
+  const canAsk = !!ask && ask.settings.enabled && ask.client !== null;
+  const startQuestion = (text: string, item: AcademicItem | null) => {
+    draftCount.current += 1;
+    setAskDraft({ nonce: draftCount.current, text });
+    setAskAbout(item ? { itemId: shortId(item.key, item.kind), title: item.title } : null);
+    actions.setPreferences({ activeTab: "ask" });
+  };
+  const askAboutItem = (item: AcademicItem) => startQuestion(dashboard?.changedAt.has(item.key) ? `What changed on "${item.title}"?` : `Why is "${item.title}" ranked where it is?`, item);
+  const askAboutChange = (event: ChangeEvent) => startQuestion(`What does this change to "${changeTitle(event)}" mean for me?`, dashboard?.itemByKey.get(event.entityKey) ?? null);
+  const askWhyFirst = (key: string) => {
+    const item = dashboard?.itemByKey.get(key);
+    if (item) startQuestion(`Why is "${item.title}" my next move?`, item);
+  };
+  const sendFromComposer = (text: string) => {
+    thread.send(text, askAbout ? { focusItemId: askAbout.itemId } : {});
+    setAskAbout(null);
+  };
 
   useEffect(() => {
     setExpandedKey(null);
@@ -186,6 +224,34 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
     setExpandedKey(key);
     requestAnimationFrame(() => document.getElementById(`details-${key.replace(/[^a-z0-9]+/gi, "-")}`)?.scrollIntoView({ block: "nearest" }));
   };
+
+  // "Show on Week" from an answer: the page that holds the deadline, that day picked, and no filter hiding it.
+  const showPersonal = (deadline: PersonalDeadline) => {
+    const due = startOfDay(new Date(deadline.dueAt));
+    const offset = Math.floor((due.getTime() - startOfDay(now).getTime()) / (7 * 86_400_000));
+    const patch: Partial<UiPreferences> = { activeTab: "week" };
+    if (preferences.courseFilter !== null && deadline.courseId !== preferences.courseFilter) patch.courseFilter = null;
+    // The Week tab starts today: a deadline that is already past has no page to show, so the tab opens on this week.
+    setWeekOffset(Math.max(0, offset));
+    setSelectedDay(offset >= 0 ? format(due, "yyyy-MM-dd") : null);
+    actions.setPreferences(patch);
+  };
+
+  const askLive: AskLive | undefined = ask
+    ? {
+        localMarks: ask.localMarks ?? dashboard?.localDone ?? new Map<string, string>(),
+        dismissed: dismissals.items,
+        events: ask.events,
+        personal: ask.personal ?? dashboard?.personal ?? [],
+        actions: {
+          onSetDone: actions.setLocalDone,
+          onDismiss: actions.dismissItem,
+          onSetRead: actions.setEventRead,
+          onSetPersonalDone: actions.setPersonalDone,
+          onShowPersonal: showPersonal,
+        },
+      }
+    : undefined;
 
   const jumpTo = (target: "overdue" | "this-week" | "changes") => {
     if (target === "overdue") {
@@ -271,7 +337,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
       }
     />
   ) : (
-    <FocusHero nextMove={dashboard.nextMove} course={dashboard.nextMove ? dashboard.courseById.get(dashboard.nextMove.item.courseId) : undefined} now={now} canOpen={canOpen(dashboard.nextMove?.item.url ?? null)} onOpen={actions.openUrl} onInspect={inspect} onDismiss={actions.dismissItem} />
+    <FocusHero nextMove={dashboard.nextMove} course={dashboard.nextMove ? dashboard.courseById.get(dashboard.nextMove.item.courseId) : undefined} now={now} canOpen={canOpen(dashboard.nextMove?.item.url ?? null)} onOpen={actions.openUrl} onInspect={inspect} onDismiss={actions.dismissItem} onAsk={canAsk ? askWhyFirst : undefined} />
   );
 
   const tabs = showFirstRun ? null : (
@@ -385,7 +451,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                         <span>{preferences.courseFilter ? "This course has nothing visible. Try All courses." : "Nova found no visible assignments or quizzes in your active courses."}</span>
                       </div>
                     ) : (
-                      <FocusList dashboard={dashboard} category={category} sort={preferences.sort} now={now} courseFiltered={preferences.courseFilter !== null} expandedKey={expandedKey} onExpand={setExpandedKey} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} onSetDone={actions.setLocalDone} showLongOverdue={showLongOverdue} onToggleLongOverdue={() => setShowLongOverdue((value) => !value)} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup} onToggleAllGroups={toggleAllGroups} />
+                      <FocusList dashboard={dashboard} category={category} sort={preferences.sort} now={now} courseFiltered={preferences.courseFilter !== null} expandedKey={expandedKey} onExpand={setExpandedKey} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} onSetDone={actions.setLocalDone} showLongOverdue={showLongOverdue} onToggleLongOverdue={() => setShowLongOverdue((value) => !value)} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup} onToggleAllGroups={toggleAllGroups} onAsk={canAsk ? askAboutItem : undefined} />
                     )
                   ) : (
                     <div className="empty">
@@ -397,17 +463,17 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
               </Tabs.Content>
               <Tabs.Content className="tab-content" value="week">
                 {stateBanners}
-                {dashboard && page ? <WeekView dashboard={dashboard} days={page.days} now={now} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} selectedDay={selectedDay} personal={personalActions} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
+                {dashboard && page ? <WeekView dashboard={dashboard} days={page.days} now={now} canOpen={canOpen} onOpen={actions.openUrl} onDismiss={actions.dismissItem} selectedDay={selectedDay} personal={personalActions} onAsk={canAsk ? askAboutItem : undefined} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
               </Tabs.Content>
               <Tabs.Content className="tab-content" value="changes">
                 {stateBanners}
-                {dashboard ? <ChangesFeed dashboard={dashboard} now={now} baselineOnly={dashboard.totalChanges === 0 && hasEverSynced} canOpen={canOpen} onOpen={actions.openUrl} onSetRead={actions.setEventRead} onDelete={actions.deleteEvent} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
+                {dashboard ? <ChangesFeed dashboard={dashboard} now={now} baselineOnly={dashboard.totalChanges === 0 && hasEverSynced} canOpen={canOpen} onOpen={actions.openUrl} onSetRead={actions.setEventRead} onDelete={actions.deleteEvent} onAsk={canAsk ? askAboutChange : undefined} /> : showSkeleton ? <FocusSkeleton /> : <div className="empty"><strong>No data yet</strong></div>}
               </Tabs.Content>
               {ask ? (
                 // Force-mounted and hidden so the conversation survives a switch to another tab.
                 <Tabs.Content className="tab-content tab-content-ask" value="ask" forceMount hidden={tab !== "ask"}>
                   {dashboard ? (
-                    <AskView notices={tab === "ask" ? stateBanners : null} thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} />
+                    <AskView notices={tab === "ask" ? stateBanners : null} thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} live={askLive} draft={askDraft} about={askAbout} onClearAbout={() => setAskAbout(null)} onSend={sendFromComposer} />
                   ) : showSkeleton ? (
                     <FocusSkeleton />
                   ) : (

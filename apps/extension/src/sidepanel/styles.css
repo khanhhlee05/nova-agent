@@ -245,6 +245,9 @@ h1, h2, h3, h4, p { margin: 0; }
 .task:last-child { border-bottom: 0; }
 .task-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; min-height: 56px; padding: 10px 0; }
 .ask-rows .task-row { grid-template-columns: 1fr auto; }
+.ask-rows .task-row[data-actions="true"] { grid-template-columns: auto 1fr auto; }
+.ask-rows .task[data-hidden="true"] .task-title { color: var(--nova-muted); }
+.hidden-label { color: var(--nova-muted); font-weight: 600; white-space: nowrap; }
 .task-check { display: inline-grid; place-items: center; width: 32px; height: 32px; }
 .checkbox { appearance: none; width: 18px; height: 18px; margin: 0; border: 1.5px solid var(--nova-rule-strong); border-radius: 5px; background: var(--nova-bg); display: grid; place-items: center; cursor: pointer; }
 .checkbox:hover:not(:disabled) { border-color: var(--nova-accent); }
@@ -434,7 +437,13 @@ h1, h2, h3, h4, p { margin: 0; }
 .ask-rows-toggle:hover { color: var(--nova-accent); background: var(--nova-accent-soft); }
 .ask-rows { display: flex; flex-direction: column; margin-top: 2px; border-top: 1px solid var(--nova-rule); }
 .ask-note { font-size: 12.5px; color: var(--nova-muted); }
+.ask-followups { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.ask-chip { min-height: 30px; padding: 0 10px; border: 1px solid var(--nova-rule-strong); border-radius: var(--nova-radius-sm); background: var(--nova-bg); color: var(--nova-accent); font-size: 12.5px; font-weight: 600; text-align: left; }
+.ask-chip:hover { background: var(--nova-accent-soft); border-color: var(--nova-accent); }
 .ask-composer { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--nova-rule); background: var(--nova-bg); }
+.ask-about { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; padding: 0 4px 0 10px; border-radius: var(--nova-radius-sm); background: var(--nova-accent-soft); color: var(--nova-ink); font-size: 12.5px; }
+.ask-about-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ask-about strong { font-weight: 700; }
 .ask-input { width: 100%; min-height: 40px; max-height: 112px; padding: 8px 12px; resize: none; border: 1px solid var(--nova-rule-strong); border-radius: var(--nova-radius-sm); background: var(--nova-bg); color: var(--nova-ink); font: inherit; font-size: 14px; line-height: 1.4; }
 .ask-input::placeholder { color: var(--nova-faint); }
 .ask-input[aria-disabled="true"] { color: var(--nova-muted); background: var(--nova-surface); }

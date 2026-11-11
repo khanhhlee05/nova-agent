@@ -1,4 +1,4 @@
-import type { CompactAnnouncement, CompactChange, CompactCourse, CompactItem, CompactSnapshot, ToolName, ToolRow } from "@nova-agent/protocol";
+import type { CompactAnnouncement, CompactChange, CompactCourse, CompactItem, CompactPersonal, CompactSnapshot, ToolName, ToolRow } from "@nova-agent/protocol";
 import { z } from "zod";
 
 export type ToolContext = { snapshot: CompactSnapshot };
@@ -91,8 +91,21 @@ export const itemRow = (snapshot: CompactSnapshot, item: CompactItem): ToolRow =
   dueLocal: item.dueLocal,
   bucket: item.bucket,
   status: item.status,
+  ...(item.doneLocally ? { doneLocally: true } : {}),
   url: item.url,
   priority: item.priority,
+});
+
+export const personalRow = (snapshot: CompactSnapshot, deadline: CompactPersonal): ToolRow => ({
+  kind: "personal",
+  id: deadline.id,
+  title: deadline.title,
+  courseId: deadline.courseId,
+  courseName: deadline.courseId ? courseName(snapshot, deadline.courseId) : null,
+  dueAt: deadline.dueAt,
+  dueLocal: deadline.dueLocal,
+  bucket: deadline.bucket,
+  done: deadline.done,
 });
 
 export const announcementRow = (snapshot: CompactSnapshot, announcement: CompactAnnouncement): ToolRow => ({
@@ -137,6 +150,19 @@ export const itemData = (snapshot: CompactSnapshot, item: CompactItem) => ({
   points: item.pointsPossible,
   earnedScore: item.earnedScore ?? null,
   priority: item.priority,
+  ...(item.doneLocally ? { markedDoneByStudent: true } : {}),
+});
+
+/** A deadline the student typed in. `source` keeps it from being read as a Brightspace item. */
+export const personalData = (snapshot: CompactSnapshot, deadline: CompactPersonal) => ({
+  id: deadline.id,
+  source: "added by the student, not in Brightspace",
+  title: deadline.title,
+  course: deadline.courseId ? courseName(snapshot, deadline.courseId) : null,
+  due: deadline.dueLocal,
+  dueDate: deadline.dueDate,
+  bucket: deadline.bucket,
+  done: deadline.done,
 });
 
 export const changeData = (snapshot: CompactSnapshot, change: CompactChange) => ({

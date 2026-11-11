@@ -77,6 +77,9 @@ export const demoRouter: ScriptedRouter = (input) => {
   }
   if (input.toolChoice === "none") return { text: ["I could not look that up. Try asking about deadlines, changes, or what to start first."] };
   const question = lastUserText(input);
+  // "What is left in <course>?", the chip the Ask hero draws from the course with the most open work.
+  const leftIn = /\bleft in (.+?)\??$/.exec(question);
+  if (leftIn?.[1]) return { toolCalls: [{ name: "list_deadlines", args: { range: "all", course: leftIn[1].trim() } }] };
   if (/\b(announce|announcements?|posted|news)\b/.test(question)) return { toolCalls: [{ name: "get_recent_announcements", args: {} }] };
   if (/\b(change|changed|changes|new|moved|since)\b/.test(question)) return { toolCalls: [{ name: "get_changes", args: { since: "week" } }] };
   if (/\b(due|deadline|week|tomorrow|today|overdue)\b/.test(question)) {

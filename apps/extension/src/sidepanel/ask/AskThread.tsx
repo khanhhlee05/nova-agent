@@ -2,7 +2,8 @@ import type { AskErrorEvent, ToolName } from "@nova-agent/protocol";
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { Dashboard } from "../model";
-import { AskRowsDisclosure } from "./AskRows";
+import { AskFollowUps } from "./AskChips";
+import { AskRowsDisclosure, type AskLive } from "./AskRows";
 import { hostOf } from "./askSettings";
 import type { AskMessage, AskStatus } from "./useAskThread";
 
@@ -45,9 +46,13 @@ export type AskThreadProps = {
   onOpen: (url: string) => void;
   onRetry: () => void;
   onSettings: () => void;
+  /** Live state and row actions; rows are read-only without it. */
+  live?: AskLive;
+  /** Sends a follow-up question. Follow-up chips are hidden without it. */
+  onAsk?: (question: string) => void;
 };
 
-export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpen, onOpen, onRetry, onSettings }: AskThreadProps) => {
+export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpen, onOpen, onRetry, onSettings, live, onAsk }: AskThreadProps) => {
   const list = useRef<HTMLOListElement>(null);
   const lastId = messages.at(-1)?.id;
   const lastText = messages.at(-1)?.text.length ?? 0;
@@ -92,7 +97,7 @@ export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpe
                 <span className="ask-caret" aria-hidden="true" />
               </p>
             ) : null}
-            <AskRowsDisclosure rows={message.rows} dashboard={dashboard} now={now} canOpen={canOpen} onOpen={onOpen} />
+            <AskRowsDisclosure rows={message.rows} dashboard={dashboard} now={now} canOpen={canOpen} onOpen={onOpen} live={live} />
             {message.stopped ? <p className="ask-note">Stopped before Nova finished.</p> : null}
             {message.grounded === false ? <p className="ask-note">Nova could not verify every item named above against your data.</p> : null}
             {copy && message.error ? (
@@ -118,6 +123,7 @@ export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpe
                 </div>
               </div>
             ) : null}
+            {last && onAsk && status === "idle" && !message.error && !message.stopped && message.text.trim() !== "" ? <AskFollowUps tools={message.tools} onPick={onAsk} /> : null}
           </li>
         );
       })}

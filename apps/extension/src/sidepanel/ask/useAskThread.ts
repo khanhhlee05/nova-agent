@@ -2,7 +2,14 @@ import type { AskErrorEvent, ChatMessage, ChatRequest, ModelUsage, ToolName, Too
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AskClient } from "./askClient";
 
-export type AskTool = { id: string; name: ToolName; status: "running" | "ok" | "error"; summary: string | null; rows: number };
+/** `input` is what the model passed to the lookup; follow-up chips read it. */
+export type AskTool = { id: string; name: ToolName; status: "running" | "ok" | "error"; summary: string | null; rows: number; input?: unknown };
+
+/** Context for one question that is not part of its text. */
+export type AskSendOptions = {
+  /** Short id of the item the question was started from. */
+  focusItemId?: string;
+};
 
 export type AskMessage = {
   id: string;
@@ -22,7 +29,7 @@ export type AskStatus = "idle" | "streaming";
 export type AskThread = {
   messages: AskMessage[];
   status: AskStatus;
-  send: (text: string) => void;
+  send: (text: string, options?: AskSendOptions) => void;
   stop: () => void;
   retryLast: () => void;
   clear: () => void;
@@ -46,7 +53,7 @@ export const historyOf = (messages: readonly AskMessage[]): ChatMessage[] =>
  * Session-only conversation state. Nothing is persisted: closing the panel
  * forgets the thread, the same rule as session dismissals.
  */
-export const useAskThread = (client: AskClient | null, buildRequest: (message: string, history: ChatMessage[]) => ChatRequest | null): AskThread => {
+export const useAskThread = (client: AskClient | null, buildRequest: (message: string, history: ChatMessage[], options: AskSendOptions) => ChatRequest | null): AskThread => {
   const [messages, setMessages] = useState<AskMessage[]>([]);
   const [status, setStatus] = useState<AskStatus>("idle");
   const [announcement, setAnnouncement] = useState<string | null>(null);
@@ -61,10 +68,10 @@ export const useAskThread = (client: AskClient | null, buildRequest: (message: s
   }, []);
 
   const send = useCallback(
-    (text: string) => {
+    (text: string, options: AskSendOptions = {}) => {
       const question = text.trim();
       if (!client || question === "" || controller.current) return;
-      const request = buildRequest(question, historyOf(latest.current));
+      const request = buildRequest(question, historyOf(latest.current), options);
       if (!request) return;
       const userId = nextId();
       const answerId = nextId();
@@ -87,13 +94,13 @@ export const useAskThread = (client: AskClient | null, buildRequest: (message: s
                 patch(answerId, (message) => ({ ...message, text: message.text + event.delta }));
                 break;
               case "tool_call":
-                patch(answerId, (message) => ({ ...message, tools: [...message.tools, { id: event.id, name: event.name, status: "running", summary: null, rows: 0 }] }));
+                patch(answerId, (message) => ({ ...message, tools: [...message.tools, { id: event.id, name: event.name, status: "running", summary: null, rows: 0, input: event.input }] }));
                 break;
               case "tool_result":
                 patch(answerId, (message) => ({
                   ...message,
                   tools: message.tools.map((tool) => (tool.id === event.id ? { ...tool, status: event.ok ? "ok" : "error", summary: event.ok ? event.summary : (event.error ?? "Lookup failed"), rows: event.rows.length } : tool)),
-                  rows: [...message.rows, ...event.rows.filter((row) => !message.rows.some((existing) => existing.kind === row.kind && existing.id === row.id))],
+                  rows: [...message.rows, ...event.rows.filter((row, index, list) => list.findIndex((other) => other.kind === row.kind && other.id === row.id) === index && !message.rows.some((existing) => existing.kind === row.kind && existing.id === row.id))],
                 }));
                 break;
               case "done":

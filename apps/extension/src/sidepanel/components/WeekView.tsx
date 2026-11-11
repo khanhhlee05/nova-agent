@@ -2,6 +2,7 @@ import { PenLine, Plus, X } from "lucide-react";
 import { Popover } from "radix-ui";
 import { format } from "date-fns";
 import { formatTime } from "../format";
+import type { AcademicItem } from "@nova-agent/core";
 import type { Dashboard, PersonalDeadline, WeekDay, WeekEntry } from "../model";
 import { courseSwatch } from "../theme";
 import { ItemDetails } from "./ItemDetails";
@@ -37,10 +38,12 @@ export type WeekViewProps = {
   selectedDay: string | null;
   /** Present when the student can add their own deadlines from a picked day. */
   personal?: PersonalActions;
+  /** Starts an Ask Nova question about one item. Absent when Ask is off. */
+  onAsk?: (item: AcademicItem) => void;
 };
 
 /** Time-led agenda. The seven-day strip lives in the field above; this is the list under it. */
-export const WeekView = ({ dashboard, days: page = dashboard.week, now, canOpen, onOpen, onDismiss, selectedDay, personal }: WeekViewProps) => {
+export const WeekView = ({ dashboard, days: page = dashboard.week, now, canOpen, onOpen, onDismiss, selectedDay, personal, onAsk }: WeekViewProps) => {
   const nextBusy = page.find((day) => !day.isToday && (day.entries.some((entry) => entry.bucket !== "completed") || day.custom.some((deadline) => deadline.completedAt === null)));
   const days = selectedDay ? page.filter((day) => dayKey(day.date) === selectedDay) : page;
   return (
@@ -120,7 +123,7 @@ export const WeekView = ({ dashboard, days: page = dashboard.week, now, canOpen,
                         <Popover.Close className="icon-button icon-button-sm popover-close" aria-label="Close details">
                           <X size={14} aria-hidden="true" />
                         </Popover.Close>
-                        <ItemDetails item={item} course={course} ranked={dashboard.ranked.get(item.key)} now={now} canOpen={canOpen(item.url)} onOpen={onOpen} headingLevel="h3" onDismiss={() => onDismiss(item.key, item.title)} markedAt={dashboard.localDone.get(item.key) ?? null} />
+                        <ItemDetails item={item} course={course} ranked={dashboard.ranked.get(item.key)} now={now} canOpen={canOpen(item.url)} onOpen={onOpen} headingLevel="h3" onDismiss={() => onDismiss(item.key, item.title)} markedAt={dashboard.localDone.get(item.key) ?? null} onAsk={onAsk ? () => onAsk(item) : undefined} />
                       </Popover.Content>
                     </Popover.Portal>
                   </Popover.Root>

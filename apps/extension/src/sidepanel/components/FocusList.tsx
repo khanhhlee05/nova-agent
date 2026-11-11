@@ -30,6 +30,8 @@ export type FocusListProps = {
   onToggleGroup?: (bucket: DeadlineBucket) => void;
   /** Folds or unfolds every group shown. */
   onToggleAllGroups?: (buckets: readonly DeadlineBucket[], collapse: boolean) => void;
+  /** Starts an Ask Nova question about one item. Absent when Ask is off. */
+  onAsk?: (item: AcademicItem) => void;
 };
 
 const GROUP_LABELS: Partial<Record<DeadlineBucket, string>> = { ...SECTION_LABELS, "no-date": "No due date" };
@@ -41,8 +43,8 @@ const EMPTY_COPY: Record<FocusCategory, { title: string; text: (courseFiltered: 
 };
 
 /** The one list under the category control. Only the Upcoming view groups by day, and only when sorted by due date. */
-export const FocusList = ({ dashboard, category, sort, now, courseFiltered, expandedKey, onExpand, canOpen, onOpen, onDismiss, onSetDone, showLongOverdue, onToggleLongOverdue, collapsedGroups, onToggleGroup, onToggleAllGroups }: FocusListProps) => {
-  const rowProps = { dashboard, now, expandedKey, onExpand, canOpen, onOpen, onDismiss, onSetDone };
+export const FocusList = ({ dashboard, category, sort, now, courseFiltered, expandedKey, onExpand, canOpen, onOpen, onDismiss, onSetDone, showLongOverdue, onToggleLongOverdue, collapsedGroups, onToggleGroup, onToggleAllGroups, onAsk }: FocusListProps) => {
+  const rowProps = { dashboard, now, expandedKey, onExpand, canOpen, onOpen, onDismiss, onSetDone, onAsk };
   const items = category === "overdue" ? dashboard.buckets.overdue : category === "completed" ? dashboard.buckets.completed : UPCOMING_BUCKETS.flatMap((bucket) => dashboard.buckets[bucket]);
   const older = category === "overdue" ? dashboard.longOverdue : [];
   const fold =
@@ -175,9 +177,10 @@ type TaskRowProps = {
   onOpen: (url: string) => void;
   onDismiss: (key: string, title: string) => void;
   onSetDone: (key: string, title: string, done: boolean) => void;
+  onAsk?: (item: AcademicItem) => void;
 };
 
-const TaskRow = ({ item, bucket, dashboard, now, expandedKey, onExpand, canOpen, onOpen, onDismiss, onSetDone }: TaskRowProps) => {
+const TaskRow = ({ item, bucket, dashboard, now, expandedKey, onExpand, canOpen, onOpen, onDismiss, onSetDone, onAsk }: TaskRowProps) => {
   const course: Course | undefined = dashboard.courseById.get(item.courseId);
   const ranked: RankedItem | undefined = dashboard.ranked.get(item.key);
   const expanded = expandedKey === item.key;
@@ -228,7 +231,7 @@ const TaskRow = ({ item, bucket, dashboard, now, expandedKey, onExpand, canOpen,
       </div>
       {expanded ? (
         <div className="task-details" id={detailsId}>
-          <ItemDetails item={item} course={course} ranked={ranked} now={now} canOpen={canOpen(item.url)} onOpen={onOpen} onDismiss={() => onDismiss(item.key, item.title)} markedAt={markedAt ?? null} />
+          <ItemDetails item={item} course={course} ranked={ranked} now={now} canOpen={canOpen(item.url)} onOpen={onOpen} onDismiss={() => onDismiss(item.key, item.title)} markedAt={markedAt ?? null} onAsk={onAsk ? () => onAsk(item) : undefined} />
         </div>
       ) : null}
     </li>

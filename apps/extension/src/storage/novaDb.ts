@@ -39,7 +39,8 @@ export type LocalMarkRecord = { key: string; scope: string; markedAt: string };
 
 /**
  * A deadline the student typed in. Lives only here: never part of a snapshot,
- * never diffed, never sent to Ask Nova, and shown only on the Week tab.
+ * never diffed, and shown only on the Week tab. Ask Nova, when it is on, gets
+ * the title, date, course, and done flag in a list of its own.
  */
 export type PersonalItemRecord = {
   id: string;

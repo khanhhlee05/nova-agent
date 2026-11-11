@@ -53,7 +53,7 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose }
         </p>
       )}
       <p className="ask-setup-text">
-        Each question you ask goes to the Nova server with a short summary of your courses: course names, assignment and quiz titles, due dates, submission status, announcement titles, and links. The server passes it to an AI model on OpenRouter to write the answer, and Nova keeps no copy of the conversation.
+        Each question you ask goes to the Nova server with a short summary of your courses: course names, assignment and quiz titles, due dates, submission status, announcement titles, links, the items you marked done on this device, and the deadlines you added by hand. The server passes it to an AI model on OpenRouter to write the answer, and Nova keeps no copy of the conversation.
         Your Brightspace login, full announcement text, and your name never leave this device.
       </p>
       {showServer ? (

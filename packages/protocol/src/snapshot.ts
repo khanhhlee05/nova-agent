@@ -9,7 +9,7 @@ import { z } from "zod";
  * Time-zone facts (buckets, local date strings, days ago) are computed in the
  * browser so a server in any zone reads the same "today" the student sees.
  */
-export const COMPACT_LIMITS = { courses: 12, items: 200, announcements: 30, changes: 60, title: 200, reasons: 3 } as const;
+export const COMPACT_LIMITS = { courses: 12, items: 200, announcements: 30, changes: 60, personal: 100, title: 200, reasons: 3 } as const;
 
 const title = z.string().min(1).max(COMPACT_LIMITS.title);
 const iso = z.string().min(1);
@@ -48,6 +48,11 @@ export const compactItemSchema = z.object({
   /** Overdue for more than two weeks (usually closed or never updated). Still in the `overdue` bucket; optional for older clients. */
   longOverdue: z.boolean().optional(),
   status: compactItemStatusSchema,
+  /**
+   * The student marked this done on this device while Brightspace still lists it as open. Such an item sits in the
+   * `completed` bucket and is never ranked, the same as on the Focus tab. Optional for older clients.
+   */
+  doneLocally: z.boolean().optional(),
   visibility: z.enum(["visible", "scheduled", "unknown"]),
   pointsPossible: z.number().nullable(),
   /** Earned score Brightspace reported, when graded. Optional for older clients. */
@@ -58,6 +63,23 @@ export const compactItemSchema = z.object({
   reasons: z.array(z.string().max(160)).max(COMPACT_LIMITS.reasons),
 });
 export type CompactItem = z.infer<typeof compactItemSchema>;
+
+/**
+ * A deadline the student typed in on the Week tab. Kept apart from `items` so counts, ranking, and the
+ * brief stay identical to the panel, which never mixes the two.
+ */
+export const compactPersonalSchema = z.object({
+  id: z.string().min(1).max(80),
+  title,
+  /** A course of the student's, or null for "no course". */
+  courseId: z.string().min(1).nullable(),
+  dueAt: iso,
+  dueLocal: localDate,
+  dueDate: calendarDateSchema,
+  bucket: compactBucketSchema,
+  done: z.boolean(),
+});
+export type CompactPersonal = z.infer<typeof compactPersonalSchema>;
 
 export const compactAnnouncementSchema = z.object({
   id: z.string().min(2).max(40),
@@ -138,8 +160,11 @@ export const compactCalendarSchema = z.object({
 export type CompactCalendar = z.infer<typeof compactCalendarSchema>;
 
 export const compactSnapshotSchema = z.object({
-  /** 2 added `dueDate` and `calendar`. An older extension gets a clear bad_request, not a field error. */
-  version: z.literal(2),
+  /**
+   * 2 added `dueDate` and `calendar`. 3 added done marks, the student's own deadlines, and the hidden count;
+   * every field 3 added is optional, so a version 2 client still gets answers.
+   */
+  version: z.union([z.literal(2), z.literal(3)]),
   mode: z.enum(["live", "demo"]),
   now: iso,
   timezone: z.string().min(1).max(64),
@@ -152,5 +177,9 @@ export const compactSnapshotSchema = z.object({
   changes: z.array(compactChangeSchema).max(COMPACT_LIMITS.changes),
   counts: compactCountsSchema,
   calendar: compactCalendarSchema,
+  /** The student's own deadlines: open ones, plus ones finished in the last two weeks. */
+  personal: z.array(compactPersonalSchema).max(COMPACT_LIMITS.personal).optional(),
+  /** How many items the student hid for this session. Their contents are not sent. */
+  hiddenCount: z.number().int().min(0).optional(),
 });
 export type CompactSnapshot = z.infer<typeof compactSnapshotSchema>;

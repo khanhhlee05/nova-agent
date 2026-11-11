@@ -310,7 +310,7 @@ describe("Ask tab", () => {
   });
 
   it("suggests next week when nothing is overdue or due in the next 7 days", () => {
-    const quiet = { counts: { overdue: 0, today: 0, thisWeek: 0, unread: 0 }, totalChanges: 0 } as unknown as Dashboard;
-    expect(suggestedQuestions(quiet)[1]).toBe("What is due next week?");
+    const quiet = { counts: { overdue: 0, today: 0, thisWeek: 0, unread: 0 }, totalChanges: 0, week: [], items: [], localDone: new Map(), courseById: new Map() } as unknown as Dashboard;
+    expect(suggestedQuestions(quiet)).toEqual(["What should I start first?", "What is due next week?", "Any new announcements?"]);
   });
 });

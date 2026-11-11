@@ -87,12 +87,29 @@ describe("chat request schema", () => {
     expect(parsed.success).toBe(true);
   });
 
-  it("accepts version 2 only, so an older extension gets a clear bad_request", () => {
+  it("accepts versions 2 and 3, so the previous extension still gets answers and an older one a clear bad_request", () => {
     expect(compactSnapshotSchema.safeParse({ ...minimalSnapshot(), version: 1 }).success).toBe(false);
+    expect(compactSnapshotSchema.safeParse({ ...minimalSnapshot(), version: 4 }).success).toBe(false);
     expect(compactSnapshotSchema.safeParse(minimalSnapshot()).success).toBe(true);
+    const own = { id: "personal-1", title: "Study group", courseId: null, dueAt: "2026-09-10T22:00:00.000Z", dueLocal: "Thu, Sep 10, 6:00 PM", dueDate: "2026-09-10", bucket: "this-week", done: false };
+    const item = minimalSnapshot().items[0] as CompactSnapshot["items"][number];
+    const v3 = { ...minimalSnapshot(), version: 3, items: [{ ...item, doneLocally: true, bucket: "completed" }], personal: [own], hiddenCount: 2 };
+    expect(compactSnapshotSchema.safeParse(v3).success).toBe(true);
+    expect(compactSnapshotSchema.safeParse({ ...v3, hiddenCount: -1 }).success).toBe(false);
+    expect(compactSnapshotSchema.safeParse({ ...v3, personal: [{ ...own, title: "" }] }).success).toBe(false);
+    expect(compactSnapshotSchema.safeParse({ ...v3, personal: Array.from({ length: 101 }, (_, i) => ({ ...own, id: `p${i}` })) }).success).toBe(false);
     const { calendar: _calendar, ...withoutCalendar } = minimalSnapshot();
     void _calendar;
     expect(compactSnapshotSchema.safeParse(withoutCalendar).success).toBe(false);
+  });
+
+  it("takes an optional focus hint and rejects a malformed one", () => {
+    const base = { message: "Why this one?", history: [], snapshot: minimalSnapshot(), client: { name: "nova-extension", version: "0.1.0" } };
+    expect(chatRequestSchema.safeParse({ ...base, focus: { courseId: "31001", tab: "week", itemId: "a4101" } }).success).toBe(true);
+    expect(chatRequestSchema.safeParse({ ...base, focus: { courseId: null } }).success).toBe(true);
+    expect(chatRequestSchema.safeParse({ ...base, focus: {} }).success).toBe(true);
+    expect(chatRequestSchema.safeParse({ ...base, focus: { tab: "ask" } }).success).toBe(false);
+    expect(chatRequestSchema.safeParse({ ...base, focus: { itemId: "x".repeat(41) } }).success).toBe(false);
   });
 
   it("rejects oversize arrays, bad urls, and unknown modes", () => {

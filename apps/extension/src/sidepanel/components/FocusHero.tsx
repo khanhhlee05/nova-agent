@@ -1,5 +1,5 @@
 import type { Course } from "@nova-agent/core";
-import { ExternalLink, X } from "lucide-react";
+import { ExternalLink, MessageCircleQuestionMark, X } from "lucide-react";
 import { focusHero } from "../heroes";
 import type { NextMove } from "../model";
 import { Hero } from "./FieldHeader";
@@ -13,9 +13,11 @@ export type FocusHeroProps = {
   onOpen: (url: string) => void;
   onInspect: (key: string) => void;
   onDismiss: (key: string, title: string) => void;
+  /** Starts an Ask Nova question about the next move. Absent when Ask is off. */
+  onAsk?: (key: string) => void;
 };
 
-export const FocusHero = ({ nextMove, course, now, canOpen, onOpen, onInspect, onDismiss }: FocusHeroProps) => {
+export const FocusHero = ({ nextMove, course, now, canOpen, onOpen, onInspect, onDismiss, onAsk }: FocusHeroProps) => {
   const hero = focusHero(nextMove, course?.name, now);
   if (!nextMove) return <Hero {...hero} headingId="next-move-heading" />;
   const { item, ranked } = nextMove;
@@ -42,6 +44,12 @@ export const FocusHero = ({ nextMove, course, now, canOpen, onOpen, onInspect, o
           <button type="button" className="hero-score" onClick={() => onInspect(item.key)} aria-label={`Why this first? Priority ${ranked.priority.score} out of 100.`}>
             Why this first?
           </button>
+          {onAsk ? (
+            <button type="button" className="button button-on-field" onClick={() => onAsk(item.key)}>
+              <MessageCircleQuestionMark size={14} aria-hidden="true" />
+              Ask why
+            </button>
+          ) : null}
         </>
       }
     />

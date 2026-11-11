@@ -51,6 +51,7 @@ export const chatRoute = (context: AppContext): Hono =>
           snapshot: request.snapshot,
           history: request.history,
           message: request.message,
+          focus: request.focus,
           model,
           maxRounds: context.config.MAX_ROUNDS,
           maxTokens: context.config.MAX_TOKENS,
@@ -89,6 +90,7 @@ export const chatRoute = (context: AppContext): Hono =>
             historyLength: request.history.length,
             snapshotBytes,
             mode: request.snapshot.mode,
+            snapshotVersion: request.snapshot.version,
             ...(context.config.LOG_PROMPTS ? { debug: { message: request.message, answer: result?.text ?? null } } : {}),
           });
         }

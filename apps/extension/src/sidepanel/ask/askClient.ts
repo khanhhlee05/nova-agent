@@ -103,6 +103,7 @@ export class LocalAskClient implements AskClient {
       snapshot: request.snapshot,
       history: request.history,
       message: request.message,
+      focus: request.focus,
       model: this.model,
       maxTokens: this.options.maxTokens ?? 400,
       maxRounds: this.options.maxRounds,
