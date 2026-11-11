@@ -217,9 +217,18 @@ export const modelUsageSchema = z.object({
 });
 export type ModelUsage = z.infer<typeof modelUsageSchema>;
 
-/** Server-sent events for one chat turn, in order: tool_call/tool_result pairs, text deltas, then done or error. */
+/**
+ * Server-sent events for one chat turn, in order: tool_call/tool_result pairs, text, then done or error.
+ *
+ * Text arrives one of two ways. By default the answer is held back until it has been checked and sent as a
+ * single `text` event. When the request sets `streamText`, `text` events carry the model's words as they
+ * come, and a `text_reset` event tells the panel to throw away what it has shown so far: the words were a
+ * remark before a lookup (`lookup`), or a draft that failed the check and is being written again
+ * (`correction`). Either way `done.grounded` is the verdict on the text that finally stands.
+ */
 export const askEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), delta: z.string() }),
+  z.object({ type: z.literal("text_reset"), reason: z.enum(["lookup", "correction"]) }),
   z.object({ type: z.literal("tool_call"), id: z.string(), name: toolNameSchema, input: z.unknown() }),
   z.object({
     type: z.literal("tool_result"),
@@ -248,6 +257,11 @@ export const askEventSchema = z.discriminatedUnion("type", [
     rounds: z.number().int().min(0),
     grounded: z.boolean(),
     corrected: z.boolean(),
+    /**
+     * Client-only: set when the answer was made on the device without a model, because the server could not
+     * answer. Carries the reason. The server never emits it.
+     */
+    offline: z.enum(["unreachable", "not_configured", "rate_limited", "budget_exhausted"]).optional(),
   }),
   z.object({
     type: z.literal("error"),

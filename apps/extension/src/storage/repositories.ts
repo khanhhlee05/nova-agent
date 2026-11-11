@@ -11,7 +11,7 @@ import {
 } from "@nova-agent/core";
 import { MAX_CONVERSATIONS, conversationTitle, reviveMessages, type StoredConversation } from "../sidepanel/ask/conversations";
 import type { AskMessage } from "../sidepanel/ask/thread";
-import type { AttachmentTextRecord, ConversationRecord, LocalMarkRecord, MaterialTextRecord, MaterialTocRecord, NovaDb, PersonalItemRecord, StoredChangeEvent, StoredSnapshot, SyncStatusRecord } from "./novaDb";
+import type { AskFeedbackRecord, AttachmentTextRecord, ConversationRecord, LocalMarkRecord, MaterialTextRecord, MaterialTocRecord, NovaDb, PersonalItemRecord, StoredChangeEvent, StoredSnapshot, SyncStatusRecord } from "./novaDb";
 
 export const INITIAL_SYNC_STATUS: SyncStatusRecord = {
   key: "current",
@@ -262,6 +262,27 @@ export const pruneMaterialTexts = async (db: NovaDb, scope: string, courseId: st
     .equals([scope, courseId])
     .filter((record) => !keepTopicIds.has(record.topicId))
     .delete();
+
+/** Ratings kept per account. Past this the oldest go. */
+export const MAX_ASK_FEEDBACK = 500;
+
+export const askFeedbackId = (scope: string, messageId: string): string => `${scope}#${messageId}`;
+
+/** Every rating for this account, oldest first. */
+export const listAskFeedback = async (db: NovaDb, scope: string): Promise<AskFeedbackRecord[]> => (await db.askFeedback.where("scope").equals(scope).toArray()).sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
+
+/** Stores one rating, replacing an earlier one for the same answer, and keeps the newest `MAX_ASK_FEEDBACK`. */
+export const putAskFeedback = async (db: NovaDb, record: AskFeedbackRecord): Promise<void> => {
+  await db.transaction("rw", db.askFeedback, async () => {
+    await db.askFeedback.put(record);
+    const all = await listAskFeedback(db, record.scope);
+    if (all.length > MAX_ASK_FEEDBACK) await db.askFeedback.bulkDelete(all.slice(0, all.length - MAX_ASK_FEEDBACK).map((entry) => entry.id));
+  });
+};
+
+export const deleteAskFeedback = async (db: NovaDb, scope: string, messageId: string): Promise<void> => {
+  await db.askFeedback.delete(askFeedbackId(scope, messageId));
+};
 
 export const getPreference = async <T>(db: NovaDb, key: string, fallback: T): Promise<T> => {
   const row = await db.preferences.get(key);

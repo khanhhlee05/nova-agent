@@ -1,6 +1,7 @@
 import type { AskErrorEvent, ToolName } from "@nova-agent/protocol";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ThumbsDown, ThumbsUp } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { Tip } from "../components/Tip";
 import type { Dashboard } from "../model";
 import { AskFollowUps } from "./AskChips";
 import { AskPlans } from "./AskPlan";
@@ -8,6 +9,8 @@ import { AskProposals, type ProposalAction } from "./AskProposals";
 import type { AskProposal, ProposalContext } from "./proposals";
 import { AskRowsDisclosure, type AskLive } from "./AskRows";
 import { hostOf } from "./askSettings";
+import { canRate, type AskVerdict } from "./feedback";
+import { OFFLINE_NOTE, OFFLINE_REASON_COPY } from "./offline";
 import type { AskMessage, AskStatus } from "./useAskThread";
 
 /** A suggestion's own summary already starts with "Suggested", so nothing is put in front of it. The same holds for any lookup whose `done` is empty. */
@@ -77,9 +80,11 @@ export type AskThreadProps = {
   /** The data suggestions are checked against, and what the student decided about one. */
   proposalContext?: ProposalContext;
   onProposal?: (messageId: string, proposal: AskProposal, action: ProposalAction) => void;
+  /** The student's rating of each answer. Without it answers cannot be rated. */
+  feedback?: { votes: ReadonlyMap<string, AskVerdict>; onVote: (messageId: string, verdict: AskVerdict | null) => void };
 };
 
-export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpen, onOpen, onRetry, onSettings, live, onAsk, proposalContext, onProposal }: AskThreadProps) => {
+export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpen, onOpen, onRetry, onSettings, live, onAsk, proposalContext, onProposal, feedback }: AskThreadProps) => {
   const list = useRef<HTMLOListElement>(null);
   const lastId = messages.at(-1)?.id;
   const lastText = messages.at(-1)?.text.length ?? 0;
@@ -127,8 +132,14 @@ export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpe
             <AskPlans rows={message.rows} dashboard={dashboard} now={now} canOpen={canOpen} onOpen={onOpen} live={live} />
             <AskProposals proposals={message.proposals ?? []} context={proposalContext} onAction={onProposal ? (proposal, action) => onProposal(message.id, proposal, action) : undefined} />
             <AskRowsDisclosure rows={message.rows} dashboard={dashboard} now={now} canOpen={canOpen} onOpen={onOpen} live={live} />
-            {message.stopped ? <p className="ask-note">Stopped before Nova finished.</p> : null}
-            {message.grounded === false ? <p className="ask-note">Nova could not verify every item named above against your data.</p> : null}
+            {message.stopped ? <p className="ask-note">{message.text.trim() !== "" ? "Stopped before Nova finished. What is shown above was not checked against your data." : "Stopped before Nova finished."}</p> : null}
+            {message.offline ? (
+              <p className="ask-note" data-tone="offline">
+                {OFFLINE_REASON_COPY[message.offline]} {OFFLINE_NOTE}
+              </p>
+            ) : null}
+            {message.revised && !streaming && message.grounded !== false ? <p className="ask-note">Nova corrected this answer after checking it against your data.</p> : null}
+            {message.grounded === false ? <p className="ask-note">Nova could not verify everything in this answer against your data. Check the rows and Brightspace before relying on it.</p> : null}
             {copy && message.error ? (
               <div className="banner" data-tone="critical" role="alert">
                 <AlertTriangle size={16} aria-hidden="true" />
@@ -150,6 +161,21 @@ export const AskThread = ({ messages, status, dashboard, now, apiBaseUrl, canOpe
                     </div>
                   ) : null}
                 </div>
+              </div>
+            ) : null}
+            {feedback && !streaming && canRate(message) ? (
+              <div className="ask-feedback" role="group" aria-label="Rate this answer">
+                {(["up", "down"] as const).map((verdict) => {
+                  const pressed = feedback.votes.get(message.id) === verdict;
+                  const label = verdict === "up" ? "Good answer" : "Bad answer";
+                  return (
+                    <Tip key={verdict} label={pressed ? `${label}. Press again to take it back` : label}>
+                      <button type="button" className="icon-button icon-button-sm" aria-label={label} aria-pressed={pressed} onClick={() => feedback.onVote(message.id, pressed ? null : verdict)}>
+                        {verdict === "up" ? <ThumbsUp size={14} aria-hidden="true" /> : <ThumbsDown size={14} aria-hidden="true" />}
+                      </button>
+                    </Tip>
+                  );
+                })}
               </div>
             ) : null}
             {last && onAsk && status === "idle" && !message.error && !message.stopped && message.text.trim() !== "" ? <AskFollowUps tools={message.tools} onPick={onAsk} /> : null}

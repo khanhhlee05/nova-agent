@@ -17,7 +17,14 @@ export type AskComposerProps = {
   draft?: AskDraft | null;
   about?: AskAbout | null;
   onClearAbout?: () => void;
+  /** The last question asked, recalled with the Up arrow when the field is empty. */
+  lastQuestion?: string | null;
+  /** Changes when something outside asks for focus (the "/" shortcut). Zero means never. */
+  focusNonce?: number;
 };
+
+/** The count of characters appears once a question is this long. */
+export const COUNTER_FROM = 1500;
 
 /**
  * Enter sends, Shift+Enter breaks the line. One button sends, and stops while
@@ -25,12 +32,11 @@ export type AskComposerProps = {
  * Nothing here uses `disabled`: the textarea goes read-only and the button
  * aria-disabled, so both stay focusable and keep their place in the tab order.
  */
-export const AskComposer = ({ streaming, disabled, onSend, onStop, draft = null, about = null, onClearAbout }: AskComposerProps) => {
+export const AskComposer = ({ streaming, disabled, onSend, onStop, draft = null, about = null, onClearAbout, lastQuestion = null, focusNonce = 0 }: AskComposerProps) => {
   const [text, setText] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const wasStreaming = useRef(streaming);
-  const remaining = CHAT_LIMITS.message - text.length;
   const inert = !streaming && (disabled || text.trim() === "");
 
   useEffect(() => {
@@ -54,6 +60,10 @@ export const AskComposer = ({ streaming, disabled, onSend, onStop, draft = null,
     // Keyed on the nonce alone: a re-render with the same draft must not overwrite later typing.
   }, [draftNonce]);
 
+  useEffect(() => {
+    if (focusNonce > 0) ref.current?.focus();
+  }, [focusNonce]);
+
   // When an answer ends, return to the textarea if focus was here, on a suggestion chip, or lost with a removed control.
   useEffect(() => {
     if (wasStreaming.current && !streaming && !disabled) {
@@ -75,6 +85,15 @@ export const AskComposer = ({ streaming, disabled, onSend, onStop, draft = null,
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       submit();
+      return;
+    }
+    // Up in an empty field brings back the last question, to ask again or to edit. In a field with text it moves the caret as usual.
+    if (event.key === "ArrowUp" && text === "" && lastQuestion && !disabled && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) {
+      event.preventDefault();
+      const recalled = lastQuestion.slice(0, CHAT_LIMITS.message);
+      setText(recalled);
+      const element = event.currentTarget;
+      requestAnimationFrame(() => element.setSelectionRange(recalled.length, recalled.length));
     }
   };
 
@@ -112,9 +131,9 @@ export const AskComposer = ({ streaming, disabled, onSend, onStop, draft = null,
         onChange={(event) => setText(event.target.value)}
         onKeyDown={onKeyDown}
       />
-      {remaining < 200 ? (
-        <span className="ask-remaining mono" aria-live="polite">
-          {remaining}
+      {text.length > COUNTER_FROM ? (
+        <span className="ask-remaining mono" data-full={text.length >= CHAT_LIMITS.message || undefined} aria-live="polite" aria-label={`${text.length} of ${CHAT_LIMITS.message} characters`}>
+          {text.length.toLocaleString("en-US")} / {CHAT_LIMITS.message.toLocaleString("en-US")}
         </span>
       ) : null}
       <Tip label={streaming ? "Stop" : "Send"}>

@@ -201,23 +201,27 @@ describe("Ask tab", () => {
     await screen.findByText(/looked up changes/i);
   });
 
-  it("lets the student stop an answer before any unchecked text is shown", async () => {
+  it("shows an answer as it is written, and marks what was written as unchecked when the student stops it", async () => {
     const { dashboard, events } = await demoDashboard();
     const { model, release } = gated();
     render(<MissionControl {...baseProps({ dashboard, ask: askProps(new LocalAskClient(model), events) })} />);
     fireEvent.change(screen.getByRole("textbox", { name: /ask nova a question/i }), { target: { value: "Go" } });
     fireEvent.click(screen.getByRole("button", { name: /send question/i }));
     await screen.findByText(/looked up your workload/i);
-    expect(screen.getByText(/thinking/i)).toBeTruthy();
+    // The first words are on screen while the model is still writing.
+    expect(await screen.findByText("First part.")).toBeTruthy();
+    expect(screen.queryByText(/thinking/i)).toBeNull();
     // One button: Send turns into Stop in place, and the textarea stays editable for the next question.
     const stop = screen.getByRole("button", { name: /stop answering/i });
     expect(screen.queryByRole("button", { name: /send question/i })).toBeNull();
     expect((screen.getByRole("textbox", { name: /ask nova a question/i }) as HTMLTextAreaElement).readOnly).toBe(false);
     fireEvent.click(stop);
     release();
-    expect(await screen.findByText(/stopped before nova finished/i)).toBeTruthy();
-    expect(screen.queryByText("First part.")).toBeNull();
+    expect(await screen.findByText("Stopped before Nova finished. What is shown above was not checked against your data.")).toBeTruthy();
+    expect(screen.getByText("First part.")).toBeTruthy();
     expect(screen.queryByText(/second part/i)).toBeNull();
+    // A stopped draft offers no follow-ups and is not treated as an answer.
+    expect(screen.queryByRole("group", { name: /follow-up questions/i })).toBeNull();
     expect(screen.getByRole("button", { name: /send question/i })).toBe(stop);
   });
 

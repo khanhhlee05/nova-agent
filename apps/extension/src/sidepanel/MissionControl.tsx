@@ -6,7 +6,7 @@ import type { ChatRequest, ClientToolName } from "@nova-agent/protocol";
 import { CheckCheck, EyeOff, Plus } from "lucide-react";
 import { Tabs, Tooltip } from "radix-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AskChips, AskView, canUndo, resolveProposal, summaryOf, useAskThread, type AskAbout, type AskProposal, type ProposalAction, type ProposalApplied, type ProposalContext, type AskClient, type AskClientFactory, type AskConsent, type AskDraft, type AskHandlers, type AskMaterialsControls, type AskLive, type AskMessage, type AskRequestContext, type AskSettings, type ConversationStore, type PlanDraft } from "./ask";
+import { AskChips, AskView, canUndo, resolveProposal, summaryOf, feedbackEntry, useAskThread, useServerUsage, type AskAbout, type AskProposal, type ProposalAction, type ProposalApplied, type ProposalContext, type AskClient, type AskClientFactory, type AskConsent, type AskDraft, type AskFeedbackControls, type AskFeedbackView, type AskHandlers, type AskMaterialsControls, type AskLive, type AskMessage, type AskRequestContext, type AskSettings, type ConversationStore, type PlanDraft } from "./ask";
 import type { SyncStatusRecord } from "../storage/novaDb";
 import { PHASE_LABELS, isRunningPhase, isStale, type SyncRuntimeState } from "../sync/syncState";
 import { StateBanners, SyncProgress } from "./components/Banners";
@@ -109,6 +109,8 @@ export type AskProps = {
   consent?: AskConsent;
   /** Course materials, course by course. */
   materials?: AskMaterialsControls;
+  /** Ratings of answers, stored on this device. */
+  feedback?: AskFeedbackControls;
 };
 
 export type MissionControlProps = {
@@ -199,6 +201,8 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
             }),
             focus: { courseId: preferences.courseFilter, tab: lastTab.current, ...(context.focusItemId ? { itemId: context.focusItemId } : {}) },
             ...(ask.clientTools && ask.clientTools.names.length > 0 ? { clientTools: [...ask.clientTools.names] } : {}),
+            // This panel shows text as it is written and can take back a draft.
+            streamText: true,
             client: { name: "nova-extension", version: CLIENT_VERSION },
           }
         : null,
@@ -217,6 +221,54 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
     setAwaitingMaterials(false);
     thread.retryLast();
   }, [awaitingMaterials, consentPending, thread]);
+  // The server's use for the day is read when the Ask tab is shown and after each answer.
+  const answered = thread.messages.filter((message) => message.role === "assistant" && (message.grounded !== null || message.error !== null)).length;
+  const serverUsage = useServerUsage(ask?.settings.enabled ? (ask.client ?? null) : null, tab === "ask", answered);
+
+  // "/" goes to the composer from anywhere in the panel, unless the student is typing somewhere or a dialog is open.
+  const [composerFocus, setComposerFocus] = useState(0);
+  const [slashPending, setSlashPending] = useState(false);
+  const askEnabled = ask?.settings.enabled === true;
+  const setPreferences = actions.setPreferences;
+  useEffect(() => {
+    if (!askEnabled) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+      event.preventDefault();
+      setPreferences({ activeTab: "ask" });
+      setSlashPending(true);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [askEnabled, setPreferences]);
+
+  // The composer can only take focus once its tab is showing, which may be a moment after the key.
+  useEffect(() => {
+    if (!slashPending || tab !== "ask") return;
+    setSlashPending(false);
+    setComposerFocus((count) => count + 1);
+  }, [slashPending, tab]);
+
+  const feedbackControls = ask?.feedback;
+  const feedbackView = useMemo<AskFeedbackView | undefined>(
+    () =>
+      feedbackControls
+        ? {
+            votes: feedbackControls.votes,
+            count: feedbackControls.votes.size,
+            onExport: feedbackControls.onExport,
+            onVote: (messageId, verdict) => {
+              const entry = feedbackEntry(thread.messages, messageId, thread.conversationId);
+              if (entry) feedbackControls.onVote(entry, verdict);
+            },
+          }
+        : undefined,
+    [feedbackControls, thread.conversationId, thread.messages],
+  );
+
   const allowConsent = () => {
     const pending = ask?.consent?.pending;
     if (!pending || !ask?.consent) return;
@@ -622,7 +674,7 @@ export const MissionControl = ({ dashboard, status, runtime, feasibility, prefer
                 // Force-mounted and hidden so the conversation survives a switch to another tab.
                 <Tabs.Content className="tab-content tab-content-ask" value="ask" forceMount hidden={tab !== "ask"}>
                   {dashboard ? (
-                    <AskView notices={tab === "ask" ? stateBanners : null} thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} live={askLive} draft={askDraft} about={askAbout} onClearAbout={() => setAskAbout(null)} onSend={sendFromComposer} conversations={store ? { list: store.list, onOpen: openConversation, onDelete: deleteConversation } : undefined} proposalContext={proposalContext} onProposal={onProposal} consent={ask.consent ? { pending: ask.consent.pending, working: ask.consent.working, onDecline: ask.consent.onDecline, onAllow: allowConsent } : undefined} materials={ask.materials} />
+                    <AskView notices={tab === "ask" ? stateBanners : null} thread={thread} settings={ask.settings} onSettingsChange={ask.setSettings} clientFactory={ask.clientFactory} dashboard={dashboard} mode={status.mode} now={now} canOpen={canOpen} onOpen={actions.openUrl} live={askLive} draft={askDraft} about={askAbout} onClearAbout={() => setAskAbout(null)} onSend={sendFromComposer} conversations={store ? { list: store.list, onOpen: openConversation, onDelete: deleteConversation } : undefined} proposalContext={proposalContext} onProposal={onProposal} consent={ask.consent ? { pending: ask.consent.pending, working: ask.consent.working, onDecline: ask.consent.onDecline, onAllow: allowConsent } : undefined} materials={ask.materials} feedback={feedbackView} serverUsage={serverUsage} focusNonce={composerFocus} />
                   ) : showSkeleton ? (
                     <FocusSkeleton />
                   ) : (

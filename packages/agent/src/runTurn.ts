@@ -1,5 +1,5 @@
 import { PROPOSAL_LIMITS, type AskEvent, type ChatFocus, type ChatMessage, type ClientToolName, type ClientToolResult, type CompactSnapshot, type ModelUsage, type ToolName } from "@nova-agent/protocol";
-import { addEvidence, checkHonesty, emptyEvidence, unverifiedQuotes } from "./honesty";
+import { addEvidence, checkHonesty, emptyEvidence, unverifiedFacts, unverifiedQuotes, type UnverifiedFact } from "./honesty";
 import { ModelError, addUsage, isAbortError, type ChatModel, type ModelMessage, type ToolCall } from "./model";
 import { briefTitles, buildSystemPrompt, quote } from "./prompt";
 import { TOOLS, executeTool, isClientToolName, isToolName, rowTitles, toolSchemasForModel, toolsFor, type ToolResult, type ToolSpec } from "./tools";
@@ -23,6 +23,11 @@ export type RunTurnInput = {
   tools?: readonly ToolSpec[];
   /** Tool rounds before the model is forced to answer. Default 4. */
   maxRounds?: number;
+  /**
+   * Send the model's words as they come instead of one checked answer. A draft that turns out to be a remark
+   * before a lookup, or that fails the check and is rewritten, is withdrawn with a `text_reset` event.
+   */
+  streamText?: boolean;
   maxTokens: number;
   signal: AbortSignal;
 };
@@ -72,6 +77,15 @@ const parseArgs = (raw: string): unknown => {
 
 const quoteNudge = (quoted: string): string =>
   `Your draft puts ${quote(quoted.slice(0, 160))} in quotation marks, but those exact words are not in the course data or in any tool result. Answer again: quote only text a tool returned, exactly as written, or say it in your own words without quotation marks.`;
+
+const FACT_COPY: Record<UnverifiedFact["kind"], string> = {
+  date: "that date is not in the course data or in any tool result",
+  weekday: "that weekday does not match the date in the course data",
+  points: "that point value is not in the course data or in any tool result",
+};
+
+const factNudge = (fact: UnverifiedFact): string =>
+  `Your draft says ${quote(fact.value)}, but ${FACT_COPY[fact.kind]}. Answer again: use only dates and numbers that a tool returned or the course data lists, exactly as given, or leave it out.`;
 
 const nudge = (title: string, canLookUp: boolean): string =>
   `Your draft names ${quote(title)}, which no tool result or course data line contains. ${canLookUp ? "Call a tool to verify it, then answer using only tool results and the course data." : "Answer again without naming it, using only the course data and the tool results above."}`;
@@ -128,11 +142,17 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
       const lastRound = rounds >= maxRounds;
       const toolChoice = lastRound ? "none" : "auto";
       let text = "";
+      // What the panel has been shown of this round's text, when text is streamed.
+      let shown = "";
       const calls: ToolCall[] = [];
       let stop: string = "end";
       for await (const event of input.model.complete({ messages, tools: definitions, toolChoice, maxTokens: input.maxTokens, signal: input.signal })) {
         if (event.type === "text") {
           text += event.delta;
+          if (input.streamText && event.delta !== "") {
+            shown += event.delta;
+            yield { type: "text", delta: event.delta };
+          }
         } else if (event.type === "tool_call") {
           calls.push(event.call);
         } else {
@@ -143,6 +163,8 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
       }
 
       if (calls.length > 0 && !lastRound) {
+        // Words before a lookup are not the answer.
+        if (shown !== "") yield { type: "text_reset", reason: "lookup" };
         messages.push({ role: "assistant", content: text, toolCalls: calls });
         for (const call of calls) {
           const args = parseArgs(call.arguments);
@@ -198,17 +220,23 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<AskEvent, Tu
       if (text.trim() === "") text = stop === "max_tokens" ? FALLBACK : calls.length > 0 ? FALLBACK : "I do not have enough to answer that. Try asking about deadlines, changes, or what to start first.";
       const check = checkHonesty(text, input.snapshot, [...allowedTitles, ...returnedTitles]);
       const quotes = unverifiedQuotes(text, evidence);
-      const sound = check.ok && quotes.length === 0;
+      const facts = unverifiedFacts(text, evidence);
+      const sound = check.ok && quotes.length === 0 && facts.length === 0;
       // One correction, and only while a round is left: the last round is reserved for the answer.
       if (!sound && !corrected && !lastRound) {
         corrected = true;
+        if (shown !== "") yield { type: "text_reset", reason: "correction" };
         messages.push({ role: "assistant", content: text });
-        messages.push({ role: "user", content: check.ok ? quoteNudge(quotes[0] ?? "") : nudge(check.unverified[0] ?? "", rounds + 1 < maxRounds) });
+        messages.push({ role: "user", content: !check.ok ? nudge(check.unverified[0] ?? "", rounds + 1 < maxRounds) : quotes.length > 0 ? quoteNudge(quotes[0] ?? "") : factNudge(facts[0] as UnverifiedFact) });
         continue;
       }
       finalText = text;
       grounded = sound;
-      yield { type: "text", delta: text };
+      // Streamed text is already on screen. It is sent again only when what stands differs from what was shown.
+      if (shown !== text) {
+        if (shown !== "") yield { type: "text_reset", reason: "lookup" };
+        yield { type: "text", delta: text };
+      }
       yield { type: "done", model: modelId, usage, rounds, grounded, corrected };
       return finish("ok");
     }

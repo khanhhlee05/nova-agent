@@ -75,6 +75,7 @@ export const chatRoute = (context: AppContext): Hono =>
           message: request.message,
           focus: request.focus,
           summary: request.summary,
+          streamText: request.streamText === true,
           model,
           maxRounds: context.config.MAX_ROUNDS,
           maxTokens: context.config.MAX_TOKENS,

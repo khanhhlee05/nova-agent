@@ -10,6 +10,7 @@ export const healthRoute = (context: AppContext): Hono =>
       configured: context.model !== null,
       model: context.model ? context.config.OPENROUTER_MODEL : null,
       usedToday: context.usage.usedToday(context.now()),
+      dailyCap: context.usage.dailyCap,
     };
     return c.json(body);
   });

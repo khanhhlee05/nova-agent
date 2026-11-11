@@ -88,7 +88,10 @@ describe("HttpAskClient", () => {
 
   it("checks health", async () => {
     const good = fetchWith(() => new Response(JSON.stringify({ status: "ok", service: "nova-agent-api", configured: true, model: "m", usedToday: 5 }), { status: 200 }));
-    expect(await new HttpAskClient({ baseUrl: "http://x", token: null, fetch: good.fetchImpl }).health()).toEqual({ ok: true, configured: true, model: "m", message: null });
+    // An older server reports its use for the day and no limit.
+    expect(await new HttpAskClient({ baseUrl: "http://x", token: null, fetch: good.fetchImpl }).health()).toEqual({ ok: true, configured: true, model: "m", message: null, usedToday: 5 });
+    const capped = fetchWith(() => new Response(JSON.stringify({ status: "ok", service: "nova-agent-api", configured: true, model: "m", usedToday: 5, dailyCap: 200_000 }), { status: 200 }));
+    expect(await new HttpAskClient({ baseUrl: "http://x", token: null, fetch: capped.fetchImpl }).health()).toEqual({ ok: true, configured: true, model: "m", message: null, usedToday: 5, dailyCap: 200_000 });
     expect(good.calls[0]?.url).toBe("http://x/healthz");
     const wrong = fetchWith(() => new Response("<html>", { status: 200 }));
     expect((await new HttpAskClient({ baseUrl: "http://x", token: null, fetch: wrong.fetchImpl }).health()).ok).toBe(false);

@@ -111,10 +111,16 @@ export const useAskThread = (
                   (message.proposals ?? []).some((proposal) => proposal.id === event.id) ? message : { ...message, proposals: [...(message.proposals ?? []), { id: event.id, label: event.label, payload: event.payload, state: "pending" }] },
                 );
                 break;
+              case "text_reset":
+                // What was shown so far was not the answer: a remark before a lookup, or a draft that failed the check.
+                answer = "";
+                patch(answerId, (message) => ({ ...message, text: "", ...(event.reason === "correction" ? { revised: true } : {}) }));
+                if (event.reason === "correction") setAnnouncement("Nova is correcting its answer.");
+                break;
               case "client_tool":
                 break;
               case "done":
-                patch(answerId, (message) => ({ ...message, usage: event.usage, grounded: event.grounded }));
+                patch(answerId, (message) => ({ ...message, usage: event.usage, grounded: event.grounded, model: event.model, ...(event.offline ? { offline: event.offline } : {}) }));
                 break;
               case "error":
                 if (event.code === "aborted") {

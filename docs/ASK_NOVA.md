@@ -93,6 +93,8 @@ npm run smoke:api -- --api http://127.0.0.1:8787 --token <NOVA_DEV_TOKEN>   # ex
 
 OpenRouter's free tier is rate limited (roughly 20 requests per minute and a small daily allowance without credits) and some free endpoints route to providers whose data policy allows training on prompts. Prefer demo data with free models. The probe filters for `tools` support; models without it answer from the brief in the system prompt but cannot look anything up.
 
+`npm run probe:api -- --try` asks the first five such models one question over demo data through the real agent loop and prints, per model, whether it called a tool, whether its answer passed the check, the rounds, the tokens, and the time, best first, as rows for the table below (`--try 8` for more, `--model <id>` to name them, `--json` for the raw results). It needs `OPENROUTER_API_KEY` and sends only demo data.
+
 Record here which ids worked once the live test runs:
 
 | Model id | Date | Tool calls | Notes |
@@ -105,8 +107,9 @@ Record here which ids worked once the live test runs:
 2. `POST /v1/chat` validates the body (`packages/protocol`), reserves the turn's worst-case tokens against the daily cap, and starts the loop (`runTurn`); the reservation is settled to real usage when the turn ends.
 3. The system prompt carries the date, the courses, counts, and a brief (next move, overdue, today, upcoming), so a weak model still answers from real facts. Tools cover everything deeper.
 4. Up to `MAX_ROUNDS` rounds: tool calls run over the snapshot, results go back to the model. The last round forces a text answer.
-5. The answer text is held back until it has been checked against the item titles the tools returned and the brief listed. If it names an item that neither contains, the model is nudged once (only while a round is left, so model calls never exceed `MAX_ROUNDS`); `done.grounded` reports whether the answer that was finally shown passed. Quotations are checked the same way: text in quotation marks of four or more words has to appear, word for word, in the prompt, the conversation, or a tool result of this turn, so a model cannot put invented words in a syllabus's mouth. Dates, points, and statuses in the answer text are not verified, and the rows under the answer carry the real values.
-6. Events: `tool_call`, `client_tool` when the lookup is one the panel makes, `tool_result` (with rows), `proposal` after the result of a propose tool, one `text` event with the checked answer, then `done` (usage, rounds, grounded) or a typed `error`.
+5. The answer text is held back until it has been checked against the item titles the tools returned and the brief listed. If it names an item that neither contains, the model is nudged once (only while a round is left, so model calls never exceed `MAX_ROUNDS`); `done.grounded` reports whether the answer that was finally shown passed. Three more checks run on the same draft. Quotations: text in quotation marks of four or more words has to appear, word for word, in the prompt, the conversation, or a tool result of this turn, so a model cannot put invented words in a syllabus's mouth. Dates: every calendar day the answer states (`2026-09-09`, `Sep 9`, `9th of September`) has to be a day the model was shown, and a weekday written next to a date has to be that date's weekday. Points: a number in front of "points" or "pts" has to be a number the model was shown. Relative words (tomorrow, next week), a weekday on its own, statuses, and arithmetic the model does itself are not verified; the rows under the answer carry the real values. One correction is asked for per turn, whichever check failed first.
+6. Events: `tool_call`, `client_tool` when the lookup is one the panel makes, `tool_result` (with rows), `proposal` after the result of a propose tool, the answer as `text`, then `done` (usage, rounds, grounded) or a typed `error`.
+7. Text arrives one of two ways. A request without `streamText` gets one `text` event, sent only after the check. A request with `streamText: true` (what the panel sends) gets `text` events as the model writes, and a `text_reset` event whenever what has been shown is not the answer: `lookup` when the words came before a tool call, `correction` when the draft failed the check and is being written again. The panel clears the paragraph on a reset and says so after a correction. `done.grounded` is the verdict on the text that stands; when no round is left for a correction, the draft stays and the panel marks it as not verified. A stopped answer keeps the words written so far, marked as unchecked, and is not sent as history with the next question.
 
 ## Prompt injection
 
@@ -114,7 +117,25 @@ Course names, codes, item titles, file names, Content topic names, the text of a
 
 ## States the tab carries
 
-Off (setup card), API unreachable, API without a key, streaming (Stop replaces Send), stopped, typed errors (rate limited with retry-after, budget exhausted, unauthorized, timeout), demo banner, empty data. A lookup that never reported back before Stop reads as stopped, not as still running. Clearing the thread or opening another conversation mid-answer cancels that answer at once, and the cancelled turn cannot write into the thread that replaced it.
+Off (setup card), API unreachable, API without a key, streaming (the answer appears as it is written; Stop replaces Send), stopped, corrected, not verified, answered on the device, typed errors (rate limited with retry-after, budget exhausted, unauthorized, timeout), demo banner, empty data. A lookup that never reported back before Stop reads as stopped, not as still running. Clearing the thread or opening another conversation mid-answer cancels that answer at once, and the cancelled turn cannot write into the thread that replaced it.
+
+## When the server cannot answer
+
+If the server is unreachable, has no model key, is rate limited, or has used its daily budget, and the failure comes before the server has sent anything, the panel tries to answer on the device. A small grammar (`matchIntent` in `packages/agent`) recognises the questions the panel itself suggests and their close variants: what is due (today, tomorrow, a weekday, this week, next week, in a course), what is overdue, what changed, announcements, what to start first, which course needs attention, what is left in a course, and a study plan. It maps the question to one lookup, runs it over the same snapshot with the same tools, and writes one sentence from the lookup's own summary, so the sentence is true of the rows under it by construction. The answer carries a note with the reason and "Answered on this device without the AI model." Nothing leaves the device for such an answer.
+
+A question the grammar does not recognise keeps the error banner: anything that asks why, needs a file or course materials, asks for an action, or points back at an earlier answer ("among these"). So does any failure that arrives after the server began to answer, and any other kind of failure (a rejected access code, a timeout).
+
+## Ratings
+
+Each finished answer has a thumbs up and a thumbs down. A rating is stored on this device (`askFeedback`, schema version 7, newest 500 per account): the question, the lookups made, whether the answer was grounded or corrected, the model, and the rating. The answer's text is not stored. The same thumb takes a rating back. **Export ratings** in the Ask settings saves them as a JSON file for the project's own evaluation. Ratings are never sent to the server, and **Clear local Nova data** deletes them.
+
+## Usage
+
+Under the status line the panel shows the tokens of the last answer and, when the server reports a daily limit, how much of it is used today, as a percentage and a bar (`/healthz` returns `usedToday` and `dailyCap`; the panel asks when the Ask tab is opened and after each answer). From 90 percent on it says the server is nearly out. The count is the server's own, for everyone who uses it, best effort and reset on restart.
+
+## Composer
+
+Enter sends and Shift+Enter breaks the line. With the field empty, the Up arrow brings back the last question. A slash pressed anywhere in the panel, outside a text field and with no dialog open, goes to the Ask tab and the field. Past 1,500 characters a counter shows how many of the 2,000 allowed are used.
 
 ## Reading assignment files
 
@@ -191,11 +212,11 @@ Everything in CI runs on fixtures: SSE parsing, the compact snapshot, every tool
 
 Run on a developer machine with Chrome and network access:
 
-1. `npm run probe:api`, set `OPENROUTER_MODEL` to a free model with tool support, `npm run dev:api`.
+1. `npm run probe:api -- --try`, paste the rows it prints into the table above, set `OPENROUTER_MODEL` to the best one, `npm run dev:api`.
 2. `npm run smoke:api -- --question "What is due this week in Microcontrollers?"` returns a `tool_call`, rows, an answer, and `grounded=true`. Record the model id in the table above.
 3. `npm run build --workspace @nova-agent/extension`, load `apps/extension/dist`, open the Ask tab, Test connection, Turn on Ask Nova, and ask the three suggested questions on demo data.
 4. Rotate the OpenRouter key afterwards if it was ever shared outside `.env`.
 
 ## Not built yet
 
-Sign-in, a server-side database, conversations across devices, per-user quotas, Google Calendar, hosting, the on-device model adapter, and meaning-based (embedding) search over course materials. See `ASK_NOVA_PLAN.md` for the next slices and `BACKEND_PLAN.md` for the hosted backend.
+Sign-in, a server-side database, conversations across devices, per-user quotas, Google Calendar, hosting, an on-device language model, and meaning-based (embedding) search over course materials. See `ASK_NOVA_PLAN.md` for the next slices and `BACKEND_PLAN.md` for the hosted backend.

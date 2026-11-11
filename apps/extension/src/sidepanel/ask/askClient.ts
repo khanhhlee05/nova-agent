@@ -2,8 +2,10 @@ import { runTurn, type ChatModel } from "@nova-agent/agent";
 import { CLIENT_TOOL_LIMITS, apiErrorBodySchema, askEventSchema, healthResponseSchema, parseSseStream, type AskErrorCode, type AskEvent, type ChatRequest, type ClientToolName, type ClientToolResult } from "@nova-agent/protocol";
 import type { AskSettings } from "./askSettings";
 import type { ClientToolAnswer } from "./clientTools";
+import { FallbackAskClient } from "./offline";
 
-export type AskHealth = { ok: boolean; configured: boolean; model: string | null; message: string | null };
+/** `usedToday` and `dailyCap` are the server's token count for the day and its limit (0 for none), when it reports them. */
+export type AskHealth = { ok: boolean; configured: boolean; model: string | null; message: string | null; usedToday?: number; dailyCap?: number };
 
 /** What the panel can do for a turn while it runs. */
 export type AskHandlers = {
@@ -128,7 +130,7 @@ export class HttpAskClient implements AskClient {
       if (!response.ok) return { ok: false, configured: false, model: null, message: response.status === 401 || response.status === 403 ? "The Nova server didn't accept the access code. Check it and try again." : `The Nova server answered with an error (${response.status}). Check the address and try again.` };
       const parsed = healthResponseSchema.safeParse(await response.json());
       if (!parsed.success) return { ok: false, configured: false, model: null, message: "Something answered at that address, but it isn't a Nova server. Check the address." };
-      return { ok: true, configured: parsed.data.configured, model: parsed.data.model, message: null };
+      return { ok: true, configured: parsed.data.configured, model: parsed.data.model, message: null, usedToday: parsed.data.usedToday, ...(parsed.data.dailyCap !== undefined ? { dailyCap: parsed.data.dailyCap } : {}) };
     } catch {
       return { ok: false, configured: false, model: null, message: `Nothing answered at ${this.baseUrl}. If the server runs on this computer, make sure it's started.` };
     }
@@ -152,6 +154,7 @@ export class LocalAskClient implements AskClient {
       model: this.model,
       maxTokens: this.options.maxTokens ?? 400,
       maxRounds: this.options.maxRounds,
+      streamText: request.streamText === true,
       signal,
       ...(request.clientTools && request.clientTools.length > 0
         ? { clientTools: { turnId: "in-process", names: request.clientTools, call: ({ id, name, input }: { id: string; name: ClientToolName; input: unknown }, inner: AbortSignal) => answerClientTool(handlers, id, name, input, inner) } }
@@ -173,4 +176,4 @@ export class LocalAskClient implements AskClient {
 
 export type AskClientFactory = (settings: AskSettings) => AskClient;
 
-export const defaultAskClientFactory: AskClientFactory = (settings) => new HttpAskClient({ baseUrl: settings.apiBaseUrl, token: settings.token });
+export const defaultAskClientFactory: AskClientFactory = (settings) => new FallbackAskClient(new HttpAskClient({ baseUrl: settings.apiBaseUrl, token: settings.token }));

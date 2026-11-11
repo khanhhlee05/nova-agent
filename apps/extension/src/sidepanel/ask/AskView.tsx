@@ -15,6 +15,7 @@ import type { AskLive } from "./AskRows";
 import { hostOf, type AskSettings } from "./askSettings";
 import { AskSetup } from "./AskSetup";
 import { AskThread } from "./AskThread";
+import type { AskVerdict } from "./feedback";
 import type { AskThread as AskThreadState } from "./useAskThread";
 
 export type AskViewProps = {
@@ -47,7 +48,29 @@ export type AskViewProps = {
   consent?: AskConsent;
   /** Course materials, course by course. Absent when files cannot be read at all. */
   materials?: AskMaterialsControls;
+  /** Ratings of answers, kept on this device. */
+  feedback?: AskFeedbackView;
+  /** How much of the server's daily allowance is used, when the server reports a limit. */
+  serverUsage?: ServerUsage | null;
+  /** Changes when the composer should take focus. */
+  focusNonce?: number;
 };
+
+export type AskFeedbackView = {
+  votes: ReadonlyMap<string, AskVerdict>;
+  onVote: (messageId: string, verdict: AskVerdict | null) => void;
+  /** How many ratings are stored, across every conversation. */
+  count: number;
+  onExport: () => void;
+};
+
+/** Tokens the server has used today, for everyone who uses it, against its daily limit. */
+export type ServerUsage = { usedToday: number; dailyCap: number };
+
+/** From this share of the daily limit on, the panel warns that answers may stop. */
+export const USAGE_WARN_AT = 0.9;
+
+export const usagePercent = (usage: ServerUsage): number => Math.min(100, Math.max(0, Math.round((usage.usedToday / usage.dailyCap) * 100)));
 
 export type AskConsent = {
   pending: ConsentRequest | null;
@@ -66,13 +89,18 @@ export type AskSavedConversations = {
 };
 
 /** The Ask tab body: setup card until enabled, then the thread and the composer. */
-export const AskView = ({ notices, thread, settings, onSettingsChange, clientFactory, dashboard, mode, now, canOpen, onOpen, live, draft = null, about = null, onClearAbout, onSend, conversations, proposalContext, onProposal, consent, materials }: AskViewProps) => {
+export const AskView = ({ notices, thread, settings, onSettingsChange, clientFactory, dashboard, mode, now, canOpen, onOpen, live, draft = null, about = null, onClearAbout, onSend, conversations, proposalContext, onProposal, consent, materials, feedback, serverUsage = null, focusNonce = 0 }: AskViewProps) => {
   const [editing, setEditing] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const saved = settings.persistConversations === true && conversations ? conversations : null;
   const showSetup = !settings.enabled || editing;
   const streaming = thread.status === "streaming";
+  const lastQuestion = [...thread.messages].reverse().find((message) => message.role === "user")?.text ?? null;
+  // Tokens of the newest answer a model wrote; an answer made on the device used none.
+  const lastTokens = [...thread.messages].reverse().find((message) => message.role === "assistant" && message.grounded !== null)?.usage?.totalTokens ?? null;
+  const percent = serverUsage && serverUsage.dailyCap > 0 ? usagePercent(serverUsage) : null;
+  const nearlyOut = serverUsage !== null && serverUsage.dailyCap > 0 && serverUsage.usedToday / serverUsage.dailyCap >= USAGE_WARN_AT;
 
   return (
     <div className="ask">
@@ -84,7 +112,15 @@ export const AskView = ({ notices, thread, settings, onSettingsChange, clientFac
           </Banner>
         ) : null}
         {showSetup ? (
-          <AskSetup key={`${settings.apiBaseUrl}|${settings.token ?? ""}`} settings={settings} onChange={onSettingsChange} clientFactory={clientFactory} editing={settings.enabled} onClose={settings.enabled ? () => setEditing(false) : undefined} />
+          <AskSetup
+            key={`${settings.apiBaseUrl}|${settings.token ?? ""}`}
+            settings={settings}
+            onChange={onSettingsChange}
+            clientFactory={clientFactory}
+            editing={settings.enabled}
+            onClose={settings.enabled ? () => setEditing(false) : undefined}
+            feedback={feedback ? { count: feedback.count, onExport: feedback.onExport } : undefined}
+          />
         ) : (
           <div className="ask-status">
             <span>
@@ -126,6 +162,20 @@ export const AskView = ({ notices, thread, settings, onSettingsChange, clientFac
             </Tip>
           </div>
         )}
+        {settings.enabled && !editing && (lastTokens !== null || percent !== null) ? (
+          <p className="ask-usage" data-tone={nearlyOut ? "warn" : undefined}>
+            {lastTokens !== null ? <span>Last answer: {lastTokens.toLocaleString("en-US")} tokens</span> : null}
+            {percent !== null ? (
+              <span className="ask-usage-server">
+                <span>Server use today: {percent}%</span>
+                <span className="ask-meter" role="meter" aria-label="Share of the Nova server's daily limit used today" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+                  <span className="ask-meter-fill" style={{ width: `${percent}%` }} />
+                </span>
+              </span>
+            ) : null}
+            {nearlyOut ? <span role="status">Nearly out for today. Simple questions are still answered on this device.</span> : null}
+          </p>
+        ) : null}
         {settings.enabled && !editing ? (
           thread.messages.length === 0 ? (
             <div className="empty ask-empty">
@@ -133,7 +183,7 @@ export const AskView = ({ notices, thread, settings, onSettingsChange, clientFac
               <span>Deadlines, what changed, what to start first. Answers cover every course and use the data on this device.</span>
             </div>
           ) : (
-            <AskThread messages={thread.messages} status={thread.status} dashboard={dashboard} now={now} apiBaseUrl={settings.apiBaseUrl} canOpen={canOpen} onOpen={onOpen} onRetry={thread.retryLast} onSettings={() => setEditing(true)} live={live} onAsk={thread.send} proposalContext={proposalContext} onProposal={onProposal} />
+            <AskThread messages={thread.messages} status={thread.status} dashboard={dashboard} now={now} apiBaseUrl={settings.apiBaseUrl} canOpen={canOpen} onOpen={onOpen} onRetry={thread.retryLast} onSettings={() => setEditing(true)} live={live} onAsk={thread.send} proposalContext={proposalContext} onProposal={onProposal} feedback={feedback ? { votes: feedback.votes, onVote: feedback.onVote } : undefined} />
           )
         ) : null}
         {settings.enabled && !editing && consent?.pending ? (
@@ -170,7 +220,7 @@ export const AskView = ({ notices, thread, settings, onSettingsChange, clientFac
       </div>
       {materials && choosing ? <AskMaterials {...materials} now={now} onClose={() => setChoosing(false)} /> : null}
       {saved && browsing ? <AskConversations conversations={saved.list} currentId={thread.conversationId} now={now} onOpen={saved.onOpen} onDelete={saved.onDelete} onClose={() => setBrowsing(false)} /> : null}
-      <AskComposer streaming={streaming} disabled={!settings.enabled || editing} onSend={onSend ?? thread.send} onStop={thread.stop} draft={draft} about={about} onClearAbout={onClearAbout} />
+      <AskComposer streaming={streaming} disabled={!settings.enabled || editing} onSend={onSend ?? thread.send} onStop={thread.stop} draft={draft} about={about} onClearAbout={onClearAbout} lastQuestion={lastQuestion} focusNonce={focusNonce} />
     </div>
   );
 };

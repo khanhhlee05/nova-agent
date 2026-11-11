@@ -136,6 +136,30 @@ export type MaterialTextRecord = {
   sourceUpdatedAt: string | null;
 };
 
+/**
+ * What the student thought of one answer. Kept on this device for the
+ * project's own evaluation and exported by hand; never sent anywhere. It
+ * holds the question, not the answer.
+ */
+export type AskFeedbackRecord = {
+  /** `${scope}#${messageId}`. */
+  id: string;
+  scope: string;
+  messageId: string;
+  conversationId: string;
+  verdict: "up" | "down";
+  question: string;
+  toolNames: string[];
+  /** Whether the answer passed the check against the data; null when the turn did not report it. */
+  grounded: boolean | null;
+  /** True when a first draft was withdrawn and rewritten. */
+  revised: boolean;
+  model: string | null;
+  /** Set when the answer was made on the device without a model. */
+  offline: string | null;
+  at: string;
+};
+
 export class NovaDb extends Dexie {
   snapshots!: EntityTable<StoredSnapshot, "id">;
   changeEvents!: EntityTable<StoredChangeEvent, "id">;
@@ -149,6 +173,7 @@ export class NovaDb extends Dexie {
   attachmentText!: EntityTable<AttachmentTextRecord, "id">;
   materialToc!: EntityTable<MaterialTocRecord, "id">;
   materialText!: EntityTable<MaterialTextRecord, "id">;
+  askFeedback!: EntityTable<AskFeedbackRecord, "id">;
 
   constructor(name = "nova-agent") {
     super(name);
@@ -165,6 +190,7 @@ export class NovaDb extends Dexie {
     this.version(4).stores({ conversations: "id, scope, updatedAt" });
     this.version(5).stores({ attachmentText: "id, scope, itemKey, extractedAt" });
     this.version(6).stores({ materialToc: "id, scope", materialText: "id, scope, [scope+courseId]" });
+    this.version(7).stores({ askFeedback: "id, scope, at" });
   }
 }
 

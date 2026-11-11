@@ -37,6 +37,8 @@ export const chatRequestSchema = z.object({
   summary: z.string().max(CHAT_LIMITS.summary).optional(),
   /** The lookups this panel can make on the device right now. The server offers the model no other client tool. */
   clientTools: z.array(clientToolNameSchema).max(8).optional(),
+  /** True when the panel can show text as it is written and take a `text_reset`. Without it the answer comes as one checked `text` event. */
+  streamText: z.boolean().optional(),
   client: z.object({ name: z.literal("nova-extension"), version: z.string().min(1).max(32) }),
 });
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
@@ -47,5 +49,7 @@ export const healthResponseSchema = z.object({
   configured: z.boolean(),
   model: z.string().nullable(),
   usedToday: z.number().int().min(0),
+  /** Tokens this server allows per UTC day across everyone who uses it. 0 means no limit. Absent on older servers. */
+  dailyCap: z.number().int().min(0).optional(),
 });
 export type HealthResponse = z.infer<typeof healthResponseSchema>;

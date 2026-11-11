@@ -10,13 +10,15 @@ export type AskSetupProps = {
   /** Editing an enabled setup shows Save and Turn off instead of Turn on. */
   editing: boolean;
   onClose?: () => void;
+  /** Ratings of answers kept on this device, and the way to save them as a file. */
+  feedback?: { count: number; onExport: () => void };
 };
 
 /**
  * The consent step. It says exactly what leaves the device and where it
  * goes, and Ask Nova stays off until the student turns it on here.
  */
-export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose }: AskSetupProps) => {
+export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose, feedback }: AskSetupProps) => {
   const [apiBaseUrl, setApiBaseUrl] = useState(settings.apiBaseUrl || DEFAULT_ASK_SETTINGS.apiBaseUrl);
   const [token, setToken] = useState(settings.token ?? "");
   const [persist, setPersist] = useState(settings.persistConversations === true);
@@ -56,7 +58,7 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose }
       )}
       <p className="ask-setup-text">
         Each question you ask goes to the Nova server with a short summary of your courses: course names, assignment and quiz titles, due dates, submission status, announcement titles, links, the items you marked done on this device, and the deadlines you added by hand. The server passes it to an AI model on OpenRouter to write the answer, and Nova keeps no copy of the conversation.
-        Your Brightspace login, full announcement text, and your name never leave this device.
+        Your Brightspace login, full announcement text, and your name never leave this device. A file or a course's materials are opened only after you allow it, on this device, and only the text a question needs is sent.
       </p>
       {showServer ? (
         <>
@@ -104,6 +106,14 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose }
           </span>
         </span>
       </label>
+      {editing && feedback ? (
+        <p className="ask-setup-server">
+          <span>{feedback.count === 0 ? "Rate an answer with the thumbs under it. Ratings stay on this device." : `${feedback.count} ${feedback.count === 1 ? "answer" : "answers"} rated. Ratings stay on this device until you export them.`}</span>
+          <button type="button" className="button button-ghost button-sm" onClick={feedback.onExport} disabled={feedback.count === 0}>
+            Export ratings
+          </button>
+        </p>
+      ) : null}
       {check.state !== "idle" ? (
         <p className="ask-check" data-state={check.state} role="status">
           {check.text}

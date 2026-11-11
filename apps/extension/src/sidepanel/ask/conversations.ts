@@ -95,6 +95,9 @@ const storedMessageSchema = z.object({
   grounded: z.boolean().nullable().catch(null),
   stopped: z.boolean().catch(false),
   proposals: z.array(z.unknown()).optional().catch(undefined),
+  model: z.string().max(200).nullable().optional().catch(undefined),
+  offline: z.enum(["unreachable", "not_configured", "rate_limited", "budget_exhausted"]).optional().catch(undefined),
+  revised: z.boolean().optional().catch(undefined),
 });
 
 /**
@@ -123,7 +126,12 @@ export const reviveMessages = (raw: unknown): AskMessage[] => {
       const result = storedProposalSchema.safeParse(proposal);
       return result.success ? [{ ...result.data, state: result.data.state === "pending" ? ("expired" as const) : result.data.state }] : [];
     });
-    out.push({ id: parsed.data.id, role: parsed.data.role, text: parsed.data.text, tools, rows, error: error.success ? (error.data as AskErrorEvent) : null, usage: parsed.data.usage, grounded: parsed.data.grounded, stopped: parsed.data.stopped, ...(proposals.length > 0 ? { proposals } : {}) });
+    out.push({ id: parsed.data.id, role: parsed.data.role, text: parsed.data.text, tools, rows, error: error.success ? (error.data as AskErrorEvent) : null, usage: parsed.data.usage, grounded: parsed.data.grounded, stopped: parsed.data.stopped,
+      ...(proposals.length > 0 ? { proposals } : {}),
+      ...(parsed.data.model !== undefined ? { model: parsed.data.model } : {}),
+      ...(parsed.data.offline ? { offline: parsed.data.offline } : {}),
+      ...(parsed.data.revised ? { revised: true } : {}),
+    });
   }
   return out;
 };

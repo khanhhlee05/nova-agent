@@ -29,14 +29,20 @@ export type AskMessage = {
   grounded: boolean | null;
   /** True when the student pressed Stop before the answer finished. */
   stopped: boolean;
+  /** The model that wrote the answer, as the server named it. Absent on messages saved before it was kept. */
+  model?: string | null;
+  /** Set when the answer was made on this device because the server could not answer; says why. */
+  offline?: "unreachable" | "not_configured" | "rate_limited" | "budget_exhausted";
+  /** True when a first draft failed the check and was replaced by this text while the student watched. */
+  revised?: boolean;
   /** Actions the answer suggested, each waiting for the student or already decided. Absent on messages saved before suggestions existed. */
   proposals?: AskProposal[];
 };
 
 export const HISTORY_LIMIT = 12;
 
-/** A message the server may see: a question, or an answer that did not fail. */
-export const sendable = (message: AskMessage): boolean => message.text.trim() !== "" && (message.role === "user" || message.error === null);
+/** A message the server may see: a question, or an answer that finished and did not fail. A stopped answer is a draft nobody checked. */
+export const sendable = (message: AskMessage): boolean => message.text.trim() !== "" && (message.role === "user" || (message.error === null && !message.stopped));
 
 /** Text-only history the server sees: user questions and completed answers, newest last, capped. */
 export const historyOf = (messages: readonly AskMessage[]): ChatMessage[] =>

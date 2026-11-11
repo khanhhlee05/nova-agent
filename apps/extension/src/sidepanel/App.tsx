@@ -9,10 +9,11 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExtensionHost } from "../platform/host";
 import type { DataMode, NovaDb } from "../storage/novaDb";
-import { attachmentTextId, clearAllData, clearConversations, createDexieVersionCache, deleteChangeEvent, deleteConversation, deletePersonalItem, deletePlanItems, forgetCourseMaterials, listMaterialTexts, listMaterialTocs, materialTextId, getConversation, getPreference, getSyncStatus, listAttachmentTexts, listChangeEvents, listConversations, listLocalMarks, listPersonalItems, latestSnapshot, markAllRead, putPersonalItem, replacePlanItems, saveConversation, setEventRead, setLocalMark, setPreference, unreadCount } from "../storage/repositories";
+import { attachmentTextId, askFeedbackId, clearAllData, clearConversations, deleteAskFeedback, listAskFeedback, putAskFeedback, createDexieVersionCache, deleteChangeEvent, deleteConversation, deletePersonalItem, deletePlanItems, forgetCourseMaterials, listMaterialTexts, listMaterialTocs, materialTextId, getConversation, getPreference, getSyncStatus, listAttachmentTexts, listChangeEvents, listConversations, listLocalMarks, listPersonalItems, latestSnapshot, markAllRead, putPersonalItem, replacePlanItems, saveConversation, setEventRead, setLocalMark, setPreference, unreadCount } from "../storage/repositories";
 import { DATA_MODE_PREFERENCE, DEMO_SCENARIO_PREFERENCE, SyncCoordinator, defaultTransportFactory, type TransportFactory } from "../sync/syncCoordinator";
 import { IDLE_STATE, isRunningPhase, type SyncRuntimeState } from "../sync/syncState";
-import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, availableClientTools, defaultAskClientFactory, effectiveAskSettings, runReadAttachment, runReadMaterial, runSearchMaterials, summarize, type AskMaterialsControls, type MaterialsToolDeps, type AskClientFactory, type AskSettings, type ClientToolAnswer, type ConsentRequest, type ConversationStore } from "./ask";
+import { ASK_SETTINGS_PREFERENCE, DEFAULT_ASK_SETTINGS, availableClientTools, defaultAskClientFactory, effectiveAskSettings, runReadAttachment, runReadMaterial, runSearchMaterials, summarize, FEEDBACK_FILE_NAME, feedbackExport, type AskFeedbackControls, type AskMaterialsControls, type MaterialsToolDeps, type AskClientFactory, type AskSettings, type ClientToolAnswer, type ConsentRequest, type ConversationStore } from "./ask";
+import { browserSaveFile, type SaveFile } from "../platform/saveFile";
 import { FILE_ACCESS_PREFERENCE, checkFileAccess as runCheckFileAccess, connectLive as runConnectLive } from "./connect";
 import { useSessionDismissals } from "./dismissals";
 import { DEFAULT_PREFERENCES, MissionControl, withPreferenceDefaults, type UiPreferences } from "./MissionControl";
@@ -34,6 +35,8 @@ export type AppDeps = {
   fileFetchFactory?: FileFetchFactory;
   /** Reads PDF text. Tests inject a stand-in so they never load pdf.js. */
   readPdf?: PdfReader;
+  /** Hands the student a file to keep (the ratings export). Tests inject a recorder. */
+  saveFile?: SaveFile;
 };
 
 export type FileFetchFactory = (mode: DataMode, context: { now: Date }) => RawFileFetch | null;
@@ -48,7 +51,7 @@ type PendingDelete = { id: string; title: string; kind: "event" | "personal" };
 
 const PREFERENCES_KEY = "ui.preferences";
 
-export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, askClientFactory = defaultAskClientFactory, undoMs = 5000, fileFetchFactory, readPdf = defaultReadPdf }: AppDeps) => {
+export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, askClientFactory = defaultAskClientFactory, undoMs = 5000, fileFetchFactory, readPdf = defaultReadPdf, saveFile = browserSaveFile }: AppDeps) => {
   const now = useNow(60_000, nowFn);
   // Every timestamp the panel writes comes from the same injected clock as the one it reads with.
   const clock = useCallback(() => (nowFn ? nowFn() : new Date()), [nowFn]);
@@ -88,6 +91,20 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
     [db],
   );
   const savedConversations = useLiveQuery(async () => (scope ? listConversations(db, scope) : []), [db, scope]);
+
+  // Ratings of answers: stored here, exported by hand, never sent.
+  const feedbackRecords = useLiveQuery(async () => (scope ? listAskFeedback(db, scope) : []), [db, scope]);
+  const feedback = useMemo<AskFeedbackControls | undefined>(
+    () =>
+      scope
+        ? {
+            votes: new Map((feedbackRecords ?? []).map((record) => [record.messageId, record.verdict])),
+            onVote: (entry, verdict) => void (verdict === null ? deleteAskFeedback(db, scope, entry.messageId) : putAskFeedback(db, { ...entry, id: askFeedbackId(scope, entry.messageId), scope, verdict, at: clock().toISOString() })),
+            onExport: () => void listAskFeedback(db, scope).then((records) => saveFile(FEEDBACK_FILE_NAME, feedbackExport(records, clock()))),
+          }
+        : undefined,
+    [clock, db, feedbackRecords, saveFile, scope],
+  );
 
   // Assignment files: read on request, text kept in the extension's own storage, never the bytes.
   const mode = status?.mode ?? "fixture";
@@ -563,7 +580,7 @@ export const App = ({ db, host, now: nowFn, transportFactory, autoSync = true, a
       dismissals={dismissals}
       actions={actions}
       pendingDelete={pendingDelete}
-      ask={{ client: askClient, settings: askSettings, setSettings: setAskSettings, clientFactory: askClientFactory, events: visibleEvents ?? [], localMarks, personal: visiblePersonal ?? [], conversations: conversationStore, clientTools: { names: clientToolNames, run: runClientTool }, consent, materials }}
+      ask={{ client: askClient, settings: askSettings, setSettings: setAskSettings, clientFactory: askClientFactory, events: visibleEvents ?? [], localMarks, personal: visiblePersonal ?? [], conversations: conversationStore, clientTools: { names: clientToolNames, run: runClientTool }, consent, materials, feedback }}
       attachments={attachmentControls}
       checkingFiles={checkingFiles}
       fileAccess={fileAccess ?? null}
