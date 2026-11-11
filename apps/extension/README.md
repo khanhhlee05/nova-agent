@@ -9,7 +9,7 @@ npm install
 npm run build --workspace @nova-agent/extension
 ```
 
-Then open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `apps/extension/dist`.
+Then open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `apps/extension/dist`. After pulling new code, run the build again and click the reload arrow on the extension's card; local data upgrades in place. The root README has the full local setup, including the preview harness (`npm run dev:extension`, then `http://127.0.0.1:5174/preview.html`) and the Ask Nova API.
 
 - Visit `https://brightspace.villanova.edu` while signed in. A small Nova Orb appears bottom-right; click it (or the toolbar icon) to open Mission Control in the side panel.
 - On first run choose **Connect to Brightspace** to run the read-only feasibility probe, or **Explore with demo data**.
@@ -28,9 +28,13 @@ The seven-day strip in the field is tappable. Selecting a day shows only what is
 
 Arrows above the strip page the Week tab seven days at a time, forward only, in rolling pages from today (the first page is the same "next 7 days" the Focus count strip uses). The forward arrow stops at the page holding the latest due date Nova knows about, so there are no empty weeks to scroll through; **Today** returns to the first page. Paging clears a picked day. The headline is rewritten for the page it shows ("Two deadlines Nov 7 to Nov 13 · 1 week ahead"). The position is not persisted: the tab always opens on the current week.
 
+## How "Do this first" is chosen
+
+A deterministic score from six parts (urgency, stakes, weight, momentum, crunch, effort), each read from fields Brightspace already returns. The details panel explains it in words and shows every part against its maximum. The formula is in `docs/PRIORITY.md`.
+
 ## Focus: one category at a time
 
-Under the field, a category control shows **Overdue**, **Upcoming**, or **Completed**, one at a time, each with its count. The panel opens on Overdue when anything is overdue and on Upcoming otherwise, then remembers whatever the student last picked. Upcoming groups rows under Today (always shown, even when empty), Tomorrow, Later this week, Later, and No due date. A toolbar above the list holds the course filter and a sort control (**Due date**, **Course**, **Recently updated**); sorting by anything other than due date flattens the groups into one list. Only the list scrolls; the field, the category control, and the toolbar stay put. Rows that appear in the current change feed carry a **Changed** mark. The category and sort are remembered between opens.
+Under the field, a category control shows **Overdue**, **Upcoming**, or **Completed**, one at a time, each with its count. The panel opens on Overdue when anything is overdue and on Upcoming otherwise, then remembers whatever the student last picked. Upcoming groups rows under Today (always shown, even when empty), Tomorrow, Later this week, Later, and No due date. Each group heading folds its rows; **Collapse all** / **Expand all** above the groups does them all at once, and the folded set is remembered between opens. "Why this first?" unfolds the group that holds the item. A toolbar above the list holds the course filter and a sort control (**Due date**, **Course**, **Recently updated**); sorting by anything other than due date flattens the groups into one list, with no folding. Only the list scrolls; the field, the category control, and the toolbar stay put. Rows that appear in the current change feed carry a **Changed** mark. The category and sort are remembered between opens.
 
 Overdue shows the last two weeks. Anything overdue for longer is **long overdue**: instructors often leave such items open for months without updating them. Long overdue items are not counted in the Overdue number, never become the next move, and stay folded behind a **Show N long overdue items** line at the bottom of the Overdue list (or inside its empty state) until the student asks; the reveal lasts for the session. They are ordinary rows once shown, so one can be marked done or opened. The threshold is the `LONG_OVERDUE_AFTER_DAYS` constant in `packages/core`.
 

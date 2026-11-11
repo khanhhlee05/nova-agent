@@ -14,6 +14,12 @@ export type ItemStatus = "not-started" | "in-progress" | "submitted" | "complete
 
 export type Importance = "low" | "normal" | "high";
 
+/** How an assignment is handed in. D2L SUBMISSIONTYPE_T: 0 file, 1 text, 2 on paper, 3 observed in person. */
+export type SubmissionType = "online" | "on-paper" | "observed" | "unknown";
+
+/** A score Brightspace reported for the student on this item. `earned` is null when feedback exists without a number. */
+export type ItemScore = { earned: number | null; graded: boolean };
+
 export type Course = {
   id: string;
   name: string;
@@ -43,6 +49,25 @@ export type AcademicItem = {
   url: string | null;
   sourceUpdatedAt: string | null;
   observedAt: string;
+  /**
+   * Signals read from the same Brightspace responses, all optional so older
+   * stored snapshots and fixtures stay valid. Absent means "not reported".
+   */
+  /** Group assignment (D2L DropboxType 2). */
+  group?: boolean;
+  /** The assignment is graded against a rubric. */
+  hasRubric?: boolean;
+  submissionType?: SubmissionType;
+  /** Quiz attempts allowed; null means unlimited. */
+  attemptsAllowed?: number | null;
+  /** Enforced quiz time limit in minutes; null when untimed. */
+  timeLimitMinutes?: number | null;
+  /** The quiz needs a password or is restricted to certain addresses: an exam signal. */
+  proctored?: boolean;
+  /** Whether a late attempt or submission is accepted at all; null when Brightspace did not say. */
+  lateAllowed?: boolean | null;
+  /** The score Brightspace reported; null when nothing has been graded. */
+  score?: ItemScore | null;
 };
 
 export type Announcement = {
@@ -81,7 +106,8 @@ export type ChangeEventKind =
   | "status-changed"
   | "became-overdue"
   | "announcement-added"
-  | "announcement-updated";
+  | "announcement-updated"
+  | "graded";
 
 export type ChangeEvent = {
   id: string;

@@ -103,11 +103,13 @@ export const changesHero = (dashboard: Dashboard, lastVisitAt: string | null, no
   const added = count("item-added");
   const posted = count("announcement-added") + count("announcement-updated");
   const submitted = count("status-changed");
+  const graded = count("graded");
   const removed = count("item-removed") + count("visibility-changed");
-  const lead = moved > 0 ? plural(moved, "deadline") + " moved" : overdue > 0 ? `${words(overdue)} became overdue` : added > 0 ? plural(added, "new item") : posted > 0 ? plural(posted, "announcement") : submitted > 0 ? `${words(submitted)} submitted` : plural(removed, "item") + " changed";
+  const lead = moved > 0 ? plural(moved, "deadline") + " moved" : overdue > 0 ? `${words(overdue)} became overdue` : graded > 0 ? `${words(graded)} graded` : added > 0 ? plural(added, "new item") : posted > 0 ? plural(posted, "announcement") : submitted > 0 ? `${words(submitted)} submitted` : plural(removed, "item") + " changed";
   const rest = [
     moved > 0 && lead.includes("moved") ? null : moved > 0 ? `${words(moved)} moved` : null,
     overdue > 0 && !lead.includes("overdue") ? `${words(overdue)} overdue` : null,
+    graded > 0 && !lead.includes("graded") ? `${words(graded)} graded` : null,
     added > 0 && !lead.includes("new") ? `${words(added)} added` : null,
     submitted > 0 && !lead.includes("submitted") ? `${words(submitted)} submitted` : null,
     posted > 0 && !lead.includes("announcement") ? `${words(posted)} posted` : null,

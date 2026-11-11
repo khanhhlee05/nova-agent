@@ -237,7 +237,7 @@ describe("keyboard navigation", () => {
     expect(screen.getByRole("list", { name: /next seven days/i }).children).toHaveLength(7);
     const chip = screen.getAllByRole("button", { name: /Lab 3: Timer Interrupts/ })[0] as HTMLButtonElement;
     await user.click(chip);
-    expect(screen.getByRole("dialog")).toHaveProperty("textContent", expect.stringContaining("Priority, out of 100"));
+    expect(screen.getByRole("dialog")).toHaveProperty("textContent", expect.stringContaining("priority out of 100"));
   });
 });
 
@@ -260,6 +260,37 @@ describe("changes feed", () => {
     expect(screen.getByRole("listitem", { name: /Submitted: Homework 4/ })).toBeTruthy();
     expect(screen.getByRole("listitem", { name: /Added: Quiz 3/ })).toBeTruthy();
     expect(screen.getByRole("listitem", { name: /Posted: Lab 3 deadline extended/ })).toBeTruthy();
+    const graded = screen.getByRole("listitem", { name: /Graded: Lab 1: Toolchain Setup/ });
+    expect(graded.querySelector(".new")?.textContent).toBe("18 of 20");
+  });
+
+  it("explains the score in words in the details, with every part out of its maximum", async () => {
+    const { dashboard } = await demoDashboard();
+    render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "overdue" } })} />);
+    fireEvent.click(screen.getByRole("button", { name: /show details for Lab 2/i }));
+    const details = screen.getByRole("region", { name: /^priority$/i });
+    expect(details.textContent).toContain("Do this first · priority out of 100");
+    expect(within(details).getByText(/^Top of the list at \d+ out of 100\. Urgency and momentum carry nearly all of it; crunch, effort add nothing yet\.$/)).toBeTruthy();
+    expect(within(details).getByText(/^Overdue, but still open for a late submission\.$/)).toBeTruthy();
+    fireEvent.click(within(details).getByRole("button", { name: /show breakdown/i }));
+    const breakdown = details.querySelector(".breakdown")?.textContent ?? "";
+    for (const label of ["Urgency", "Stakes", "Weight", "Momentum", "Crunch", "Effort"]) expect(breakdown).toContain(label);
+    expect(breakdown).toContain("of 50");
+    expect(breakdown).toContain("of 20");
+  });
+
+  it("shows the earned score and the in-person note in the details", async () => {
+    const { snapshot, events } = await demoDashboard();
+    const graded = snapshot.items.find((item) => item.title.startsWith("Homework 3")) as (typeof snapshot.items)[number];
+    const paper = { ...graded, key: `${graded.key}-paper`, sourceId: "paper", title: "In-class worksheet", status: "not-started" as const, score: null, submissionType: "on-paper" as const, dueAt: new Date(NOW.getTime() + 2 * 86_400_000).toISOString() };
+    const dashboard = buildDashboard({ snapshot: { ...snapshot, items: [...snapshot.items, paper] }, events, now: NOW, courseFilter: null });
+    render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "completed" } })} />);
+    fireEvent.click(screen.getByRole("button", { name: /show details for Homework 3/i }));
+    expect(screen.getByText("36 of 40")).toBeTruthy();
+    cleanup();
+    render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "upcoming" } })} />);
+    fireEvent.click(screen.getByRole("button", { name: /show details for In-class worksheet/i }));
+    expect(screen.getByText(/Handed in on paper, so Brightspace may never mark it submitted/)).toBeTruthy();
   });
 
   it("hides the badge and disables mark-all-read when everything is read", async () => {
@@ -386,6 +417,56 @@ describe("focus categories", () => {
     render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: category } })} />);
     const row = screen.getByText(item.title).closest(".task") as HTMLElement;
     expect(within(row).getByText("Changed")).toBeTruthy();
+  });
+});
+
+describe("upcoming groups fold", () => {
+  it("folds a group from its heading, folds and unfolds them all, and remembers the set", async () => {
+    const { dashboard } = await demoDashboard();
+    const p = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "upcoming" } });
+    const { unmount } = render(<MissionControl {...p} />);
+    const calls = (p.actions as ReturnType<typeof actions>).calls;
+    const later = screen.getByRole("button", { name: /^Later this week, \d+ items?, expanded$/ });
+    expect(later.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(later);
+    expect(calls.setPreferences?.at(-1)?.[0]).toEqual({ collapsedGroups: ["this-week"] });
+    fireEvent.click(screen.getByRole("button", { name: /collapse all groups/i }));
+    const all = calls.setPreferences?.at(-1)?.[0] as { collapsedGroups: string[] };
+    expect(all.collapsedGroups).toEqual(expect.arrayContaining(["today", "this-week", "later"]));
+    expect(all.collapsedGroups).not.toContain("overdue");
+    unmount();
+
+    const folded = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "upcoming", collapsedGroups: ["this-week", "later"] } });
+    render(<MissionControl {...folded} />);
+    const title = dashboard.buckets["this-week"][0]?.title as string;
+    expect(screen.queryByRole("button", { name: new RegExp(`show details for ${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i") })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Later this week, \d+ items?, collapsed$/ }).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByRole("button", { name: /^Today, \d+ items?, expanded$/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Later this week, \d+ items?, collapsed$/ }));
+    expect((folded.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0]).toEqual({ collapsedGroups: ["later"] });
+    cleanup();
+
+    const allFolded = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "upcoming", collapsedGroups: ["today", "tomorrow", "this-week", "later", "no-date"] } });
+    render(<MissionControl {...allFolded} />);
+    fireEvent.click(screen.getByRole("button", { name: /expand all groups/i }));
+    expect((allFolded.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0]).toEqual({ collapsedGroups: [] });
+  });
+
+  it("does not fold when sorted by course, and 'Why this first?' unfolds the group holding the item", async () => {
+    const { dashboard } = await demoDashboard();
+    render(<MissionControl {...baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "upcoming", sort: "course", collapsedGroups: ["today"] } })} />);
+    expect(screen.queryByRole("button", { name: /collapse all groups/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /, (expanded|collapsed)$/ })).toBeNull();
+    cleanup();
+
+    const top = dashboard.nextMove?.item as NonNullable<typeof dashboard.nextMove>["item"];
+    const bucket = (Object.keys(dashboard.buckets) as (keyof typeof dashboard.buckets)[]).find((candidate) => dashboard.buckets[candidate].some((entry) => entry.key === top.key)) as string;
+    const p = baseProps({ dashboard, preferences: { ...DEFAULT_PREFERENCES, focusCategory: "completed", collapsedGroups: [bucket as "today"] } });
+    render(<MissionControl {...p} />);
+    fireEvent.click(screen.getAllByText(/why this first\?/i)[0] as HTMLElement);
+    const patch = (p.actions as ReturnType<typeof actions>).calls.setPreferences?.at(-1)?.[0] as Record<string, unknown>;
+    expect(patch.focusCategory).toBe(bucket === "overdue" ? "overdue" : "upcoming");
+    if (bucket !== "overdue") expect(patch.collapsedGroups).toEqual([]);
   });
 });
 

@@ -7,7 +7,7 @@ const maxDaysAgo: Record<z.infer<typeof sinceSchema>, number> = { today: 0, yest
 
 export const getChanges = defineTool({
   name: "get_changes",
-  description: "What changed since the student's last visit: new items, moved due dates, items that became overdue, submissions, hidden or removed items, and new announcements. Each change carries before and after values.",
+  description: "What changed since the student's last visit: new items, moved due dates, items that became overdue, submissions, scores that came back (kind 'graded'), hidden or removed items, and new announcements. Each change carries before and after values.",
   input: z.object({
     course: z.string().max(120).optional().describe("Course id, code, or part of the course name."),
     since: sinceSchema.optional().describe("How far back: 'today', 'yesterday' (includes today), 'week', or 'all'. Default 'all'."),

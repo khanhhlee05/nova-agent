@@ -17,10 +17,10 @@ Sent with every question, whatever the question is about (nothing is filtered by
 | Field | Notes |
 |---|---|
 | Course names, ids, codes, home links | Active courses only |
-| Item titles, kinds, due dates (ISO, local text, and local calendar date), buckets, a long-overdue flag (overdue for more than two weeks), statuses, points, links, priority and reasons | Visible items; hidden and expired items are dropped |
+| Item titles, kinds, due dates (ISO, local text, and local calendar date), buckets, a long-overdue flag (overdue for more than two weeks), statuses, points possible, the earned score when Brightspace reported one, links, priority and reasons | Visible items; hidden and expired items are dropped. Feedback text never leaves the device |
 | Calendar: today, the Monday of this week, the panel's next 7 days, and next week (Monday to Sunday), all as `YYYY-MM-DD` | Computed in the browser in the student's zone |
 | Announcement titles, dates, pinned flag, links | No body text |
-| Change events: kind, title, before and after values, detected date, read flag | Last 14 days |
+| Change events: kind, title, before and after values (due dates, statuses, visibility, scores), detected date, read flag | Last 14 days |
 | Counts, refresh time, whether the refresh was complete, mode (live or demo) | |
 | The question and up to twelve prior messages of this session's thread | Text only |
 

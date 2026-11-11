@@ -156,6 +156,14 @@ export const diffSnapshots = ({ current, history, detectedAt = current.capturedA
         makeEvent("status-changed", item.key, item.courseId, detectedAt, { status: prev.status, title: prev.title }, { status: next.status, title: next.title }),
       );
     }
+    // A score arriving, or changing, is news the student wants; losing one (feedback withdrawn) is not reported.
+    const prevScore = before.score?.graded ? before.score.earned : null;
+    const nextScore = item.score?.graded ? item.score.earned : null;
+    if (nextScore !== null && prevScore !== nextScore) {
+      events.push(
+        makeEvent("graded", item.key, item.courseId, detectedAt, { score: prevScore, pointsPossible: before.pointsPossible, title: prev.title }, { score: nextScore, pointsPossible: item.pointsPossible, title: next.title }),
+      );
+    }
     if (prev.dueAt === next.dueAt && !isOverdueAt(before, baseline.capturedAt) && isOverdueAt(item, current.capturedAt)) {
       events.push(
         makeEvent("became-overdue", item.key, item.courseId, detectedAt, { dueAt: prev.dueAt, title: prev.title }, { dueAt: next.dueAt, title: next.title }),
