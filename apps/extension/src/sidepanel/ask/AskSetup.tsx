@@ -21,7 +21,7 @@ export type AskSetupProps = {
 export type AskAccountControls = {
   /** The address signed in with, for the saved server; null when not signed in. */
   email: string | null;
-  /** False where Google's sign-in window cannot be opened (the preview harness, a test). */
+  /** False where Google's sign-in window cannot be opened: a build without the `identity` permission, the preview harness, a test. */
   canSignIn: boolean;
   busy: boolean;
   error: string | null;
@@ -195,7 +195,7 @@ export const AskSetup = ({ settings, onChange, clientFactory, editing, onClose, 
                   {account.busy ? "Signing in…" : "Sign in with Google"}
                 </button>
               </div>
-              {!account.canSignIn ? <p className="ask-toggle-note">Signing in works in the installed extension, not in this preview.</p> : null}
+              {!account.canSignIn ? <p className="ask-toggle-note">This build of Nova does not include Google sign-in.</p> : null}
             </>
           )}
           {account.error ? (

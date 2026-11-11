@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "An unofficial academic assistant for Villanova students. Mission Control for Brightspace.",
   "minimum_chrome_version": "116",
-  "permissions": ["storage", "sidePanel", "identity"],
+  "permissions": ["storage", "sidePanel"],
   "host_permissions": ["https://brightspace.villanova.edu/*"],
   "background": { "service_worker": "background.js", "type": "module" },
   "action": {

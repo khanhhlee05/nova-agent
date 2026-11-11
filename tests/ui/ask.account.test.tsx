@@ -296,11 +296,11 @@ describe("signing in from the panel: end to end", () => {
     expect(await screen.findByText("Ask Nova has hit today's limit. Answered on this device without the AI model.", {}, LONG)).toBeTruthy();
   });
 
-  it("says where sign-in works when this panel cannot open Google's window", { timeout: 60_000 }, async () => {
+  it("says so when this build cannot open Google's sign-in window", { timeout: 60_000 }, async () => {
     await mount({ withGoogle: false });
     fireEvent.click(screen.getByRole("button", { name: "Ask Nova settings" }));
     const account = await screen.findByRole("group", { name: "Nova account" }, LONG);
     expect((within(account).getByRole("button", { name: "Sign in with Google" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(within(account).getByText("Signing in works in the installed extension, not in this preview.")).toBeTruthy();
+    expect(within(account).getByText("This build of Nova does not include Google sign-in.")).toBeTruthy();
   });
 });
